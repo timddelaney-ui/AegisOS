@@ -1,23 +1,31 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Pin, BarChart3, Play, CheckCircle2 } from "lucide-react";
+import { Pin, BarChart3, Play, CheckCircle2, Save } from "lucide-react";
 import { workbookData, getDefaultValue } from "../mock/workbookData";
 import SvgSchematic from "./SvgSchematic";
+import SaveJobDialog from "./SaveJobDialog";
+import { useAuth } from "../context/AuthContext";
 
-const SheetContent = ({ sheetKey, unitSystem, onUnitChange }) => {
+const SheetContent = ({ sheetKey, unitSystem, onUnitChange, initialValues, hasTeam }) => {
   const data = workbookData[sheetKey];
   const params = unitSystem === "imp" ? data.imp : data.met;
   const [values, setValues] = useState({});
   const [showAlert, setShowAlert] = useState(false);
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
   const canvasRef = useRef(null);
+  const { user } = useAuth();
 
   useEffect(() => {
+    if (initialValues) {
+      setValues(initialValues);
+      return;
+    }
     const initial = {};
     params.forEach((p, i) => {
       initial[i] = getDefaultValue(p, unitSystem);
     });
     setValues(initial);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sheetKey, unitSystem]);
+    // eslint-disable-next-line
+  }, [sheetKey, unitSystem, initialValues]);
 
   const handleInputChange = (idx, val) => {
     setValues((prev) => ({ ...prev, [idx]: val }));
@@ -30,13 +38,11 @@ const SheetContent = ({ sheetKey, unitSystem, onUnitChange }) => {
 
   return (
     <div className="flex flex-col gap-2">
-      {/* SOP Banner */}
       <div className="bg-[#E6F4EA] border-l-[3px] border-[#107C41] px-2.5 py-2 text-[11px] font-semibold text-[#0D6535] rounded-r flex items-center gap-1.5">
         <Pin className="w-3 h-3 flex-shrink-0" strokeWidth={2.5} />
         <span>{data.sop}</span>
       </div>
 
-      {/* Unit System Selector */}
       <div className="flex justify-between items-center bg-white px-2.5 py-1.5 border border-[#D4D4D4] rounded">
         <span className="text-xs font-semibold text-[#555]">Unit System:</span>
         <select
@@ -49,16 +55,11 @@ const SheetContent = ({ sheetKey, unitSystem, onUnitChange }) => {
         </select>
       </div>
 
-      {/* Parameters Table */}
       <table className="w-full border-collapse bg-white border border-[#D4D4D4] rounded overflow-hidden shadow-sm">
         <thead>
           <tr>
-            <th className="bg-[#F8F9FA] text-[#595959] text-[11px] font-semibold text-left px-2.5 py-2 border-b border-[#D4D4D4] w-[55%]">
-              Parameter (Column A)
-            </th>
-            <th className="bg-[#F8F9FA] text-[#595959] text-[11px] font-semibold text-left px-2.5 py-2 border-b border-[#D4D4D4]">
-              Input Value (Column B)
-            </th>
+            <th className="bg-[#F8F9FA] text-[#595959] text-[11px] font-semibold text-left px-2.5 py-2 border-b border-[#D4D4D4] w-[55%]">Parameter (Column A)</th>
+            <th className="bg-[#F8F9FA] text-[#595959] text-[11px] font-semibold text-left px-2.5 py-2 border-b border-[#D4D4D4]">Input Value (Column B)</th>
           </tr>
         </thead>
         <tbody>
@@ -78,16 +79,12 @@ const SheetContent = ({ sheetKey, unitSystem, onUnitChange }) => {
         </tbody>
       </table>
 
-      {/* Live Simulation Diagram */}
       <div className="bg-white border border-[#D4D4D4] rounded p-2.5 shadow-sm">
         <div className="text-[11px] font-bold text-[#107C41] mb-1.5 uppercase flex items-center gap-1.5">
           <BarChart3 className="w-3 h-3" strokeWidth={2.5} />
           Live Simulation Diagram // {data.title.toUpperCase()}
         </div>
-        <div
-          ref={canvasRef}
-          className="bg-[#FAFAFA] border border-[#E0E0E0] rounded h-[140px] flex items-center justify-center relative overflow-hidden"
-        >
+        <div ref={canvasRef} className="bg-[#FAFAFA] border border-[#E0E0E0] rounded h-[140px] flex items-center justify-center relative overflow-hidden">
           <SvgSchematic sheetKey={sheetKey} />
           {showAlert && (
             <div className="absolute top-2.5 right-2.5 bg-[#D4EDDA] text-[#155724] border border-[#28A745] px-2 py-1 text-[10px] font-bold rounded-sm flex items-center gap-1 animate-in fade-in duration-200">
@@ -98,14 +95,34 @@ const SheetContent = ({ sheetKey, unitSystem, onUnitChange }) => {
         </div>
       </div>
 
-      {/* Execute Macro Button */}
-      <button
-        onClick={runMacro}
-        className="w-full bg-[#107C41] hover:bg-[#0D6535] active:bg-[#0D6535] text-white py-3 rounded text-[13px] font-bold uppercase shadow-md transition-colors flex items-center justify-center gap-2"
-      >
-        <Play className="w-4 h-4 fill-white" strokeWidth={2.5} />
-        Execute Spreadsheet Macro & Simulation
-      </button>
+      <div className="grid grid-cols-4 gap-2">
+        <button
+          onClick={runMacro}
+          className="col-span-3 bg-[#107C41] hover:bg-[#0D6535] active:bg-[#0D6535] text-white py-3 rounded text-[13px] font-bold uppercase shadow-md transition-colors flex items-center justify-center gap-2"
+        >
+          <Play className="w-4 h-4 fill-white" strokeWidth={2.5} />
+          Execute Macro
+        </button>
+        <button
+          onClick={() => setShowSaveDialog(true)}
+          className="bg-white border border-[#107C41] text-[#107C41] hover:bg-[#F0F9F3] py-3 rounded text-[13px] font-bold uppercase shadow-sm transition-colors flex items-center justify-center gap-1.5"
+        >
+          <Save className="w-4 h-4" strokeWidth={2.5} />
+          Save
+        </button>
+      </div>
+
+      {showSaveDialog && (
+        <SaveJobDialog
+          sheetKey={sheetKey}
+          sheetTitle={data.title}
+          unitSystem={unitSystem}
+          values={values}
+          hasTeam={hasTeam}
+          onClose={() => setShowSaveDialog(false)}
+          onSaved={() => { /* toast could go here */ }}
+        />
+      )}
     </div>
   );
 };
