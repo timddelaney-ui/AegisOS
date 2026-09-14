@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
-import { Pin, BarChart3, Play, CheckCircle2, Save } from "lucide-react";
+import { Pin, BarChart3, Play, CheckCircle2, Save, Sparkles, Brain } from "lucide-react";
 import { workbookData, getDefaultValue } from "../mock/workbookData";
 import SvgSchematic from "./SvgSchematic";
 import SaveJobDialog from "./SaveJobDialog";
 import ResultsPanel from "./ResultsPanel";
+import AIPanel from "./AIPanel";
 import { computeResults } from "../lib/formulas";
 import { useAuth } from "../context/AuthContext";
 
@@ -13,6 +14,8 @@ const SheetContent = ({ sheetKey, unitSystem, onUnitChange, initialValues, hasTe
   const [values, setValues] = useState({});
   const [showAlert, setShowAlert] = useState(false);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiMode, setAiMode] = useState("assistant");
   const canvasRef = useRef(null);
   const { user } = useAuth();
 
@@ -43,6 +46,31 @@ const SheetContent = ({ sheetKey, unitSystem, onUnitChange, initialValues, hasTe
     () => computeResults(sheetKey, values, params, unitSystem),
     [sheetKey, values, params, unitSystem]
   );
+
+  // Build a compact context object for the AI
+  const buildAIContext = () => {
+    const inputSummary = {};
+    params.forEach((label, i) => {
+      if (values[i] !== undefined && values[i] !== "") inputSummary[label] = values[i];
+    });
+    const resultSummary = (results?.results || [])
+      .map((r) => `${r.label}: ${r.value} ${r.unit}`)
+      .join("; ");
+    const warningSummary = (results?.warnings || []).map((w) => w.msg).join(" | ");
+    return {
+      sheet_key: sheetKey,
+      sheet_title: data.title,
+      unit_system: unitSystem === "imp" ? "Imperial" : "Metric",
+      inputs: inputSummary,
+      results: resultSummary,
+      warnings: warningSummary,
+    };
+  };
+
+  const openAI = (mode) => {
+    setAiMode(mode);
+    setAiOpen(true);
+  };
 
   return (
     <div className="flex flex-col gap-2">
@@ -90,13 +118,29 @@ const SheetContent = ({ sheetKey, unitSystem, onUnitChange, initialValues, hasTe
       {/* Live-calculated results */}
       <ResultsPanel data={results} />
 
+      {/* AI action buttons */}
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          onClick={() => openAI("interpret")}
+          className="bg-white border border-[#107C41] text-[#107C41] hover:bg-[#F0F9F3] py-2 rounded text-[12px] font-bold flex items-center justify-center gap-1.5 shadow-sm"
+        >
+          <Brain className="w-4 h-4" strokeWidth={2.5} /> Explain Results
+        </button>
+        <button
+          onClick={() => openAI("program")}
+          className="bg-white border border-[#107C41] text-[#107C41] hover:bg-[#F0F9F3] py-2 rounded text-[12px] font-bold flex items-center justify-center gap-1.5 shadow-sm"
+        >
+          <Sparkles className="w-4 h-4" strokeWidth={2.5} /> Draft Job Program
+        </button>
+      </div>
+
       <div className="bg-white border border-[#D4D4D4] rounded p-2.5 shadow-sm">
         <div className="text-[11px] font-bold text-[#107C41] mb-1.5 uppercase flex items-center gap-1.5">
           <BarChart3 className="w-3 h-3" strokeWidth={2.5} />
           Live Simulation Diagram // {data.title.toUpperCase()}
         </div>
         <div ref={canvasRef} className="bg-[#FAFAFA] border border-[#E0E0E0] rounded h-[140px] flex items-center justify-center relative overflow-hidden">
-          <SvgSchematic sheetKey={sheetKey} />
+          <SvgSchematic sheetKey={sheetKey} results={results} />
           {showAlert && (
             <div className="absolute top-2.5 right-2.5 bg-[#D4EDDA] text-[#155724] border border-[#28A745] px-2 py-1 text-[10px] font-bold rounded-sm flex items-center gap-1 animate-in fade-in duration-200">
               <CheckCircle2 className="w-3 h-3" strokeWidth={3} />
@@ -134,6 +178,22 @@ const SheetContent = ({ sheetKey, unitSystem, onUnitChange, initialValues, hasTe
           onSaved={() => { /* toast could go here */ }}
         />
       )}
+
+      {/* Floating AI trigger */}
+      <button
+        onClick={() => openAI("assistant")}
+        className="fixed bottom-16 right-4 z-40 bg-[#107C41] hover:bg-[#0D6535] text-white w-12 h-12 rounded-full shadow-lg flex items-center justify-center transition-transform hover:scale-105"
+        title="Ask CT Field AI"
+      >
+        <Sparkles className="w-5 h-5" strokeWidth={2.5} />
+      </button>
+
+      <AIPanel
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+        initialMode={aiMode}
+        contextBuilder={buildAIContext}
+      />
     </div>
   );
 };

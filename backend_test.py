@@ -468,19 +468,246 @@ def test_subscription_stripe(user: TestUser):
     
     return True
 
+def test_ai_gemini():
+    """Test Gemini AI integration endpoints"""
+    print("\n=== Testing GEMINI AI Endpoints ===")
+    
+    # Demo sessions from MongoDB
+    pro_token = "demo_pro_session_token_12345"
+    free_trial_token = "demo_free_session_token_67890"
+    expired_token = "demo_expired_ss"
+    
+    # Test 1: Assistant mode with sheet context (Pro user)
+    print("\n[Test 1] Assistant mode with sheet context (Pro user)...")
+    headers = {"Authorization": f"Bearer {pro_token}"}
+    resp = requests.post(
+        f"{BASE_URL}/ai/chat",
+        headers=headers,
+        json={
+            "mode": "assistant",
+            "message": "Is this pump rate safe for the current setup?",
+            "context": {
+                "sheet_key": "CT_Milling",
+                "sheet_title": "Composite Plug Milling",
+                "unit_system": "Imperial",
+                "inputs": {"Depth (ft)": "5200", "CT ID (in)": "1.25", "Pump Rate (BPM)": "3.5", "Density (ppg)": "9.5"},
+                "results": "CT friction pressure: 10042 psi; WOB: 0 lb",
+                "warnings": "CT friction 10042 psi is very high"
+            }
+        }
+    )
+    
+    if resp.status_code != 200:
+        print(f"❌ Test 1 FAILED: {resp.status_code} - {resp.text}")
+        return False
+    
+    data = resp.json()
+    if not data.get("session_id") or not data.get("response") or data.get("model") != "gemini-2.5-flash":
+        print(f"❌ Test 1 FAILED: Missing required fields or wrong model")
+        print(f"   Response: {json.dumps(data, indent=2)}")
+        return False
+    
+    session_id = data["session_id"]
+    response_text = data["response"]
+    print(f"✓ Test 1 PASSED")
+    print(f"   Session ID: {session_id}")
+    print(f"   Response snippet: {response_text[:150]}...")
+    
+    # Test 2: Troubleshoot mode (Pro user)
+    print("\n[Test 2] Troubleshoot mode (Pro user)...")
+    resp = requests.post(
+        f"{BASE_URL}/ai/chat",
+        headers=headers,
+        json={
+            "mode": "troubleshoot",
+            "message": "String weight increased 3000 lb during POOH at 4800 ft. Getting some drag, hoseline pressure is steady."
+        }
+    )
+    
+    if resp.status_code != 200:
+        print(f"❌ Test 2 FAILED: {resp.status_code} - {resp.text}")
+        return False
+    
+    data = resp.json()
+    if not data.get("response"):
+        print(f"❌ Test 2 FAILED: No response")
+        return False
+    
+    response_text = data["response"]
+    # Check if response mentions SOP or API standards
+    has_sop_reference = any(keyword in response_text.upper() for keyword in ["API", "RP", "SOP", "DIRECTIVE", "AER"])
+    if not has_sop_reference:
+        print(f"⚠️  Test 2 WARNING: Response doesn't cite SOP/API standards")
+        print(f"   Response: {response_text[:200]}...")
+    
+    print(f"✓ Test 2 PASSED")
+    print(f"   Response snippet: {response_text[:150]}...")
+    
+    # Test 3: Multi-turn conversation (session continuity)
+    print("\n[Test 3] Multi-turn conversation (session continuity)...")
+    resp = requests.post(
+        f"{BASE_URL}/ai/chat",
+        headers=headers,
+        json={
+            "mode": "assistant",
+            "message": "What would you change to make it safer?",
+            "session_id": session_id
+        }
+    )
+    
+    if resp.status_code != 200:
+        print(f"❌ Test 3 FAILED: {resp.status_code} - {resp.text}")
+        return False
+    
+    data = resp.json()
+    if not data.get("response"):
+        print(f"❌ Test 3 FAILED: No response")
+        return False
+    
+    response_text = data["response"]
+    # Check if response references earlier context (pump rate, friction, etc.)
+    has_context = any(keyword in response_text.lower() for keyword in ["pump", "rate", "friction", "pressure", "bpm"])
+    if not has_context:
+        print(f"⚠️  Test 3 WARNING: Response doesn't reference earlier context")
+        print(f"   Response: {response_text[:200]}...")
+    
+    print(f"✓ Test 3 PASSED")
+    print(f"   Response snippet: {response_text[:150]}...")
+    
+    # Test 4: GET history
+    print("\n[Test 4] GET /api/ai/history/{session_id}...")
+    resp = requests.get(f"{BASE_URL}/ai/history/{session_id}", headers=headers)
+    
+    if resp.status_code != 200:
+        print(f"❌ Test 4 FAILED: {resp.status_code} - {resp.text}")
+        return False
+    
+    history = resp.json()
+    if not isinstance(history, list) or len(history) < 4:
+        print(f"❌ Test 4 FAILED: Expected at least 4 messages, got {len(history)}")
+        return False
+    
+    # Check alternating roles
+    roles = [msg.get("role") for msg in history]
+    expected_pattern = ["user", "assistant", "user", "assistant"]
+    if roles[:4] != expected_pattern:
+        print(f"❌ Test 4 FAILED: Expected alternating user/assistant roles, got {roles[:4]}")
+        return False
+    
+    print(f"✓ Test 4 PASSED")
+    print(f"   History length: {len(history)} messages")
+    print(f"   Roles: {roles}")
+    
+    # Test 5: Invalid mode
+    print("\n[Test 5] Invalid mode (should return 400)...")
+    resp = requests.post(
+        f"{BASE_URL}/ai/chat",
+        headers=headers,
+        json={
+            "mode": "invalid",
+            "message": "hi"
+        }
+    )
+    
+    if resp.status_code != 400:
+        print(f"❌ Test 5 FAILED: Expected 400, got {resp.status_code}")
+        return False
+    
+    data = resp.json()
+    if "invalid" not in data.get("detail", "").lower():
+        print(f"❌ Test 5 FAILED: Error message doesn't mention 'invalid mode'")
+        print(f"   Detail: {data.get('detail')}")
+        return False
+    
+    print(f"✓ Test 5 PASSED")
+    print(f"   Error detail: {data.get('detail')}")
+    
+    # Test 6: Access denial (expired trial)
+    print("\n[Test 6] Access denial (expired trial - should return 403)...")
+    expired_headers = {"Authorization": f"Bearer {expired_token}"}
+    resp = requests.post(
+        f"{BASE_URL}/ai/chat",
+        headers=expired_headers,
+        json={
+            "mode": "assistant",
+            "message": "hi"
+        }
+    )
+    
+    if resp.status_code != 403:
+        print(f"❌ Test 6 FAILED: Expected 403, got {resp.status_code}")
+        return False
+    
+    data = resp.json()
+    detail = data.get("detail", "").lower()
+    if "trial" not in detail and "subscription" not in detail:
+        print(f"❌ Test 6 FAILED: Error message doesn't mention trial or subscription")
+        print(f"   Detail: {data.get('detail')}")
+        return False
+    
+    print(f"✓ Test 6 PASSED")
+    print(f"   Error detail: {data.get('detail')}")
+    
+    # Test 7: Access allowed (trial-active free user)
+    print("\n[Test 7] Access allowed (trial-active free user - should return 200)...")
+    free_headers = {"Authorization": f"Bearer {free_trial_token}"}
+    resp = requests.post(
+        f"{BASE_URL}/ai/chat",
+        headers=free_headers,
+        json={
+            "mode": "assistant",
+            "message": "Hello"
+        }
+    )
+    
+    if resp.status_code != 200:
+        print(f"❌ Test 7 FAILED: Expected 200, got {resp.status_code} - {resp.text}")
+        return False
+    
+    data = resp.json()
+    if not data.get("response"):
+        print(f"❌ Test 7 FAILED: No response")
+        return False
+    
+    print(f"✓ Test 7 PASSED")
+    print(f"   Response snippet: {data['response'][:100]}...")
+    
+    # Test 8: Unauthenticated (no auth header)
+    print("\n[Test 8] Unauthenticated (should return 401)...")
+    resp = requests.post(
+        f"{BASE_URL}/ai/chat",
+        json={
+            "mode": "assistant",
+            "message": "hi"
+        }
+    )
+    
+    if resp.status_code != 401:
+        print(f"❌ Test 8 FAILED: Expected 401, got {resp.status_code}")
+        return False
+    
+    print(f"✓ Test 8 PASSED")
+    
+    return True
+
 def main():
     print("=" * 60)
     print("CT Field Workbook Backend API Testing")
     print("=" * 60)
     
     try:
-        # Create test users
+        # Test AI endpoints (uses existing demo sessions)
+        print("\n=== Testing AI Endpoints (Gemini Integration) ===")
+        ai_result = test_ai_gemini()
+        
+        # Create test users for other tests
         print("\n=== Creating Test Users ===")
         user1 = create_test_user("Test User 1")
         user2 = create_test_user("Test User 2")
         
         # Run tests
         results = {
+            "AI/GEMINI": ai_result,
             "AUTH": test_auth(user1),
             "TEAMS": test_teams(user1, user2),
             "JOBS": test_jobs(user1, user2),

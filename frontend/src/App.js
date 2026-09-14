@@ -12,6 +12,9 @@ import Pricing from "./pages/Pricing";
 import { PaymentSuccess, PaymentCancel } from "./pages/PaymentPages";
 import TeamPage from "./pages/TeamPage";
 import JobsPage from "./pages/JobsPage";
+import AdminFeedback from "./pages/AdminFeedback";
+import AdminInvites from "./pages/AdminInvites";
+import Hub from "./pages/Hub";
 import { useAuth, API } from "./context/AuthContext";
 import { workbookData } from "./mock/workbookData";
 import { Loader2, Clock } from "lucide-react";
@@ -180,8 +183,11 @@ const AppRouter = () => {
       <Route path="/payment/success" element={<PaymentSuccess />} />
       <Route path="/payment/cancel" element={<PaymentCancel />} />
       <Route path="/app" element={<ProtectedRoute><Workbook /></ProtectedRoute>} />
+      <Route path="/hub" element={<ProtectedRoute><Hub /></ProtectedRoute>} />
       <Route path="/team" element={<ProtectedRoute><TeamPage /></ProtectedRoute>} />
       <Route path="/jobs" element={<ProtectedRoute><JobsPage /></ProtectedRoute>} />
+      <Route path="/admin/feedback" element={<ProtectedRoute><AdminFeedback /></ProtectedRoute>} />
+      <Route path="/admin/invites" element={<ProtectedRoute><AdminInvites /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
@@ -196,7 +202,7 @@ const LandingRedirect = () => {
       </div>
     );
   }
-  return <Navigate to={user ? "/app" : "/login"} replace />;
+  return <Navigate to={user ? "/hub" : "/login"} replace />;
 };
 
 function App() {

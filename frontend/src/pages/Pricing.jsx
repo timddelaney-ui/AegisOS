@@ -1,7 +1,7 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth, API } from "../context/AuthContext";
-import { Check, Star, ArrowLeft, Loader2 } from "lucide-react";
+import { Check, Star, ArrowLeft, Loader2, Sparkles } from "lucide-react";
 import axios from "axios";
 
 const Pricing = () => {
@@ -10,10 +10,7 @@ const Pricing = () => {
   const [loadingPlan, setLoadingPlan] = React.useState(null);
 
   const subscribe = async (lookup_key) => {
-    if (!user) {
-      navigate("/login");
-      return;
-    }
+    if (!user) { navigate("/login"); return; }
     setLoadingPlan(lookup_key);
     try {
       const { data } = await axios.post(
@@ -30,10 +27,11 @@ const Pricing = () => {
 
   const features = [
     "All 17 operation sheets",
-    "Emergency SOP protocols",
+    "Emergency SOP protocols (17 scenarios)",
     "Imperial & Metric units",
-    "Save unlimited field jobs",
-    "Share jobs with your crew",
+    "Save & share unlimited field jobs",
+    "AI Field Assistant (Gemini)",
+    "Beginner Training mode",
     "Live simulation diagrams",
     "API 5CT & AER Directive compliant",
   ];
@@ -52,19 +50,17 @@ const Pricing = () => {
           <div className="text-center mb-6">
             <div className="inline-flex items-center gap-1.5 bg-[#FFF3CD] text-[#856404] px-3 py-1 rounded-full text-xs font-bold mb-3">
               <Star className="w-3.5 h-3.5 fill-[#856404]" />
-              FOUNDER'S LAUNCH — LIMITED TIME
+              ROLLOUT PRICING — LOCK IN NOW
             </div>
             <h2 className="text-2xl md:text-3xl font-bold text-[#262626] mb-2">Unlock CT Workbook Pro</h2>
-            <p className="text-sm text-[#595959]">Full access to every sheet, saved jobs, crew sharing, and Emergency SOPs.</p>
+            <p className="text-sm text-[#595959]">Cheaper than a coffee. Full access to every sheet, saved jobs, crew sharing, AI assistant, and Emergency SOPs.</p>
           </div>
 
           <div className="grid md:grid-cols-2 gap-4">
             <div className="bg-white border border-[#D4D4D4] rounded-lg p-6 shadow-sm">
-              <div className="flex items-baseline justify-between mb-1">
-                <h3 className="text-lg font-bold text-[#262626]">Monthly</h3>
-              </div>
+              <div className="flex items-baseline justify-between mb-1"><h3 className="text-lg font-bold text-[#262626]">Monthly</h3></div>
               <div className="mb-4">
-                <span className="text-4xl font-bold text-[#107C41]">$5</span>
+                <span className="text-4xl font-bold text-[#107C41]">$2.99</span>
                 <span className="text-sm text-[#595959] ml-1">/ month USD</span>
               </div>
               <p className="text-xs text-[#595959] mb-4">Cancel anytime. No commitment.</p>
@@ -79,14 +75,15 @@ const Pricing = () => {
             </div>
 
             <div className="bg-white border-2 border-[#107C41] rounded-lg p-6 shadow-md relative">
-              <div className="absolute -top-3 right-4 bg-[#107C41] text-white text-[10px] font-bold px-2 py-1 rounded">BEST VALUE</div>
-              <div className="flex items-baseline justify-between mb-1">
-                <h3 className="text-lg font-bold text-[#262626]">Yearly</h3>
+              <div className="absolute -top-3 right-4 bg-[#107C41] text-white text-[10px] font-bold px-2 py-1 rounded flex items-center gap-1">
+                <Sparkles className="w-2.5 h-2.5" /> SAVE 30%
               </div>
-              <div className="mb-4">
-                <span className="text-4xl font-bold text-[#107C41]">$60</span>
+              <div className="flex items-baseline justify-between mb-1"><h3 className="text-lg font-bold text-[#262626]">Yearly</h3></div>
+              <div className="mb-1">
+                <span className="text-4xl font-bold text-[#107C41]">$24.99</span>
                 <span className="text-sm text-[#595959] ml-1">/ year USD</span>
               </div>
+              <p className="text-[11px] text-[#0D6535] font-semibold mb-3">Just $2.08/month — save $11/year</p>
               <p className="text-xs text-[#595959] mb-4">One payment. Full year of access.</p>
               <button
                 onClick={() => subscribe("ct_pro_yearly")}
@@ -112,7 +109,7 @@ const Pricing = () => {
           </div>
 
           <p className="text-[11px] text-center text-[#595959] mt-4">
-            Secure payment powered by Stripe. Test mode: use card 4242 4242 4242 4242, any future date, any CVC.
+            Secure payment powered by Stripe. Test mode: card 4242 4242 4242 4242, any future date, any CVC.
           </p>
         </div>
       </div>

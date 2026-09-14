@@ -1,13 +1,24 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { FileSpreadsheet, Menu, LogOut, Users, FolderOpen, Sparkles, X, Crown } from "lucide-react";
-import { useAuth } from "../context/AuthContext";
+import { FileSpreadsheet, Menu, LogOut, Users, FolderOpen, Sparkles, X, Crown, MessageSquarePlus, ShieldAlert, Gift, Ticket, Home } from "lucide-react";
+import axios from "axios";
+import { useAuth, API } from "../context/AuthContext";
+import FeedbackDialog from "./FeedbackDialog";
+import RedeemDialog from "./RedeemDialog";
 
 const ExcelHeader = () => {
   const { user, logout } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [redeemOpen, setRedeemOpen] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const navigate = useNavigate();
   const isPro = user?.subscription_status === "active";
+
+  useEffect(() => {
+    if (!user) return;
+    axios.get(`${API}/admin/whoami`, { withCredentials: true }).then((r) => setIsAdmin(r.data.is_admin)).catch(() => {});
+  }, [user]);
 
   return (
     <>
@@ -43,12 +54,31 @@ const ExcelHeader = () => {
               </div>
             )}
             <nav className="p-2">
+              <button onClick={() => { setMenuOpen(false); navigate("/hub"); }} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-[#F0F9F3] rounded text-sm font-medium text-[#262626]">
+                <Home className="w-4 h-4 text-[#107C41]" /> Hub
+              </button>
               <button onClick={() => { setMenuOpen(false); navigate("/jobs"); }} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-[#F0F9F3] rounded text-sm font-medium text-[#262626]">
                 <FolderOpen className="w-4 h-4 text-[#107C41]" /> Saved Jobs
               </button>
               <button onClick={() => { setMenuOpen(false); navigate("/team"); }} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-[#F0F9F3] rounded text-sm font-medium text-[#262626]">
                 <Users className="w-4 h-4 text-[#107C41]" /> Crew / Team
               </button>
+              <button onClick={() => { setMenuOpen(false); setRedeemOpen(true); }} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-[#F0F9F3] rounded text-sm font-medium text-[#262626]">
+                <Ticket className="w-4 h-4 text-[#107C41]" /> Redeem Invite Code
+              </button>
+              <button onClick={() => { setMenuOpen(false); setFeedbackOpen(true); }} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-[#F0F9F3] rounded text-sm font-medium text-[#262626]">
+                <MessageSquarePlus className="w-4 h-4 text-[#107C41]" /> Send Feedback
+              </button>
+              {isAdmin && (
+                <>
+                  <button onClick={() => { setMenuOpen(false); navigate("/admin/feedback"); }} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-[#F0F9F3] rounded text-sm font-medium text-[#262626]">
+                    <ShieldAlert className="w-4 h-4 text-[#C00000]" /> Admin: Feedback Inbox
+                  </button>
+                  <button onClick={() => { setMenuOpen(false); navigate("/admin/invites"); }} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-[#F0F9F3] rounded text-sm font-medium text-[#262626]">
+                    <Gift className="w-4 h-4 text-[#C00000]" /> Admin: Invite Codes
+                  </button>
+                </>
+              )}
               {!isPro && (
                 <button onClick={() => { setMenuOpen(false); navigate("/pricing"); }} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-[#F0F9F3] rounded text-sm font-medium text-[#262626]">
                   <Sparkles className="w-4 h-4 text-[#856404]" /> Upgrade to Pro
@@ -62,6 +92,9 @@ const ExcelHeader = () => {
           </div>
         </div>
       )}
+
+      <FeedbackDialog open={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
+      <RedeemDialog open={redeemOpen} onClose={() => setRedeemOpen(false)} />
     </>
   );
 };

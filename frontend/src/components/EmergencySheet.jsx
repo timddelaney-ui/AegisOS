@@ -10,8 +10,10 @@ import {
   ChevronDown,
   ChevronUp,
   Users,
+  Sparkles,
 } from "lucide-react";
 import { emergencyProtocols, emergencyCategories } from "../mock/workbookData";
+import AIPanel from "./AIPanel";
 
 const severityStyles = {
   critical: {
@@ -120,6 +122,7 @@ const EmergencyCard = ({ protocol }) => {
 const EmergencySheet = () => {
   const [category, setCategory] = useState("All");
   const [query, setQuery] = useState("");
+  const [aiOpen, setAiOpen] = useState(false);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -202,6 +205,26 @@ const EmergencySheet = () => {
         037, and CSA Z662. They do not replace site-specific ERPs, JHAs, or licensee well-control
         procedures. Always follow your company's ERP and applicable jurisdiction regulations.
       </p>
+
+      {/* Floating AI trigger for emergency scenarios */}
+      <button
+        onClick={() => setAiOpen(true)}
+        className="fixed bottom-16 right-4 z-40 bg-[#C00000] hover:bg-[#8B0000] text-white w-12 h-12 rounded-full shadow-lg flex items-center justify-center transition-transform hover:scale-105"
+        title="Ask AI about emergency scenarios"
+      >
+        <Sparkles className="w-5 h-5" strokeWidth={2.5} />
+      </button>
+
+      <AIPanel
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+        initialMode="emergency"
+        contextBuilder={() => ({
+          sheet_key: "EMERGENCY",
+          sheet_title: "Emergency Well Control & HSE",
+          scenarios: emergencyProtocols.map((p) => p.title).join("; "),
+        })}
+      />
     </div>
   );
 };

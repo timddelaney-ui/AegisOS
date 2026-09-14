@@ -246,6 +246,74 @@ frontend:
 
   - task: "Imperial ↔ Metric unit switching in Results panel"
     implemented: true
+    -agent: "main"
+    -message: |
+      NEW FEATURES:
+      1. Invite code system for exclusive trial access:
+         - POST /api/admin/invites  (admin only) — body {grant_days, note, max_uses}; returns code like "CT-ABCD-EFGH"
+         - GET /api/admin/invites  (admin only) — list all codes with redemption history
+         - DELETE /api/admin/invites/{code}  (admin only) — mark inactive
+         - POST /api/invites/redeem  (any auth user) — body {code}; grants grant_days of Pro
+         - Same user cannot redeem the same code twice; max_uses cap enforced; revoked codes rejected
+      2. Hub / dashboard page at /hub — personalized landing after login (greeting, stats, AI shortcuts, recent jobs, crew, tips)
+      3. Redeem invite dialog wired into header menu
+
+      TESTING NEEDED (backend):
+      - Admin gating:
+        POST /api/admin/invites as admin with {"grant_days":30,"note":"pilot","max_uses":1} → 200, returns code "CT-XXXX-XXXX"
+        POST as non-admin → 403
+        GET /api/admin/invites as admin → 200 array
+        GET as non-admin → 403
+      - Redemption:
+        POST /api/invites/redeem with the code just created (as demo_free user) → 200, sets user.subscription_status=active, subscription_plan="invite", subscription_expires_at ~30 days out
+        POST /api/invites/redeem with same code again as same user → 400 "already used"
+        POST /api/invites/redeem with a NEW code as demo_free where max_uses=1 already reached → 400 "already been redeemed"
+        POST /api/invites/redeem with invalid code "CT-XXXX-XXXX-fake" → 404
+        DELETE /api/admin/invites/{code} as admin → 200. Try to redeem revoked code → 400 "revoked"
+      - Validation:
+        POST /api/admin/invites with {"grant_days":0} → 400
+        POST /api/admin/invites with {"max_uses":0} → 400
+      - Post-redeem behavior:
+        After successful redeem, GET /api/auth/me should show subscription_status="active".
+        Redeeming again with a fresh code should extend, not reset (new_expires = current_expires + grant_days).
+    -agent: "main"
+    -message: |
+      FEATURE UPDATES (user request): 
+      1. Stripe pricing dropped from $5/mo, $60/yr to $2.99/mo, $24.99/yr (30% annual discount)
+      2. All AI system prompts rewritten with authentic Canadian oilfield voice (dry humour, field slang, still API/AER-grounded)
+      3. Added Training mode ("training") — sixth AI mode for new hands, mentor-style explanations of what's happening downhole
+      4. NEW: Feedback / recommendations system
+         - POST /api/feedback  (any authenticated user submits) — category in {bug, idea, ux, data_accuracy, other}, subject, message, page
+         - GET  /api/feedback  (ADMIN only, checked against ADMIN_EMAILS env var) — returns all
+         - GET  /api/feedback/mine  (user's own submissions)
+         - PATCH /api/feedback/{id}  (ADMIN only) — update status + admin_notes
+         - GET  /api/admin/whoami  (returns {is_admin, email})
+         - ADMIN_EMAILS=demo.pro@example.com set in .env for testing
+      5. SVG simulation diagrams now interpret live calculated results:
+         wellbore stroke goes red on danger warnings/orange on warn;
+         mill/bit rotates when WOB > 0 and turns red > 2000 lb;
+         frac fluid pulses;
+         N2 bubbles rise faster with higher rate;
+         pipe stretch arrow speed reflects utilisation;
+         cement plug shows AER Dir 020 compliance mark.
+      
+      TESTING NEEDED (backend):
+      - Feedback endpoints CRUD:
+        - POST /api/feedback with {"category":"bug","subject":"Test","message":"Testing"} as demo_pro user → 200
+        - POST /api/feedback with {"category":"invalid",...} → 400
+        - GET /api/feedback as ADMIN (demo_pro_session_token_12345) → 200 array
+        - GET /api/feedback as NON-ADMIN (demo_free_session_token_67890) → 403
+        - PATCH /api/feedback/{id} with {"status":"in_review","admin_notes":"looking"} as admin → 200
+        - PATCH as non-admin → 403
+        - GET /api/feedback/mine → 200 array of own submissions
+        - GET /api/admin/whoami as admin → {is_admin: true}, as non-admin → {is_admin: false}
+      - AI Training mode:
+        - POST /api/ai/chat with {"mode":"training","message":"What does WOB mean and why does it matter?"} → 200 with beginner-friendly explanation
+        - Verify oilfield voice: assistant/troubleshoot responses should use field slang and end with the advisory disclaimer
+      - Pricing:
+        - POST /api/payments/checkout with {"lookup_key":"ct_pro_monthly","origin_url":"https://example.com"} → 200 with valid checkout_url
+          Verify the amount is 299 cents (not 500) — you can retrieve the session and check line_items or verify the price lookup returns 299.
+        - Same for ct_pro_yearly should be 2499 cents.
     working: true
     file: "frontend/src/lib/formulas.js"
     stuck_count: 0
@@ -259,15 +327,104 @@ frontend:
         -agent: "testing"
         -comment: "VERIFIED: Unit switching works correctly across all sheets. Pipe_Stretch conversions: 727 ft → 222 m, 0.54 in² → 348.36 mm², 53,996 lb → 24,019 daN, 43,197 lb → 19,215 daN. Frac gradient switches: psi/ft → kPa/m. CT_Milling shows all metric units: daN, L/min, MPa, kPa, kW, m/min, m³/m. Both unit labels AND numeric values convert correctly."
 
+  - task: "Feedback system (POST /api/feedback, GET /api/feedback, GET /api/feedback/mine, PATCH /api/feedback/{id})"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Implemented feedback system with POST /api/feedback (any auth user), GET /api/feedback (admin only), GET /api/feedback/mine (user's own), PATCH /api/feedback/{id} (admin only). Valid categories: bug, idea, ux, data_accuracy, other. Admin check uses ADMIN_EMAILS env var."
+        -working: true
+        -agent: "testing"
+        -comment: "ALL TESTS PASSED. POST /api/feedback: Admin and non-admin can submit feedback (200), invalid category correctly rejected (400). GET /api/feedback: Admin can list all feedback (200), non-admin correctly denied (403). GET /api/feedback/mine: Non-admin can list own submissions (200). PATCH /api/feedback/{id}: Admin can update status and admin_notes (200), non-admin correctly denied (403), invalid ID returns 404."
+
+  - task: "Admin whoami endpoint (GET /api/admin/whoami)"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Implemented GET /api/admin/whoami endpoint that returns {is_admin: bool, email: str}. Admin check based on ADMIN_EMAILS env var (demo.pro@example.com)."
+        -working: true
+        -agent: "testing"
+        -comment: "VERIFIED. GET /api/admin/whoami with admin cookie (demo_pro_session_token_12345) returns {is_admin: true, email: 'demo.pro@example.com'}. With non-admin cookie (demo_free_session_token_67890) returns {is_admin: false, email: 'demo.free@example.com'}."
+
+  - task: "AI Training mode (mode='training')"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Added Training mode to AI chat system. System prompt is mentor-style for new field hands, explains downhole operations in plain English with analogies. POST /api/ai/chat with mode='training'."
+        -working: true
+        -agent: "testing"
+        -comment: "VERIFIED. POST /api/ai/chat with mode='training' and message 'What does WOB mean and why does it matter for milling?' returns 200 with beginner-friendly explanation (8624 chars). Response includes keywords: weight, bit, downhole, force, pressure, milling. Training mode working correctly."
+
+  - task: "AI oilfield voice (Canadian field slang, API/AER citations, advisory disclaimer)"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Rewrote all AI system prompts with authentic Canadian oilfield voice. Assistant mode uses field slang (rig up, tag bottom, POOH, tool push, etc.) and ends with 'Advisory only — always verify against the site ERP and licensee program.' Cites API RP 5C7, AER Directives, CSA standards."
+        -working: true
+        -agent: "testing"
+        -comment: "VERIFIED. POST /api/ai/chat with mode='assistant' and message '3.5 BPM through 1.25 CT at 5200 ft, 9.5 ppg — safe?' returns 200 with response (1354 chars) that includes 'Advisory only' phrase and cites API/AER standards. Oilfield voice working correctly."
+
+  - task: "Updated Stripe pricing ($2.99/mo, $24.99/yr)"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Updated Stripe pricing from $5/mo, $60/yr to $2.99/mo, $24.99/yr (30% annual discount). Lookup keys: ct_pro_monthly (299 cents), ct_pro_yearly (2499 cents)."
+        -working: true
+        -agent: "testing"
+        -comment: "VERIFIED. POST /api/payments/checkout with lookup_key='ct_pro_monthly' creates checkout session and stores amount=299 cents in payment_transactions. POST with lookup_key='ct_pro_yearly' stores amount=2499 cents. Pricing correctly updated to $2.99/mo and $24.99/yr."
+
+  - task: "Invite code system (POST /api/admin/invites, GET /api/admin/invites, DELETE /api/admin/invites/{code}, POST /api/invites/redeem)"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Implemented invite code system for exclusive trial access. POST /api/admin/invites (admin only) creates codes with grant_days, note, max_uses. GET /api/admin/invites (admin only) lists all codes. DELETE /api/admin/invites/{code} (admin only) revokes codes. POST /api/invites/redeem (any auth user) redeems codes and grants Pro access. Enforces max_uses cap, prevents duplicate redemption by same user, extends (not resets) subscription on repeat redemption."
+        -working: true
+        -agent: "testing"
+        -comment: "ALL TESTS PASSED. Created comprehensive test suite in /app/test_invite_codes.py. Test 1 - Admin gating: Admin can create invite codes (200) with correct response structure (code pattern CT-XXXX-XXXX, created_by_email, grant_days, max_uses, use_count=0, is_active=true). Non-admin correctly denied (403). Invalid grant_days=0 and max_uses=0 correctly rejected (400). Test 2 - Admin list: Admin can list all codes (200), non-admin denied (403). Test 3 - Redemption: Non-admin successfully redeemed code (200), subscription_status=active, subscription_plan=invite, subscription_expires_at set to ~30 days. Test 4 - Duplicate redemption: Same user cannot redeem same code twice (400). Test 5 - Max uses: Code with max_uses=1 cannot be redeemed by different user after first use (400). Test 6 - Invalid code: Non-existent code returns 404. Test 7 - Revocation: Admin can revoke code (200), non-admin denied (403), non-existent code returns 404, revoked code cannot be redeemed (400 'revoked'). Test 8 - Extension: Redeeming second code extends subscription (T2 = T1 + 10 days), does not reset to now+10 days. Minor: Error message order could be improved - when same user tries to redeem twice, they get 'Code has already been redeemed' instead of more specific 'You have already used this code' because max_uses check comes before duplicate user check. Functionality works correctly, just less user-friendly error message."
+
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 2
+  test_sequence: 4
   run_ui: false
 
 test_plan:
-  current_focus:
-    - "Emergent Google Auth (session exchange, /auth/me, /auth/logout)"
+  current_focus: []
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -349,3 +506,138 @@ agent_communication:
       - Units switch back to Imperial correctly ✓
       
       Both unit LABELS and NUMERIC VALUES convert correctly. No issues found.
+    -agent: "testing"
+    -message: |
+      ✅ GEMINI AI INTEGRATION TESTING COMPLETE - ALL TESTS PASSED
+      
+      Tested all 8 scenarios for Gemini AI integration:
+      
+      ✅ Test 1 - Assistant mode with sheet context (Pro user)
+      - POST /api/ai/chat returned 200 with session_id, response, model="gemini-2.5-flash"
+      - Response correctly addressed pump rate safety and high friction pressure
+      
+      ✅ Test 2 - Troubleshoot mode (Pro user)
+      - POST /api/ai/chat returned 200 with diagnostic guidance citing industry SOPs
+      
+      ✅ Test 3 - Multi-turn conversation (session continuity)
+      - Session memory working - response referenced earlier conversation context
+      
+      ✅ Test 4 - GET /api/ai/history/{session_id}
+      - Returned 4 messages with alternating user/assistant roles
+      - Message persistence to ai_messages collection working correctly
+      
+      ✅ Test 5 - Invalid mode
+      - Correctly returned 400 Bad Request with error: "Invalid mode: invalid"
+      
+      ✅ Test 6 - Access denial (expired trial)
+      - Correctly returned 403 Forbidden for demo_expired_ss token
+      - Error: "AI features require an active trial or Pro subscription"
+      
+      ✅ Test 7 - Access allowed (trial-active free user)
+      - Correctly returned 200 for demo_free_session_token_67890
+      - Free users with active trial have AI access as expected
+      
+      ✅ Test 8 - Unauthenticated
+      - Correctly returned 401 Unauthorized without auth header
+      
+      Backend logs confirm:
+      - LiteLLM successfully calling Gemini 2.5 Flash model
+      - All access control checks working correctly
+      - No errors in backend logs
+      
+      All backend features are now working correctly. No issues found.
+    -agent: "testing"
+    -message: |
+      ✅ NEW FEATURES TESTING COMPLETE - ALL TESTS PASSED
+      
+      Tested new features: Feedback system, Admin whoami, AI Training mode, Updated Stripe pricing
+      Created comprehensive test suite in /app/test_new_features.py
+      
+      RESULTS:
+      ✅ Test 1 - Admin whoami: PASSED
+      - GET /api/admin/whoami with admin cookie returns {is_admin: true, email: "demo.pro@example.com"}
+      - GET /api/admin/whoami with non-admin cookie returns {is_admin: false}
+      
+      ✅ Test 2 - Feedback create: PASSED
+      - POST /api/feedback as admin with valid body returns 200 with feedback_id, status="new", created_at
+      - POST /api/feedback with invalid category returns 400
+      - POST /api/feedback as non-admin with valid body returns 200
+      
+      ✅ Test 3 - Feedback list (admin gating): PASSED
+      - GET /api/feedback with admin cookie returns 200 with array of all feedback
+      - GET /api/feedback with non-admin cookie returns 403 with detail "Admin only"
+      - GET /api/feedback/mine as non-admin returns 200 with array of own submissions
+      
+      ✅ Test 4 - Feedback update (admin only): PASSED
+      - PATCH /api/feedback/{id} as admin with status and admin_notes returns 200 with updated fields
+      - PATCH /api/feedback/{id} as non-admin returns 403
+      - PATCH /api/feedback/invalid_id as admin returns 404
+      
+      ✅ Test 5 - AI Training mode: PASSED
+      - POST /api/ai/chat with mode="training" returns 200 with beginner-friendly explanation (8624 chars)
+      - Response includes keywords: weight, bit, downhole, force, pressure, milling
+      
+      ✅ Test 6 - AI oilfield voice: PASSED
+      - POST /api/ai/chat with mode="assistant" returns 200 with response (1354 chars)
+      - Response ends with "Advisory only" phrase and cites API/AER standards
+      
+      ✅ Test 7 - Stripe pricing update: PASSED
+      - POST /api/payments/checkout with lookup_key="ct_pro_monthly" creates checkout session
+      - Verified amount in payment_transactions: 299 cents ($2.99) ✓
+      - POST /api/payments/checkout with lookup_key="ct_pro_yearly" creates checkout session
+      - Verified amount in payment_transactions: 2499 cents ($24.99) ✓
+      
+      All backend features working correctly. No issues found.
+    -agent: "testing"
+    -message: |
+      ✅ INVITE CODE SYSTEM TESTING COMPLETE - ALL TESTS PASSED
+      
+      Tested new invite code system for exclusive trial access.
+      Created comprehensive test suite in /app/test_invite_codes.py
+      
+      RESULTS:
+      ✅ Test 1 - Admin gating on creation: PASSED
+      - POST /api/admin/invites as admin with valid body returns 200 with code "CT-BMWB-XG97"
+      - Response structure verified: created_by_email="demo.pro@example.com", grant_days=30, max_uses=1, use_count=0, is_active=true
+      - Code pattern matches ^CT-[A-Z0-9]{4}-[A-Z0-9]{4}$ ✓
+      - POST as non-admin returns 403 "Admin only" ✓
+      - POST with grant_days=0 returns 400 "grant_days must be 1..3650" ✓
+      - POST with max_uses=0 returns 400 "max_uses must be 1..10000" ✓
+      
+      ✅ Test 2 - Admin list: PASSED
+      - GET /api/admin/invites as admin returns 200 with array containing CODE_A ✓
+      - GET as non-admin returns 403 "Admin only" ✓
+      
+      ✅ Test 3 - Redemption success: PASSED
+      - POST /api/invites/redeem as non-admin with CODE_A returns 200
+      - Response: success=true, grant_days=30, expires_at (29 days in future), message ✓
+      - GET /api/auth/me shows subscription_status="active", subscription_plan="invite", subscription_expires_at set ✓
+      
+      ✅ Test 4 - Cannot redeem same code twice: PASSED
+      - POST /api/invites/redeem with CODE_A again as same user returns 400 "Code has already been redeemed" ✓
+      
+      ✅ Test 5 - Max uses enforced: PASSED
+      - POST /api/invites/redeem with CODE_A (max_uses=1, use_count=1) as different user returns 400 "Code has already been redeemed" ✓
+      
+      ✅ Test 6 - Invalid code: PASSED
+      - POST /api/invites/redeem with "CT-ZZZZ-9999" returns 404 "Invalid code" ✓
+      
+      ✅ Test 7 - Revocation: PASSED
+      - POST /api/admin/invites creates CODE_B with grant_days=15, max_uses=5 ✓
+      - DELETE /api/admin/invites/{CODE_B} as admin returns 200 ✓
+      - DELETE as non-admin returns 403 "Admin only" ✓
+      - DELETE /api/admin/invites/NOT_A_REAL_CODE returns 404 "Not found" ✓
+      - POST /api/invites/redeem with revoked CODE_B returns 400 "Code has been revoked" ✓
+      
+      ✅ Test 8 - Extension (not reset) on repeat redemption: PASSED
+      - Created CODE_C with grant_days=10, max_uses=1 ✓
+      - Got demo_free user's current subscription_expires_at (T1) = 2026-10-14 16:15:38.903000
+      - Redeemed CODE_C as demo_free user ✓
+      - Got updated subscription_expires_at (T2) = 2026-10-24 16:15:38.903000
+      - Verified T2 = T1 + 10 days (extension, not reset to now+10) ✓
+      - Diff: 0.0 seconds (perfect match)
+      
+      MINOR ISSUE (not critical):
+      - Error message order: When same user tries to redeem same code twice, they get generic "Code has already been redeemed" instead of more specific "You have already used this code". This happens because max_uses check (line 793) comes before duplicate user check (line 797). Functionality works correctly, just less user-friendly error message.
+      
+      All backend invite code features working correctly. No critical issues found.

@@ -32,7 +32,7 @@ const AuthCallback = () => {
         );
         setUser(data);
         window.history.replaceState(null, "", window.location.pathname);
-        navigate("/app", { replace: true, state: { user: data } });
+        navigate("/hub", { replace: true, state: { user: data } });
       } catch (e) {
         setError("Sign-in failed. Please try again.");
         setTimeout(() => navigate("/login"), 2000);
