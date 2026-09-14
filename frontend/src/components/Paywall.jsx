@@ -1,27 +1,33 @@
 import React from "react";
-import { Lock, Sparkles, Check } from "lucide-react";
+import { Lock, Sparkles, Check, Clock } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
-const Paywall = ({ sheetTitle }) => {
+const Paywall = ({ sheetTitle, trialExpired = false }) => {
   const navigate = useNavigate();
   return (
     <div className="flex flex-col gap-3">
-      <div className="bg-[#FFF3CD] border-l-[3px] border-[#856404] px-2.5 py-2 text-[11px] font-semibold text-[#856404] rounded-r flex items-center gap-1.5">
-        <Lock className="w-3 h-3 flex-shrink-0" strokeWidth={2.5} />
-        <span>PRO SHEET — Upgrade to unlock</span>
+      <div className={`px-2.5 py-2 text-[11px] font-semibold rounded-r flex items-center gap-1.5 border-l-[3px] ${trialExpired ? "bg-[#F8D7DA] border-[#C00000] text-[#721C24]" : "bg-[#FFF3CD] border-[#856404] text-[#856404]"}`}>
+        {trialExpired ? <Clock className="w-3 h-3 flex-shrink-0" strokeWidth={2.5} /> : <Lock className="w-3 h-3 flex-shrink-0" strokeWidth={2.5} />}
+        <span>{trialExpired ? "7-DAY TRIAL ENDED — Subscribe to keep working" : "PRO SHEET — Upgrade to unlock"}</span>
       </div>
 
       <div className="bg-white border border-[#D4D4D4] rounded-lg p-5 md:p-7 shadow-sm text-center">
-        <div className="w-14 h-14 bg-[#FFF3CD] rounded-full flex items-center justify-center mx-auto mb-3">
-          <Lock className="w-7 h-7 text-[#856404]" strokeWidth={2} />
+        <div className={`w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-3 ${trialExpired ? "bg-[#F8D7DA]" : "bg-[#FFF3CD]"}`}>
+          {trialExpired ? <Clock className="w-7 h-7 text-[#721C24]" strokeWidth={2} /> : <Lock className="w-7 h-7 text-[#856404]" strokeWidth={2} />}
         </div>
-        <h3 className="text-lg font-bold text-[#262626] mb-1">{sheetTitle} is Pro</h3>
-        <p className="text-sm text-[#595959] mb-5">Unlock this sheet plus every other operation, Emergency SOPs, and saved jobs across your crew.</p>
+        <h3 className="text-lg font-bold text-[#262626] mb-1">
+          {trialExpired ? "Your 7-day trial has ended" : `${sheetTitle} is Pro`}
+        </h3>
+        <p className="text-sm text-[#595959] mb-5">
+          {trialExpired
+            ? "Subscribe to keep using the workbook, save field jobs, and access all 17 sheets plus Emergency SOPs."
+            : "Unlock this sheet plus every other operation, Emergency SOPs, and saved jobs across your crew."}
+        </p>
 
         <div className="bg-[#F8F9FA] border border-[#D4D4D4] rounded p-4 mb-4 text-left">
           <div className="flex items-center gap-2 mb-3">
             <Sparkles className="w-4 h-4 text-[#107C41]" strokeWidth={2.5} />
-            <span className="text-xs font-bold text-[#856404] uppercase">Founder's Launch</span>
+            <span className="text-xs font-bold text-[#856404] uppercase">Founder's Launch Pricing</span>
           </div>
           <div className="grid grid-cols-2 gap-3 text-center">
             <div className="bg-white border border-[#D4D4D4] rounded p-2">

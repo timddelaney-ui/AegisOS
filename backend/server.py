@@ -41,6 +41,7 @@ class User(BaseModel):
     subscription_status: str = "free"  # free | active | canceled
     subscription_plan: Optional[str] = None  # monthly | yearly
     subscription_expires_at: Optional[datetime] = None
+    trial_expires_at: Optional[datetime] = None
 
 
 class Team(BaseModel):
@@ -161,11 +162,11 @@ async def create_session(request: Request, response: Response):
     existing = await db.users.find_one({"email": email}, {"_id": 0})
     if existing:
         user_id = existing["user_id"]
-        # Update name/picture in case they changed
-        await db.users.update_one(
-            {"user_id": user_id},
-            {"$set": {"name": name, "picture": picture}},
-        )
+        update_fields = {"name": name, "picture": picture}
+        # Backfill trial_expires_at for pre-trial users
+        if not existing.get("trial_expires_at"):
+            update_fields["trial_expires_at"] = datetime.now(timezone.utc) + timedelta(days=7)
+        await db.users.update_one({"user_id": user_id}, {"$set": update_fields})
     else:
         user_id = f"user_{uuid.uuid4().hex[:12]}"
         await db.users.insert_one({
@@ -177,6 +178,7 @@ async def create_session(request: Request, response: Response):
             "subscription_status": "free",
             "subscription_plan": None,
             "subscription_expires_at": None,
+            "trial_expires_at": datetime.now(timezone.utc) + timedelta(days=7),
             "created_at": datetime.now(timezone.utc),
         })
 

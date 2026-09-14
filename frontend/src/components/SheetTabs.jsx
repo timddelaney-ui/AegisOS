@@ -2,7 +2,7 @@ import React, { useRef, useEffect } from "react";
 import { AlertTriangle, Lock } from "lucide-react";
 import { workbookData } from "../mock/workbookData";
 
-const SheetTabs = ({ currentSheet, onSelectSheet, freeSheets = [], isPro = false }) => {
+const SheetTabs = ({ currentSheet, onSelectSheet, freeSheets = [], isPro = false, trialActive = false }) => {
   const containerRef = useRef(null);
   const activeTabRef = useRef(null);
 
@@ -20,7 +20,14 @@ const SheetTabs = ({ currentSheet, onSelectSheet, freeSheets = [], isPro = false
     }
   }, [currentSheet]);
 
-  const isLocked = (key) => !isPro && !freeSheets.includes(key);
+  // A sheet is locked when the user is NOT Pro and either:
+  // - the sheet is not in the free list, OR
+  // - the trial has expired (in which case even free sheets are locked)
+  const isLocked = (key) => {
+    if (isPro) return false;
+    if (!trialActive) return true; // trial expired
+    return !freeSheets.includes(key);
+  };
 
   return (
     <nav

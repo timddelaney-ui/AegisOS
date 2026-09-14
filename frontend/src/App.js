@@ -14,11 +14,11 @@ import TeamPage from "./pages/TeamPage";
 import JobsPage from "./pages/JobsPage";
 import { useAuth, API } from "./context/AuthContext";
 import { workbookData } from "./mock/workbookData";
-import { Loader2 } from "lucide-react";
+import { Loader2, Clock } from "lucide-react";
 import axios from "axios";
 import "./App.css";
 
-// Free sheets accessible without subscription
+// Sheets included in the 7-day free trial
 const FREE_SHEETS = [
   "Pipe_Stretch",
   "Sand_Cleanout",
@@ -27,6 +27,19 @@ const FREE_SHEETS = [
   "Frac_Through_CT",
   "Annular_Frac",
 ];
+
+const TRIAL_DAYS = 7;
+
+const getTrialInfo = (user) => {
+  if (!user?.trial_expires_at) return { active: false, daysLeft: 0, hoursLeft: 0 };
+  const exp = new Date(user.trial_expires_at).getTime();
+  const now = Date.now();
+  const msLeft = exp - now;
+  if (msLeft <= 0) return { active: false, daysLeft: 0, hoursLeft: 0 };
+  const daysLeft = Math.floor(msLeft / (1000 * 60 * 60 * 24));
+  const hoursLeft = Math.floor(msLeft / (1000 * 60 * 60));
+  return { active: true, daysLeft, hoursLeft };
+};
 
 const Workbook = () => {
   const location = useLocation();
@@ -37,6 +50,9 @@ const Workbook = () => {
   const [hasTeam, setHasTeam] = useState(false);
   const { user } = useAuth();
   const isPro = user?.subscription_status === "active";
+  const trial = getTrialInfo(user);
+  // Free tier access: Pro subscribers get everything. Free users get FREE_SHEETS only while trial is active.
+  const canAccessFree = isPro || trial.active;
 
   useEffect(() => {
     setHasTeam(!!user?.team_id);
@@ -63,17 +79,59 @@ const Workbook = () => {
     return `=VET_MODEL("${sopCode}")`;
   };
 
-  const sheetIsLocked = currentSheet !== "EMERGENCY" && !FREE_SHEETS.includes(currentSheet) && !isPro;
+  // Sheet is locked if user is not Pro AND (sheet is not in free list OR trial has expired)
+  const sheetIsLocked =
+    !isPro &&
+    (currentSheet === "EMERGENCY" ||
+      !FREE_SHEETS.includes(currentSheet) ||
+      !trial.active);
 
   return (
     <div className="bg-[#F3F3F3] text-[#262626] flex flex-col h-screen overflow-hidden">
       <ExcelHeader />
       <FormulaBar formulaText={getFormulaText()} />
+      {!isPro && trial.active && (
+        <div className="bg-[#FFF3CD] border-b border-[#FFE69C] px-3 py-1.5 flex items-center justify-between text-[11px] flex-shrink-0">
+          <span className="text-[#856404] font-semibold flex items-center gap-1.5">
+            <Clock className="w-3.5 h-3.5" strokeWidth={2.5} />
+            {trial.daysLeft > 0
+              ? `${trial.daysLeft} day${trial.daysLeft !== 1 ? "s" : ""} left in your 7-day trial`
+              : `${trial.hoursLeft}h left in your 7-day trial`}
+          </span>
+          <button
+            onClick={() => (window.location.href = "/pricing")}
+            className="text-[#0D6535] font-bold hover:underline"
+          >
+            Upgrade →
+          </button>
+        </div>
+      )}
+      {!isPro && !trial.active && (
+        <div className="bg-[#F8D7DA] border-b border-[#F5C6CB] px-3 py-1.5 flex items-center justify-between text-[11px] flex-shrink-0">
+          <span className="text-[#721C24] font-semibold flex items-center gap-1.5">
+            <Clock className="w-3.5 h-3.5" strokeWidth={2.5} />
+            Trial ended — subscribe to keep working
+          </span>
+          <button
+            onClick={() => (window.location.href = "/pricing")}
+            className="text-[#C00000] font-bold hover:underline"
+          >
+            Upgrade →
+          </button>
+        </div>
+      )}
       <div className="flex-1 overflow-y-auto p-2">
-        {currentSheet === "EMERGENCY" ? (
-          isPro ? <EmergencySheet /> : <Paywall sheetTitle="Emergency SOPs" />
-        ) : sheetIsLocked ? (
-          <Paywall sheetTitle={workbookData[currentSheet]?.title || "This sheet"} />
+        {sheetIsLocked ? (
+          <Paywall
+            sheetTitle={
+              currentSheet === "EMERGENCY"
+                ? "Emergency SOPs"
+                : workbookData[currentSheet]?.title || "This sheet"
+            }
+            trialExpired={!trial.active}
+          />
+        ) : currentSheet === "EMERGENCY" ? (
+          <EmergencySheet />
         ) : (
           <SheetContent
             sheetKey={currentSheet}
@@ -84,7 +142,13 @@ const Workbook = () => {
           />
         )}
       </div>
-      <SheetTabs currentSheet={currentSheet} onSelectSheet={handleSelectSheet} freeSheets={FREE_SHEETS} isPro={isPro} />
+      <SheetTabs
+        currentSheet={currentSheet}
+        onSelectSheet={handleSelectSheet}
+        freeSheets={FREE_SHEETS}
+        isPro={isPro}
+        trialActive={trial.active}
+      />
     </div>
   );
 };
