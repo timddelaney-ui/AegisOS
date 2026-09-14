@@ -19,7 +19,14 @@ import axios from "axios";
 import "./App.css";
 
 // Free sheets accessible without subscription
-const FREE_SHEETS = ["Pipe_Stretch", "Sand_Cleanout", "Fishing_Ops"];
+const FREE_SHEETS = [
+  "Pipe_Stretch",
+  "Sand_Cleanout",
+  "Fishing_Ops",
+  "CT_Milling",
+  "Frac_Through_CT",
+  "Annular_Frac",
+];
 
 const Workbook = () => {
   const location = useLocation();
