@@ -1,8 +1,10 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Pin, BarChart3, Play, CheckCircle2, Save } from "lucide-react";
 import { workbookData, getDefaultValue } from "../mock/workbookData";
 import SvgSchematic from "./SvgSchematic";
 import SaveJobDialog from "./SaveJobDialog";
+import ResultsPanel from "./ResultsPanel";
+import { computeResults } from "../lib/formulas";
 import { useAuth } from "../context/AuthContext";
 
 const SheetContent = ({ sheetKey, unitSystem, onUnitChange, initialValues, hasTeam }) => {
@@ -35,6 +37,12 @@ const SheetContent = ({ sheetKey, unitSystem, onUnitChange, initialValues, hasTe
     setShowAlert(true);
     setTimeout(() => setShowAlert(false), 2500);
   };
+
+  // Live compute results whenever inputs or unit system change
+  const results = useMemo(
+    () => computeResults(sheetKey, values, params, unitSystem),
+    [sheetKey, values, params, unitSystem]
+  );
 
   return (
     <div className="flex flex-col gap-2">
@@ -78,6 +86,9 @@ const SheetContent = ({ sheetKey, unitSystem, onUnitChange, initialValues, hasTe
           ))}
         </tbody>
       </table>
+
+      {/* Live-calculated results */}
+      <ResultsPanel data={results} />
 
       <div className="bg-white border border-[#D4D4D4] rounded p-2.5 shadow-sm">
         <div className="text-[11px] font-bold text-[#107C41] mb-1.5 uppercase flex items-center gap-1.5">
