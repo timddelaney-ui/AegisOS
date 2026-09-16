@@ -1,0 +1,20 @@
+# CT Field Workbook - Coiled Tubing Operations Calculator
+# https://mycoiltubingpocketsupports.tech
+
+User-agent: *
+Allow: /
+Allow: /login
+Allow: /pricing
+
+# Auth-gated app routes have no public value for crawlers
+Disallow: /app
+Disallow: /hub
+Disallow: /team
+Disallow: /jobs
+Disallow: /admin/
+Disallow: /payment/
+
+# API endpoints
+Disallow: /api/
+
+Sitemap: https://mycoiltubingpocketsupports.tech/sitemap.xml
