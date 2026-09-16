@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
-import { Pin, Play, Save, Sparkles, Brain } from "lucide-react";
+import { Pin, Play, Save, Sparkles, Brain, AlertOctagon, X } from "lucide-react";
 import axios from "axios";
 import { workbookData, getDefaultValue } from "../mock/workbookData";
 import SaveJobDialog from "./SaveJobDialog";
@@ -10,6 +10,7 @@ import { useAuth, API } from "../context/AuthContext";
 
 // Convert current sheet values to normalized Imperial numbers for the watchdog.
 // Returns { rih, tagged, surfp, vann_ftmin } — undefined when not applicable.
+// Normalize any input value → Imperial for both the server watchdog and the client-side flash checks.
 const buildWatchdogPayload = (sheetKey, values, params, unitSystem, results) => {
   const payload = {};
   const pick = (patterns) => {
@@ -18,10 +19,12 @@ const buildWatchdogPayload = (sheetKey, values, params, unitSystem, results) => 
       if (patterns.some((p) => l.includes(p.toLowerCase()))) {
         const raw = parseFloat(values[i]);
         if (isNaN(raw)) return null;
-        // The formulas.grab helper already normalizes to Imperial internally — we replicate the daN conversion here.
         if (unitSystem === "met") {
-          if (l.includes("(dan)")) return raw * 2.24809;
-          if (l.includes("(mpa)")) return raw * 145.038;
+          if (l.includes("(dan)")) return raw * 2.24809;         // daN → lb
+          if (l.includes("(mpa)")) return raw * 145.038;         // MPa → psi
+          if (l.includes("(kg/m3)")) return raw / 119.826;       // kg/m³ → ppg
+          if (l.includes("(l/min)")) return raw / 158.987;       // L/min → BPM
+          if (l.includes("(m/hr)")) return raw * 3.28084;        // m/hr → ft/hr
         }
         return raw;
       }
@@ -31,12 +34,18 @@ const buildWatchdogPayload = (sheetKey, values, params, unitSystem, results) => 
   if (["CT_Milling", "CT_Drilling"].includes(sheetKey)) {
     payload.rih = pick(["run-in-hole", "run in hole"]);
     payload.tagged = pick(["weight on gauge", "tagged"]);
+    payload.density_ppg = pick(["density"]);
+    payload.rate_bpm = pick(["pump rate"]);
   }
-  if (sheetKey === "Frac_Through_CT") {
+  if (sheetKey === "CT_Drilling") {
+    payload.rop_ftph = pick(["rop"]);
+  }
+  if (sheetKey === "Frac_Through_CT" || sheetKey === "Annular_Frac") {
     payload.surfp = pick(["treating p"]);
+    payload.density_ppg = pick(["density"]);
   }
   if (sheetKey === "Sand_Cleanout") {
-    // Pull annular velocity out of computed results (Imperial ft/min).
+    payload.rate_bpm = pick(["flow rate"]);
     const row = (results?.results || []).find((r) => r.label === "Annular velocity");
     if (row && row.value !== "—") {
       const v = parseFloat(row.value);
@@ -46,6 +55,47 @@ const buildWatchdogPayload = (sheetKey, values, params, unitSystem, results) => 
   return payload;
 };
 
+// Mirror of the server thresholds so we can flash a Cape Breton quip *instantly*
+// (before the 1.5s server-side debounce fires the durable crew-channel alert).
+const CLIENT_THRESHOLDS = {
+  CT_Milling: [
+    { id: "wob_high",   test: (v) => v.rih != null && v.tagged != null && (v.rih - v.tagged) > 2000,
+      msg: "WOB > 2000 lb — sinusoidal buckling risk." },
+    { id: "density_hi", test: (v) => v.density_ppg != null && v.density_ppg > 15,
+      msg: "Density > 15 ppg — verify wellbore balance." },
+    { id: "rate_hi",    test: (v) => v.rate_bpm != null && v.rate_bpm > 6,
+      msg: "Pump rate > 6 BPM is high for milling." },
+  ],
+  CT_Drilling: [
+    { id: "wob_high",   test: (v) => v.rih != null && v.tagged != null && (v.rih - v.tagged) > 2000,
+      msg: "WOB > 2000 lb — sinusoidal buckling risk." },
+    { id: "rop_hi",     test: (v) => v.rop_ftph != null && v.rop_ftph > 120,
+      msg: "ROP > 120 ft/hr — cuttings load overwhelms annulus." },
+  ],
+  Frac_Through_CT: [
+    { id: "surfp_hi",   test: (v) => v.surfp != null && v.surfp > 10000,
+      msg: "Surface pressure > 10,000 psi CT working limit." },
+    { id: "surfp_90",   test: (v) => v.surfp != null && v.surfp >= 9000 && v.surfp <= 10000,
+      msg: "Surface pressure > 90 % of CT working limit." },
+  ],
+  Annular_Frac: [
+    { id: "surfp_hi",   test: (v) => v.surfp != null && v.surfp > 5000,
+      msg: "Annular treating pressure > 5000 psi — check burst rating." },
+  ],
+  Sand_Cleanout: [
+    { id: "vann_low",   test: (v) => v.vann_ftmin != null && v.vann_ftmin < 90,
+      msg: "Annular velocity < 90 ft/min — cuttings will fall back." },
+  ],
+};
+
+const CLIENT_QUIPS = [
+  "Whoa, hold 'er right there, b'y! You're fixin' to twist that string into a pretzel.",
+  "Steady as she goes, me son! Ease off before the iron talks back.",
+  "Jeez, look at those readings. Pop the pumps down before pipe parts fly across the lease.",
+  "Oh me nerves — shut 'er in a sec and check the gauges.",
+  "Alright b'y, that's enough — you're deep in the red. Reset and try again.",
+];
+
 const SheetContent = ({ sheetKey, unitSystem, onUnitChange, initialValues, hasTeam }) => {
   const data = workbookData[sheetKey];
   const params = unitSystem === "imp" ? data.imp : data.met;
@@ -54,6 +104,8 @@ const SheetContent = ({ sheetKey, unitSystem, onUnitChange, initialValues, hasTe
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [aiMode, setAiMode] = useState("assistant");
+  const [flashAlert, setFlashAlert] = useState(null); // { id, msg, quip, ts }
+  const lastFlashRef = useRef({});
   const canvasRef = useRef(null);
   const { user } = useAuth();
 
@@ -98,6 +150,30 @@ const SheetContent = ({ sheetKey, unitSystem, onUnitChange, initialValues, hasTe
     return () => clearTimeout(t);
   }, [sheetKey, values, params, unitSystem, results, hasTeam]);
 
+  // Client-side INSTANT flash: same threshold logic as the server, but fires immediately with
+  // a Cape Breton quip so the tool push sees the hazard before the 1.5s server round-trip.
+  // Non-persistent — the durable crew-channel alert is still the server watchdog's job.
+  useEffect(() => {
+    const payload = buildWatchdogPayload(sheetKey, values, params, unitSystem, results);
+    const rules = CLIENT_THRESHOLDS[sheetKey] || [];
+    for (const rule of rules) {
+      try {
+        if (rule.test(payload)) {
+          const last = lastFlashRef.current[rule.id] || 0;
+          // Only re-flash after 15s per rule so a keystroke storm doesn't spam.
+          if (Date.now() - last > 15000) {
+            lastFlashRef.current[rule.id] = Date.now();
+            const quip = CLIENT_QUIPS[Math.floor(Math.random() * CLIENT_QUIPS.length)];
+            setFlashAlert({ id: rule.id, msg: rule.msg, quip, ts: Date.now() });
+            // Auto-dismiss after 8s
+            setTimeout(() => setFlashAlert((f) => (f && f.id === rule.id ? null : f)), 8000);
+          }
+          break; // only one flash at a time
+        }
+      } catch { /* ignore */ }
+    }
+  }, [sheetKey, values, params, unitSystem, results]);
+
   // Build a compact context object for the AI
   const buildAIContext = () => {
     const inputSummary = {};
@@ -125,6 +201,26 @@ const SheetContent = ({ sheetKey, unitSystem, onUnitChange, initialValues, hasTe
 
   return (
     <div className="flex flex-col gap-2">
+      {flashAlert && (
+        <div
+          data-testid="skipper-flash-banner"
+          className="bg-[#F8D7DA] border-2 border-[#C00000] rounded px-2.5 py-2 text-[12px] text-[#721C24] flex items-start gap-2 shadow-md animate-in fade-in slide-in-from-top-2 duration-200"
+        >
+          <AlertOctagon className="w-5 h-5 flex-shrink-0 text-[#C00000]" strokeWidth={2.5} />
+          <div className="flex-1 min-w-0">
+            <div className="text-[10px] font-bold text-[#C00000] uppercase tracking-wider mb-0.5">SKIPPER — HAZARD</div>
+            <div className="italic leading-snug mb-1">"{flashAlert.quip}"</div>
+            <div className="text-[11px] font-semibold">{flashAlert.msg}</div>
+          </div>
+          <button
+            data-testid="skipper-flash-dismiss"
+            onClick={() => setFlashAlert(null)}
+            className="text-[#721C24] hover:bg-[#F5C6CB] rounded p-1"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
       <div className="bg-[#E6F4EA] border-l-[3px] border-[#107C41] px-2.5 py-2 text-[11px] font-semibold text-[#0D6535] rounded-r flex items-center gap-1.5">
         <Pin className="w-3 h-3 flex-shrink-0" strokeWidth={2.5} />
         <span>{data.sop}</span>
