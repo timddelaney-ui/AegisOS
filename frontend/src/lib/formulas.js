@@ -108,7 +108,7 @@ function grab(values, params, unitSystem, patterns) {
       // Convert Metric input to Imperial based on unit hint in the label
       if (l.includes("(mm)")) return conv.mm_to_in(raw);
       if (l.includes("(m)") && !l.includes("mm") && !l.includes("mpa") && !l.includes("min")) return conv.m_to_ft(raw);
-      if (l.includes("(daN)")) return conv.daN_to_lb(raw);
+      if (l.includes("(dan)")) return conv.daN_to_lb(raw);
       if (l.includes("(mpa)")) return conv.MPa_to_psi(raw);
       if (l.includes("(m3)")) return conv.m3_to_bbl(raw);
       if (l.includes("(l/min)")) return conv.Lmin_to_bpm(raw);
@@ -496,6 +496,7 @@ function calc_Annular_Frac(vals, params, u) {
   const vAnn = v_annular_ftmin(q_bpm, A_ann);
   const capAnn = casing && tubOD ? annCap_bbl_per_ft(casing, tubOD) : null;
   const totalVol = capAnn && trueDepth ? capAnn * trueDepth : null;
+  const fr_savings_pct = fr_load !== null && fr_load > 0 ? (1 - fr_factor) * 100 : null;
 
   const warnings = [];
   if (fracGrad && fracGrad > 1.0)
@@ -516,6 +517,9 @@ function calc_Annular_Frac(vals, params, u) {
     { label: "Annular capacity", ...fmt(capAnn, u, "capacity", 4) },
     { label: "Total annular volume", ...fmt(totalVol, u, "volume", 1) },
   ];
+  if (fr_savings_pct !== null) {
+    results.push({ label: "FR friction reduction", value: fr_savings_pct.toFixed(0), unit: "%", note: "Effective drag reduction from FR loading" });
+  }
 
   return {
     results,

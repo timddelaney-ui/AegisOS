@@ -1,0 +1,30 @@
+{
+  "summary": "Frontend-only regression for 6 bug fixes (WOB relabel, WOB formula, WOB warnings, Friction Reducer input/output/warnings). Used demo Pro session cookie against preview URL. 5 of 6 bug groups PASS; 2 defects found: (a) metric-daN inputs are NOT being converted to Imperial in formulas.grab() due to a case-sensitivity bug, so WOB (and other force calcs) in Metric are wrong (~44% low); (b) Annular_Frac is missing the 'FR friction reduction' result row that the spec required (Frac_Through_CT has it, Annular_Frac does not).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "formulas.js grab()", "issue": "Case-sensitivity bug — label is lowercased to l='...(dan)' but check is l.includes('(daN)'). Same defect for any other Mixed-case unit token. Result: daN inputs (Weight on gauge – tagged, Run-in-hole weight, Overpull, Shift Force, Fish Wt, Jar Overpull, String Drag) are NOT converted to lb. In Metric CT_Milling with defaults tagged=8010 daN, RIH=8680 daN the WOB result shows 298 daN instead of expected ~670 daN. Imperial mode is unaffected (WOB=1500 lb correct).", "selector": "/app/frontend/src/lib/formulas.js line ~111", "priority": "HIGH"},
+      {"component": "calc_Annular_Frac (formulas.js)", "issue": "Missing 'FR friction reduction' result row. Spec requires this row on Annular_Frac too (Frac_Through_CT already appends it via fr_savings_pct). Verified in UI: on Annular_Frac tab with FR entered, 'FR friction reduction' is absent from CALCULATED RESULTS. Note: friction pressure IS reduced by fr_factor correctly, only the display row is missing.", "selector": "/app/frontend/src/lib/formulas.js calc_Annular_Frac (~line 508–518)", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "FIX A (HIGH): In /app/frontend/src/lib/formulas.js grab(), replace `if (l.includes(\"(daN)\"))` with `if (l.includes(\"(dan)\"))` (or use `label.toLowerCase().includes(...)` with lowercase token). Same applies to any other mixed-case token if added later. This will restore correct WOB in Metric on CT_Milling and CT_Drilling, and also fix Overpull/Shift-Force/Fishing calcs in Metric mode.",
+    "FIX B (MED): In calc_Annular_Frac, compute fr_savings_pct = fr_load>0 ? (1-fr_factor)*100 : null and push a result row: {label: 'FR friction reduction', value: fr_savings_pct.toFixed(0), unit: '%', note: 'Effective drag reduction from FR loading'} — mirroring calc_Frac_Through_CT."
+  ],
+  "critical_code_review_comments": [
+    "grab() unit-hint checks in formulas.js should all use lowercase tokens because `l = label.toLowerCase()`. Recommend consolidating to a single {tokenLower: converter} map to prevent future regressions.",
+    "Friction Reducer numeric equivalence gpt ≡ L/m³ is correct (both 1×10⁻³ ratios), but consider adding a comment above the grab() usage in calc_Sand_Cleanout to prevent future contributors from double-converting.",
+    "Consider adding data-testid to sheet-tab buttons and to input rows (currently no data-testid on tabs or inputs — tests had to fall back to text/row lookups)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped)", "frontend": "83% (5/6 bug groups pass)"},
+  "test_credentials": "Used demo Pro session_token cookie from /app/memory/test_credentials.md",
+  "seed_data_creation": "none",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "PASS items verified in this run: CT_Milling & CT_Drilling parameter relabel (no more Surface Wt/Up Weight, now Weight on gauge – tagged & Run-in-hole weight, correct units per unit system); WOB formula label 'WOB = RIH weight − Weight on gauge (tagged)'; WOB=1500 lb in Imperial with defaults 18000/19500 (correct); negative-WOB warning fires when tagged>RIH ('Negative WOB — tagged weight exceeds run-in-hole weight. Recheck inputs...'); >2000 lb sinusoidal-buckling warning fires; Friction Reducer input present on Sand_Cleanout / Frac_Through_CT / Annular_Frac with correct units (gpt / L/m³) and default 1.5 / 2.0; 'FR volume per bottoms-up' result present on Sand_Cleanout; 'FR friction reduction' present on Frac_Through_CT with values 73% @1.5gpt → 100% @0gpt (Pf went 2994→4129 psi confirming friction correctly rises without FR); low-FR (<0.5) and high-FR (>4.0 on Sand_Cleanout) warnings fire. Metric default unit system PASS. Remaining fails: metric-daN conversion bug (WOB shows 298 daN vs expected 670 daN in metric mode), and missing FR friction reduction row on Annular_Frac.",
+  "rca of the issue": "In /app/frontend/src/lib/formulas.js function grab(values, params, unitSystem, patterns): the line `const l = label.toLowerCase();` lowercases the label, but the subsequent unit-hint check `if (l.includes(\"(daN)\"))` searches for the uppercase-N literal token in a lowercased string, so it never matches. The daN→lb converter never runs; raw daN values are returned as-is and treated as lb by downstream imperial math. In fmt('force', met) the value is then converted back lb→daN using 1/2.24809, producing a value ≈44.5% of the correct magnitude (670 daN raw → mis-interpreted → displayed as 298 daN). Fix is a one-character change: `l.includes(\"(dan)\")`. Reproduction: open CT_Milling in Metric with default inputs 8010/8680; WOB reads 298 daN. Expected 670 daN (or convert 8680−8010=670 daN → 1500 lb → back to daN 670)."
+}
