@@ -1070,6 +1070,7 @@ class TeamItemCreate(BaseModel):
     status: Optional[str] = None   # inventory: OK|LOW|OOS ; parts: REQUESTED|ORDERED|RECEIVED ; todo: OPEN|DONE
     priority: Optional[str] = None # todo: LOW|MED|HIGH
     due_date: Optional[str] = None # ISO
+    rig_id: Optional[str] = None   # RIG1 | RIG2 | YARD (None = visible on every rig, legacy items)
 
 
 class TeamItemUpdate(BaseModel):
@@ -1084,14 +1085,18 @@ class TeamItemUpdate(BaseModel):
 
 
 @api_router.get("/team/items/{kind}")
-async def list_team_items(kind: str, user: dict = Depends(require_user)):
+async def list_team_items(kind: str, rig_id: Optional[str] = None, user: dict = Depends(require_user)):
     if kind not in ITEM_KINDS:
         raise HTTPException(400, f"Invalid kind. Must be one of {sorted(ITEM_KINDS)}")
     team_id = user.get("team_id")
     if not team_id:
         return {"items": [], "team_id": None}
-    docs = await db.team_items.find({"team_id": team_id, "kind": kind}, {"_id": 0}).sort("created_at", -1).to_list(500)
-    return {"items": [_serialize(d) for d in docs], "team_id": team_id}
+    query: Dict[str, Any] = {"team_id": team_id, "kind": kind}
+    if rig_id:
+        # Show items tagged for this rig OR untagged legacy items (rig_id missing / None).
+        query["$or"] = [{"rig_id": rig_id}, {"rig_id": {"$in": [None]}}, {"rig_id": {"$exists": False}}]
+    docs = await db.team_items.find(query, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return {"items": [_serialize(d) for d in docs], "team_id": team_id, "rig_id": rig_id}
 
 
 @api_router.post("/team/items")
@@ -1116,6 +1121,7 @@ async def create_team_item(body: TeamItemCreate, user: dict = Depends(require_us
         "status": body.status or ("OPEN" if body.kind == "todo" else "OK"),
         "priority": body.priority or ("MED" if body.kind == "todo" else None),
         "due_date": body.due_date,
+        "rig_id": body.rig_id,
         "created_by": user["email"],
         "created_at": now,
         "updated_at": now,

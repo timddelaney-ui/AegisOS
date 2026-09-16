@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { Plus, Trash2, MapPin, Loader2, Package, Beaker, Wrench, ListChecks } from "lucide-react";
 import { API } from "../context/AuthContext";
+import { useRig, rigLabel } from "../context/RigContext";
 
 /**
  * TeamItemsList — generic CRUD list used for inventory, consumables, parts orders, to-dos.
@@ -28,6 +29,7 @@ const STATUS_STYLE = {
 
 const TeamItemsList = ({ kind }) => {
   const cfg = KIND_CONFIG[kind];
+  const { rigId } = useRig();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
@@ -37,17 +39,17 @@ const TeamItemsList = ({ kind }) => {
   const load = async () => {
     setLoading(true);
     try {
-      const { data } = await axios.get(`${API}/team/items/${kind}`, { withCredentials: true });
+      const { data } = await axios.get(`${API}/team/items/${kind}`, { params: { rig_id: rigId }, withCredentials: true });
       setItems(data.items || []);
     } finally { setLoading(false); }
   };
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [kind]);
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [kind, rigId]);
 
   const create = async () => {
     if (!form.name.trim()) return;
     setSaving(true);
     try {
-      const payload = { kind, ...form };
+      const payload = { kind, rig_id: rigId, ...form };
       if (payload.quantity === "") delete payload.quantity;
       else payload.quantity = parseFloat(payload.quantity);
       await axios.post(`${API}/team/items`, payload, { withCredentials: true });
@@ -76,7 +78,7 @@ const TeamItemsList = ({ kind }) => {
         <div className="flex items-center gap-2">
           <Icon className="w-4 h-4" style={{ color: cfg.accent }} strokeWidth={2.5} />
           <span className="text-sm font-bold" style={{ color: cfg.accent }}>{cfg.label}</span>
-          <span className="text-[10px] text-[#595959]">{items.length} items</span>
+          <span className="text-[10px] text-[#595959]">{items.length} items · {rigLabel(rigId)}</span>
         </div>
         <button
           data-testid={`team-list-add-${kind}`}

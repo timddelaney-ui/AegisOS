@@ -16,6 +16,7 @@ import AdminFeedback from "./pages/AdminFeedback";
 import AdminInvites from "./pages/AdminInvites";
 import Hub from "./pages/Hub";
 import { AdvisoryFooter, AdvisoryModal, AdvisoryStrip } from "./components/AdvisoryDisclaimer";
+import RigSelector from "./components/RigSelector";
 import { useAuth, API, isProUser } from "./context/AuthContext";
 import { workbookData } from "./mock/workbookData";
 import { Loader2, Clock } from "lucide-react";
@@ -93,6 +94,7 @@ const Workbook = () => {
   return (
     <div className="workbook-root bg-[#F3F3F3] text-[#262626] flex flex-col h-screen overflow-hidden">
       <ExcelHeader />
+      <RigSelector />
       <FormulaBar formulaText={getFormulaText()} />
       <AdvisoryStrip />
       {!isPro && trial.active && (

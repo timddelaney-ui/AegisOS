@@ -5,9 +5,12 @@ import { API, useAuth } from "../context/AuthContext";
 import { ArrowLeft, Users, Copy, Check, LogOut, Plus, Loader2, MessageSquare, Package, Beaker, Wrench, ListChecks } from "lucide-react";
 import CrewChat from "../components/CrewChat";
 import TeamItemsList from "../components/TeamItemsList";
+import RigChecklists from "../components/RigChecklists";
+import RigSelector from "../components/RigSelector";
 
 const HUB_TABS = [
   { id: "chat",        label: "Chat",        Icon: MessageSquare },
+  { id: "rig",         label: "Rig Checks",  Icon: ListChecks    },
   { id: "inventory",   label: "Inventory",   Icon: Package },
   { id: "consumables", label: "Consumables", Icon: Beaker },
   { id: "parts_order", label: "Parts",       Icon: Wrench },
@@ -84,6 +87,7 @@ const TeamPage = () => {
         </button>
         <h1 className="text-sm font-semibold ml-4">Crew / Team</h1>
       </header>
+      <RigSelector />
 
       <div className="flex-1 p-4 overflow-auto">
         <div className="max-w-xl mx-auto">
@@ -156,7 +160,8 @@ const TeamPage = () => {
               </div>
               <div className="border border-t-0 border-[#D4D4D4] rounded-b-lg bg-white p-2">
                 {hubTab === "chat" && <CrewChat currentUserId={user?.user_id} />}
-                {hubTab !== "chat" && <TeamItemsList kind={hubTab} />}
+                {hubTab === "rig" && <RigChecklists />}
+                {hubTab !== "chat" && hubTab !== "rig" && <TeamItemsList kind={hubTab} />}
               </div>
             </div>
             </>

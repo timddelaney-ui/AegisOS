@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { workbookData } from "../mock/workbookData";
 import ExcelHeader from "../components/ExcelHeader";
+import RigSelector from "../components/RigSelector";
 import AIPanel from "../components/AIPanel";
 
 const greetings = ["Kettle's on", "Ready for tour", "How's the shift", "Morning, hand", "Evening, tool push", "Coffee's brewing"];
@@ -95,6 +96,7 @@ const Hub = () => {
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#F3F3F3] to-[#E8ECEF] flex flex-col">
       <ExcelHeader />
+      <RigSelector />
 
       <div className="flex-1 overflow-y-auto pb-8">
         <div className="max-w-3xl mx-auto p-4 space-y-4">
