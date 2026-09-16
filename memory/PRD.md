@@ -53,9 +53,10 @@ Build a pixel-perfect, mobile-friendly clone of an Excel spreadsheet for Coiled 
 - **feedback** — user_email, type, message
 - **invite_codes** — code, created_by, grant_days (≤3650), max_uses, use_count, redemptions[]
 - **ai_messages** — user_id, session_id, role, content, mode, created_at
-- **crew_messages** — team-scoped chat: sender_user_id, sender_name, text, is_alert, is_skipper, threshold_id, sheet_key
-- **crew_alerts** — audit log of every Skipper safety alert
-- **team_items** — unified team-scoped list: kind ∈ {inventory, consumables, parts_order, todo}, name, quantity, unit, location, note, status, priority, due_date
+- **crew_messages** — team-scoped chat: sender_user_id, sender_name, text, is_alert, is_skipper, threshold_id, sheet_key, **rig_id** (RIG1..RIG25|YARD|null-legacy)
+- **crew_alerts** — audit log of every Skipper safety alert (with rig_id)
+- **team_items** — unified team-scoped list: kind ∈ {inventory, consumables, parts_order, todo}, name, quantity, unit, location, note, status, priority, due_date, rig_id
+- **checklist_events** — rig-scoped audit log of every checklist check/uncheck: rig_id, tier (safety|ops|pm), item_id, item_label, cadence, action, user_id, user_name, user_email, created_at
 
 ## API Endpoints
 ### Auth / Users
@@ -70,8 +71,12 @@ Build a pixel-perfect, mobile-friendly clone of an Excel spreadsheet for Coiled 
 ### Teams
 - POST `/api/teams`, POST `/api/teams/join`, POST `/api/teams/leave`, GET `/api/teams/me`
 ### Crew Chat + Watchdog
-- GET `/api/crew/chat?since=<iso>`, POST `/api/crew/chat`
-- POST `/api/crew/safety-eval` — server-authoritative thresholds
+- GET `/api/crew/chat?rig_id=<id>&since=<iso>`, POST `/api/crew/chat` (body: {text, rig_id})
+- POST `/api/crew/safety-eval` (body includes rig_id) — server-authoritative thresholds
+- POST `/api/crew/checklist-events` — persist a checklist check/uncheck with user attribution
+- GET `/api/crew/checklist-events?rig_id=&hours=` — list recent events
+- GET `/api/crew/activity-summary` — latest chat/checklist timestamps per rig (drives unread dots)
+- GET `/api/crew/handover-summary?rig_id=&hours=` — aggregated shift report
 ### Team Hub Items (Inventory / Consumables / Parts / To-Do)
 - GET `/api/team/items/{kind}` — list
 - POST `/api/team/items` — create
@@ -83,6 +88,7 @@ Build a pixel-perfect, mobile-friendly clone of an Excel spreadsheet for Coiled 
 - `/robots.txt`, `/sitemap.xml` — SEO
 
 ## Changelog (recent)
+- **Feb 2026 (iter 8)**: 25 rigs + Yard with searchable RigSelector dropdown (data-testid `rig-selector-toggle`/`rig-selector-menu`). Rig-scoped chat + safety alerts. Server-persisted checklist events (`checklist_events` collection) with user_name/user_id/timestamp attribution. `/api/crew/activity-summary` powers unread red dots on the rig selector and Hub tabs (per-user last-seen in localStorage `ctp_rig_last_seen_v1`). New Handover Modal (`open-handover` → `handover-modal`) aggregates completed tasks, alerts, inventory flags, open parts, open to-dos, chat notes for the active rig, with one-click Copy-to-Clipboard. 20 new lifetime invite codes (grant_days=3650) seeded for testers.
 - **Feb 2026 (iter 5)**: Team Hub with 5 tabs (Chat, Inventory, Consumables, Parts, To-Do), CRUD-backed via team_items collection. Simulation SVG canvas removed per user request. Fixed getDefaultValue precedence bug so tapered/multi-casing defaults populate correctly.
 - **Feb 2026 (iter 4)**: Wall thickness input replacing raw CT ID everywhere; deriveCT_ID helper. Tapered CT strings (Upper OD + Taper Depth). Multi-casing well makeup (2nd Casing ID + MD). AI Panel 45s timeout + clearer error surfacing. Prominent "🎯 Coil volume for spotting" and "🎯 Annular volume with coil in well" rows.
 - **Feb 2026 (iter 3, Phase B)**: Skipper Crew Group Chat (3s polling) + Server-side Safety Watchdog with Cape Breton alert quips + 60s dedupe.

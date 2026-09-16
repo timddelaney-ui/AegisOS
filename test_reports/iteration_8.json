@@ -1,0 +1,56 @@
+{
+  "summary": "Iteration 8 — 25 rigs + Yard + searchable dropdown + rig-scoped chat + server-persisted checklist events + activity summary + handover modal. Backend 15/15 pytest PASSED. Frontend UI flows all PASS (26 rigs, search filter, RIG5 select + reload persistence via ctp_active_rig_v2, chat isolation RIG5<->RIG7, HandoverModal opens with all 6 sections and Copy-to-Clipboard writes plain text starting with 'HANDOVER SUMMARY', checklist check/uncheck POSTs /api/crew/checklist-events with correct action). Invite redeem via a lifetime code confirmed grant_days=3650.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "AdvisoryDisclaimer sticky footer", "issue": "The persistent bottom-of-viewport 'Advisory only — Educational & computational tool …' banner overlaps the CrewChat send button ([data-testid=chat-send-btn]) at ~900-1024px tall viewports (mobile/laptop). Playwright reports 'advisory-modal intercepts pointer events' and real users would tap the banner instead of Send. Enter-to-send still works (verified). Recommend giving the chat panel bottom-padding equal to the banner height OR making the banner z-index below the chat input.", "selector": "[data-testid=chat-send-btn]", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "RigSelector strip", "issues": ["'All data filtered by rig' text at #666 on #1E1E1E is very faint — carry-over from iter7, still worth bumping to #9CA3AF for consistency."]}
+    ]
+  },
+  "verified_behaviors": [
+    "GET/POST /api/crew/chat with rig_id filters correctly and legacy null-rig messages still surface on any rig",
+    "POST /api/crew/checklist-events persists event with user_id, user_name, created_at (400 on invalid tier)",
+    "GET /api/crew/checklist-events?rig_id=RIG3&hours=24 returns the just-created event",
+    "GET /api/crew/activity-summary returns { rigs: { RIG3: { last_checklist_at, last_chat_at } } } after activity",
+    "GET /api/crew/handover-summary?rig_id=RIG3 returns all 6 sections and includes legacy rig-null inventory item (verified with a seeded LOW item then cleaned up)",
+    "POST /api/crew/safety-eval with rig_id=RIG9 emits alert filed under rig_id=RIG9 (verified via /crew/chat?rig_id=RIG9); works without rig_id too",
+    "POST /api/invites/redeem with a fresh CT-XXXX-XXXX code (grant_days=3650) upgrades a throwaway user to active/invite plan",
+    "GET /api/auth/me and /api/team/items CRUD regression pass",
+    "RigSelector opens dropdown, lists 26 rigs (RIG1..RIG25 + YARD), search filters (rig 2 -> 7 matches, yard -> 1)",
+    "Selecting RIG5 persists to localStorage 'ctp_active_rig_v2' and survives reload with the correct label",
+    "CrewChat is rig-scoped: message posted while on RIG5 shows on RIG5, is absent on RIG7, and reappears after switching back to RIG5",
+    "RigChecklists on RIG3 POSTs /api/crew/checklist-events with correct payload (action=checked then action=unchecked) — captured 4 requests (React StrictMode double-fires expected in dev)",
+    "'Generate Handover' button opens data-testid=handover-modal; all six sections render; Copy-to-Clipboard writes 4880-char plaintext starting with 'HANDOVER SUMMARY — Rig 3'",
+    "Activity total-unread pill shows on RigSelector strip after background chat activity"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_iter8_rig_expansion.py",
+    "/app/test_reports/pytest/iter8_backend.xml"
+  ],
+  "action_items": [
+    "Fix z-index / bottom-padding so the sticky Advisory banner does not overlap CrewChat send button at ~900px tall viewports (only real functional UI issue found)."
+  ],
+  "critical_code_review_comments": [
+    "CrewChat useEffect adds `markSeen` to deps of the polling effect and also runs on every messages.length change — combined with the interval, markSeen is called far more often than necessary. Not a bug but wasteful (writes to localStorage every 3s while the tab is open).",
+    "RigContext.fetchActivity polls /api/crew/activity-summary every 15s unconditionally — even when the user isn't authenticated or has no team. Suggestion: short-circuit when user is null.",
+    "HandoverModal buildText assumes s.completed_tasks/alerts/etc are always arrays; server does return them but a defensive `?? []` would help if the endpoint ever returns null on error.",
+    "server.py crew_handover_summary duplicates the '$or rig_or_legacy' block inline for parts_open/todos_open/inv_flags instead of reusing `rig_or_legacy`. Minor DRY violation, easy fix.",
+    "server.py is now ~1350 lines — consider splitting rig/crew/handover endpoints into separate routers for maintainability (guideline threshold 700 lines)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter8_rig_expansion.py (new)"
+  ],
+  "success_rate": {"backend": "100% (15/15)", "frontend": "~95% (1 minor UI overlap issue)"},
+  "test_credentials": "Demo Pro cookie session_token=demo_session_dade4ac57f0c496094fde437e8e91f00 works (auth/me 200). team_id=team_dcb3ba5cfed0 (Regression Crew).",
+  "seed_data_creation": "Temp inventory item 'Legacy LOW nitrogen' + throwaway user for invite redeem — both cleaned up in the test's finally block. Chat/checklist TEST_ rows deleted in test_zzz_cleanup.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter 8 shipped 25 rigs + Yard, searchable RigSelector, rig-scoped chat, server-persisted checklist_events, activity-summary + handover-summary aggregator, and HandoverModal with clipboard copy. All backend endpoints pass and UI works end-to-end. Only real user-facing issue: on shorter viewports the sticky Advisory footer overlaps the CrewChat send button — Enter-to-send remains a working fallback. Backend safety-eval was previously flagged for Annular_Frac only having surfp_hi (iter7 comment); still true, unchanged.",
+  "rca of the issue": "Send-button click intercept: `AdvisoryDisclaimer` renders a fixed banner at the bottom of the page (z-index above the rest of the layout). At viewport heights around 900px the CrewChat's input row lands under this banner. Playwright reports 'advisory-modal intercepts pointer events' repeatedly on chat-send-btn. Repro: 1) Open /team at 1280x900. 2) Dismiss the safety modal. 3) Select CHAT tab. 4) Try to click Send — pointer events are captured by the fixed banner. Mitigation: (a) add bottom padding to the .flex.flex-col container equal to banner height, or (b) drop banner z-index below sticky UI, or (c) make banner position:sticky within a scroll container rather than position:fixed."
+}

@@ -95,7 +95,7 @@ const TeamPage = () => {
       </header>
       <RigSelector />
 
-      <div className="flex-1 p-4 overflow-auto">
+      <div className="flex-1 p-4 pb-10 overflow-auto">
         <div className="max-w-xl mx-auto">
           {loading ? (
             <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-[#107C41]" /></div>

@@ -71,7 +71,7 @@ const RigSelector = () => {
         </span>
       )}
 
-      <span className="text-[9px] text-[#666] hidden sm:block ml-auto">All data filtered by rig</span>
+      <span className="text-[9px] text-[#9CA3AF] hidden sm:block ml-auto">All data filtered by rig</span>
 
       {open && (
         <div
