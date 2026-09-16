@@ -91,7 +91,13 @@ const ManagerDashboard = () => {
   };
 
   const role = data?.role || user?.role || "crew";
-  const scopeLabel = data?.scope === "cross_team" ? "All Teams (Ops Manager)" : "Your Team (Field Manager)";
+  const scopeLabel = !data
+    ? "Loading…"
+    : data.scope === "cross_team"
+      ? "All Teams (Ops Manager)"
+      : role === "field_manager"
+        ? "Your Team (Field Manager)"
+        : "Team View";
 
   return (
     <div className="min-h-screen bg-[#F3F3F3] flex flex-col">

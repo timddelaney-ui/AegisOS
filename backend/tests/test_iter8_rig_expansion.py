@@ -212,8 +212,8 @@ def test_team_items_crud(session):
 
 # ---------- Invite redeem — use throwaway user via direct DB session ----------
 def test_invite_redeem_grants_3650(session, db):
-    # Find an unused CT- invite with grant_days=3650
-    invite = db.invite_codes.find_one({"grant_days": 3650, "is_active": True, "use_count": 0})
+    # Find an unused CT- invite with grant_days=3650 (guard against burning OM- codes)
+    invite = db.invite_codes.find_one({"grant_days": 3650, "is_active": True, "use_count": 0, "code": {"$regex": "^CT-"}})
     assert invite, "Expected at least one unused lifetime invite seeded"
     code = invite["code"]
 

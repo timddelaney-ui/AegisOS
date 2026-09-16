@@ -1,0 +1,57 @@
+{
+  "summary": "Iteration 9 — Ops Manager role, /api/manager/dashboard cross-team dashboard, Cape Breton ManagerGreeting modal, grant_role invites, 3 seeded lifetime OM- codes. Backend 10/10 pytest PASSED. Frontend flows PASSED — /manager renders all 6 stat cards + Rig activity/Safety/Maintenance/Alerts/Inventory/Parts sections + Copy Report writes 2508-char plaintext starting with 'OPS MANAGER DASHBOARD — All Teams'. ManagerGreeting shows once/day for role=ops_manager (headline picked from OPS_MANAGER_QUIPS), dismissible via manager-greeting-dismiss and manager-greeting-close, stamps localStorage 'ctp_mgr_greet_v1::demo_pro_user'=today so it does not re-open after reload. hub-manager-link correctly hidden for role=crew (even admin) and shown for role=ops_manager. Found ONE backend gap (fixed): /api/auth/me was not returning role field for legacy users — added default 'crew'.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/auth/me", "issue": "For legacy users without a `role` field in Mongo, response omitted `role` entirely — spec requires default 'crew'. Fixed in server.py auth_me by injecting role='crew' when missing."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/manager initial load", "issues": ["scopeLabel defaults to 'Your Team (Field Manager)' while data is still loading, even for admins — brief flash of wrong badge before data lands. Suggest defaulting scopeLabel to '' or 'Loading…' when data is null."]},
+      {"screen": "AdvisoryDisclaimer sticky footer", "issues": ["Carry-over from iter8: sticky bottom banner still overlaps low-viewport UI (only cosmetic on /manager since it scrolls)."]}
+    ]
+  },
+  "verified_behaviors": [
+    "POST /api/admin/invites with grant_role='ops_manager', grant_days=3650 creates code with correct fields",
+    "POST /api/invites/redeem sets user.role='ops_manager', subscription_status='active', message includes 'Ops Manager'",
+    "POST /api/invites/redeem for a code without grant_role preserves existing user.role (field_manager stays field_manager)",
+    "GET /api/manager/dashboard as admin demo user returns scope='cross_team', all 6 arrays present + totals",
+    "GET /api/manager/dashboard as role='crew' returns 403 with 'Manager access required.'",
+    "GET /api/manager/dashboard as role='field_manager' without team returns 400",
+    "GET /api/manager/dashboard as role='field_manager' with team returns scope='team' and role='field_manager'",
+    "GET /api/admin/invites lists 3 seeded OM- codes (OM-NRLB-B8H4, OM-TSLS-BLMC, OM-5D33-AJAN) all grant_role='ops_manager', grant_days=3650, is_active=true, use_count=0",
+    "GET /api/auth/me returns role field (default 'crew' after fix)",
+    "GET /api/team/items/inventory unaffected",
+    "Frontend /manager: data-testid manager-window / manager-refresh / manager-copy-report all render; 6 StatCards (Teams=1, Rigs Active=3, Safety Cert=2, Maintenance=0, Alerts=28, Inv Flags=0); Rig activity table has 3 rows",
+    "Copy Report writes 2508-char plaintext starting with 'OPS MANAGER DASHBOARD — All Teams'",
+    "Hub tile hidden for role='crew' admin user (data-testid hub-manager-link absent)",
+    "After patching demo user to role='ops_manager': ManagerGreeting modal renders with 'OPS MANAGER · signed in' tag, hub-manager-link appears, greeting-dismiss stores today's date in localStorage ctp_mgr_greet_v1::demo_pro_user, reload keeps it hidden, greeting-close (X) also dismisses. Hub tile navigates to /manager."
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_iter9_manager_dashboard.py",
+    "/app/test_reports/pytest/iter9_backend.xml"
+  ],
+  "action_items": [
+    "(Cosmetic) Default /manager scope badge to blank/'Loading…' while data is null instead of 'Your Team (Field Manager)' so admins/ops managers don't see the wrong role for ~200 ms."
+  ],
+  "critical_code_review_comments": [
+    "server.py auth_me previously returned raw user doc — did not guarantee `role` field for legacy users. Fixed inline (default 'crew'). Consider also normalising role at the User Pydantic level or the require_user dependency so every endpoint sees a consistent shape.",
+    "server.py is now ~1516 lines — well over the 700-line guideline. Manager/invite/rig endpoints should be split into separate routers for maintainability (called out in iter8 too, still open).",
+    "gen_ops_manager_codes.py is not idempotent — if re-run it will create 3 MORE codes; adding a `find_one({'note': 'Operations Manager master pass #N'})` guard would make it safe to re-run.",
+    "ManagerDashboard scopeLabel derivation `data?.scope === 'cross_team' ? ... : 'Your Team (Field Manager)'` incorrectly shows 'Field Manager' label while data is still null. Should key off `role` from useAuth() or show a loading placeholder.",
+    "iter8's test_invite_redeem_grants_3650 selects `db.invite_codes.find_one({'grant_days':3650, 'is_active':True, 'use_count':0})` — this now also matches the 3 seeded OM- codes. Re-running the iter8 suite risks burning an OM- code. Recommend tightening that query with `code: {'$regex': '^CT-'}` OR mint a fresh code in the test. Not fixed here to avoid touching iter8 file."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter9_manager_dashboard.py (new)",
+    "/app/backend/server.py (auth_me now guarantees role field, default 'crew')"
+  ],
+  "success_rate": {"backend": "100% (10/10)", "frontend": "100% of critical flows"},
+  "test_credentials": "Demo Pro cookie session_token=demo_session_dade4ac57f0c496094fde437e8e91f00 (admin via ADMIN_EMAILS). Seeded lifetime OM codes are OM-NRLB-B8H4 / OM-TSLS-BLMC / OM-5D33-AJAN — kept intact, tests mint fresh codes for redemption.",
+  "seed_data_creation": "Throwaway TEST_iter9_* users + fresh CT-XXXX-XXXX invites created and cleaned up in test finally blocks. Demo user role was temporarily patched to 'ops_manager' during Playwright greeting test and reverted (verified role=None afterward).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter9 delivers Ops Manager role + Manager Dashboard + Cape Breton greeting modal. Fresh backend test file test_iter9_manager_dashboard.py is safe to re-run (mints its own codes; never touches the 3 seeded OM- codes). If re-running iter8 test_invite_redeem_grants_3650, tighten its selector to `code: {'$regex':'^CT-'}` or it may consume an OM- code intended for the customer. server.py auth_me was patched to default role='crew' when missing — needed for /api/auth/me contract."
+}

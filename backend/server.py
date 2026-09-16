@@ -216,7 +216,11 @@ async def create_session(request: Request, response: Response):
 
 @api_router.get("/auth/me")
 async def auth_me(user: dict = Depends(require_user)):
-    return _serialize(user)
+    data = _serialize(user)
+    # Ensure `role` is always present (default 'crew' for legacy users)
+    if "role" not in data or not data.get("role"):
+        data["role"] = "crew"
+    return data
 
 
 @api_router.post("/auth/logout")

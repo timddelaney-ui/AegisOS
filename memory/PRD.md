@@ -46,12 +46,12 @@ Build a pixel-perfect, mobile-friendly clone of an Excel spreadsheet for Coiled 
 ```
 
 ## MongoDB Collections
-- **users** — user_id, email, name, role, subscription_status, subscription_expires_at, trial_expires_at, team_id
+- **users** — user_id, email, name, **role** (crew|field_manager|ops_manager), team_id, subscription_status, subscription_expires_at, trial_expires_at
 - **user_sessions** — session_token, user_id, expires_at
 - **teams** — team_id, name, owner_id, members[], invite_code, created_at
 - **saved_jobs** — user_email, title, data, is_team_shared
 - **feedback** — user_email, type, message
-- **invite_codes** — code, created_by, grant_days (≤3650), max_uses, use_count, redemptions[]
+- **invite_codes** — code, created_by, grant_days (≤3650), max_uses, **grant_role** (crew|field_manager|ops_manager|null), use_count, redemptions[]
 - **ai_messages** — user_id, session_id, role, content, mode, created_at
 - **crew_messages** — team-scoped chat: sender_user_id, sender_name, text, is_alert, is_skipper, threshold_id, sheet_key, **rig_id** (RIG1..RIG25|YARD|null-legacy)
 - **crew_alerts** — audit log of every Skipper safety alert (with rig_id)
@@ -83,12 +83,15 @@ Build a pixel-perfect, mobile-friendly clone of an Excel spreadsheet for Coiled 
 - PATCH `/api/team/items/{item_id}` — update fields
 - DELETE `/api/team/items/{item_id}` — remove
 ### Admin
-- POST/GET `/api/admin/invites`, GET `/api/admin/feedback`
+- POST/GET `/api/admin/invites` (body accepts `grant_role`), GET `/api/admin/feedback`
+### Manager
+- GET `/api/manager/dashboard?hours=<n>` — cross-team for ops_manager/admin, own-team for field_manager
 ### Public
 - `/robots.txt`, `/sitemap.xml` — SEO
 
 ## Changelog (recent)
-- **Feb 2026 (iter 8)**: 25 rigs + Yard with searchable RigSelector dropdown (data-testid `rig-selector-toggle`/`rig-selector-menu`). Rig-scoped chat + safety alerts. Server-persisted checklist events (`checklist_events` collection) with user_name/user_id/timestamp attribution. `/api/crew/activity-summary` powers unread red dots on the rig selector and Hub tabs (per-user last-seen in localStorage `ctp_rig_last_seen_v1`). New Handover Modal (`open-handover` → `handover-modal`) aggregates completed tasks, alerts, inventory flags, open parts, open to-dos, chat notes for the active rig, with one-click Copy-to-Clipboard. 20 new lifetime invite codes (grant_days=3650) seeded for testers.
+- **Feb 2026 (iter 9)**: Ops Manager + Field Manager role system. New `role` field on users (default `crew`); invite codes can carry `grant_role` that promotes the redeemer. New `/api/manager/dashboard` — cross-team for `ops_manager`/admin, own-team for `field_manager` — returns rig activity, safety cert check-offs, PM/maintenance events (last 30d), Skipper alerts, low/OOS inventory + open parts orders. New `/manager` page (`ManagerDashboard.jsx`) with 6 stat cards + tabular rig activity + full sections + Copy Report. Fun Cape Breton `ManagerGreeting` modal fires once/day for `field_manager` and `ops_manager` on any protected route. Hub gained a role-gated Manager Dashboard tile (`hub-manager-link`). AdminInvites form has `grant_role` dropdown. Seeded **3 lifetime Ops Manager codes**: OM-NRLB-B8H4, OM-TSLS-BLMC, OM-5D33-AJAN.
+- **Feb 2026 (iter 8)**: 25 rigs + Yard with searchable RigSelector dropdown. Rig-scoped chat + safety alerts. Server-persisted checklist events. `/api/crew/activity-summary` powers unread red dots. New Handover Modal with Copy-to-Clipboard. 20 lifetime invite codes seeded.
 - **Feb 2026 (iter 5)**: Team Hub with 5 tabs (Chat, Inventory, Consumables, Parts, To-Do), CRUD-backed via team_items collection. Simulation SVG canvas removed per user request. Fixed getDefaultValue precedence bug so tapered/multi-casing defaults populate correctly.
 - **Feb 2026 (iter 4)**: Wall thickness input replacing raw CT ID everywhere; deriveCT_ID helper. Tapered CT strings (Upper OD + Taper Depth). Multi-casing well makeup (2nd Casing ID + MD). AI Panel 45s timeout + clearer error surfacing. Prominent "🎯 Coil volume for spotting" and "🎯 Annular volume with coil in well" rows.
 - **Feb 2026 (iter 3, Phase B)**: Skipper Crew Group Chat (3s polling) + Server-side Safety Watchdog with Cape Breton alert quips + 60s dedupe.
