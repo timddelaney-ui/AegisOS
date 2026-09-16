@@ -173,7 +173,7 @@ async def create_session(request: Request, response: Response):
         update_fields = {"name": name, "picture": picture}
         # Backfill trial_expires_at for pre-trial users
         if not existing.get("trial_expires_at"):
-            update_fields["trial_expires_at"] = datetime.now(timezone.utc) + timedelta(days=7)
+            update_fields["trial_expires_at"] = datetime.now(timezone.utc) + timedelta(days=30)
         await db.users.update_one({"user_id": user_id}, {"$set": update_fields})
     else:
         user_id = f"user_{uuid.uuid4().hex[:12]}"
@@ -186,7 +186,7 @@ async def create_session(request: Request, response: Response):
             "subscription_status": "free",
             "subscription_plan": None,
             "subscription_expires_at": None,
-            "trial_expires_at": datetime.now(timezone.utc) + timedelta(days=7),
+            "trial_expires_at": datetime.now(timezone.utc) + timedelta(days=30),
             "created_at": datetime.now(timezone.utc),
         })
 
@@ -508,7 +508,7 @@ EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
 GEMINI_MODEL = "gemini-2.5-flash"
 
 def _user_has_ai_access(user: dict) -> bool:
-    """AI features available during 7-day trial OR for active Pro subscribers."""
+    """AI features available during 30-day trial OR for active Pro subscribers."""
     if user.get("subscription_status") == "active":
         return True
     exp = user.get("trial_expires_at")

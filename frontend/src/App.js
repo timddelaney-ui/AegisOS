@@ -22,7 +22,7 @@ import { Loader2, Clock } from "lucide-react";
 import axios from "axios";
 import "./App.css";
 
-// Sheets included in the 7-day free trial
+// Sheets included in the 30-day free trial
 const FREE_SHEETS = [
   "Pipe_Stretch",
   "Sand_Cleanout",
@@ -32,7 +32,7 @@ const FREE_SHEETS = [
   "Annular_Frac",
 ];
 
-const TRIAL_DAYS = 7;
+const TRIAL_DAYS = 30;
 
 const getTrialInfo = (user) => {
   if (!user?.trial_expires_at) return { active: false, daysLeft: 0, hoursLeft: 0 };
@@ -100,8 +100,8 @@ const Workbook = () => {
           <span className="text-[#856404] font-semibold flex items-center gap-1.5">
             <Clock className="w-3.5 h-3.5" strokeWidth={2.5} />
             {trial.daysLeft > 0
-              ? `${trial.daysLeft} day${trial.daysLeft !== 1 ? "s" : ""} left in your 7-day trial`
-              : `${trial.hoursLeft}h left in your 7-day trial`}
+              ? `${trial.daysLeft} day${trial.daysLeft !== 1 ? "s" : ""} left in your 30-day trial`
+              : `${trial.hoursLeft}h left in your 30-day trial`}
           </span>
           <button
             onClick={() => (window.location.href = "/pricing")}

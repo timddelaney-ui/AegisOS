@@ -51,8 +51,8 @@ const Login = () => {
           </div>
 
           <div className="mt-6 bg-[#E6F4EA] border border-[#107C41]/30 rounded p-3 text-xs">
-            <p className="font-bold text-[#0D6535] mb-1">7-Day Free Trial — No credit card</p>
-            <p className="text-[#0D6535]">Full access to 6 core sheets free for 7 days. Then <span className="font-semibold">$2.99/month</span> or <span className="font-semibold">$24.99/year</span> (30% off) to keep every sheet + Emergency SOPs + AI assistant.</p>
+            <p className="font-bold text-[#0D6535] mb-1">30-Day Free Trial — No credit card</p>
+            <p className="text-[#0D6535]">Full access to 6 core sheets free for 30 days. Then <span className="font-semibold">$2.99/month</span> or <span className="font-semibold">$24.99/year</span> (30% off) to keep every sheet + Emergency SOPs + AI assistant.</p>
           </div>
         </div>
       </div>

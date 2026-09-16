@@ -15,7 +15,7 @@ const Paywall = ({ sheetTitle, trialExpired = false }) => {
           {trialExpired ? <Clock className="w-7 h-7 text-[#721C24]" strokeWidth={2} /> : <Lock className="w-7 h-7 text-[#856404]" strokeWidth={2} />}
         </div>
         <h3 className="text-lg font-bold text-[#262626] mb-1">
-          {trialExpired ? "Your 7-day trial has ended" : `${sheetTitle} is Pro`}
+          {trialExpired ? "Your 30-day trial has ended" : `${sheetTitle} is Pro`}
         </h3>
         <p className="text-sm text-[#595959] mb-5">
           {trialExpired ? "Cheaper than a coffee — keep your workbook, saved jobs, all 17 sheets, and the AI assistant." : "Unlock this sheet plus every other operation, Emergency SOPs, AI assistant, and saved jobs across your crew."}
