@@ -1,0 +1,23 @@
+{
+  "summary": "Iteration 2 re-test of the 2 defects fixed since iteration_1: (A) case-sensitivity bug in formulas.grab() daN→lb conversion and (B) missing 'FR friction reduction' row on Annular_Frac. BOTH FIXES CONFIRMED. No regressions observed on the 11 previously-passing items. Success rate: 100% of targeted items.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "grab() unit-hint checks in formulas.js should all use lowercase tokens (label is lowercased with .toLowerCase()). Recommend consolidating to a single {tokenLower: converter} map to prevent future regressions if new mixed-case units are added.",
+    "Sheet-tab elements are DIVs without data-testid; consider adding data-testid to tabs and to input rows for more robust automated testing."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped)", "frontend": "100% (both re-test items pass; no regressions)"},
+  "test_credentials": "Used demo Pro session_token cookie from /app/memory/test_credentials.md",
+  "seed_data_creation": "none",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "VERIFIED FIX A (formulas.js grab line ~111 now uses '(dan)' lowercased): CT_Milling Metric with defaults tagged=8010 daN / RIH=8680 daN now displays WOB = 670 daN (was 298 daN pre-fix; expected ≡ 1500 lb). Switching Metric↔Imperial preserves the value (670 daN ≡ 1500 lb). CT_Drilling Metric behaves identically (WOB=670 daN with same defaults). Overpull-driven force calcs (e.g. Pipe_Stretch Fy) also render sensible Metric values (Overpull 6500 daN → Fy 24019 daN, Max safe overpull 19215 daN). VERIFIED FIX B (calc_Annular_Frac): Annular_Frac now shows 'FR friction reduction | Effective drag reduction from FR loading' row: 33% at 2.0 L/m³ (Metric) and 27% at 1.5 gpt (Imperial). 'Annular friction pressure (net)' row remains and reflects FR factor (its note reads e.g. 'FR 1.50 gpt → 73% of raw friction'). Also confirmed no regressions: parameter labels 'Weight on gauge – tagged' and 'Run-in-hole weight' with correct units per mode; WOB formula label 'WOB = RIH weight − Weight on gauge (tagged)'; Imperial WOB=1500 lb with defaults 18000/19500; Friction Reducer inputs present on Sand_Cleanout (1.5 gpt / 2.0 L/m³ defaults) with 'FR volume per bottoms-up' result row and high-FR warning ('FR loading 5.00 gpt is high — verify friction-pressure benefit vs cost.') fires at FR=5; Metric is default unit system; advisory strip visible.",
+  "rca of the issue": "N/A — both fixes verified working. FIX A applied by changing '(daN)' to '(dan)' in the grab() unit-hint check so it matches the lowercased label string. FIX B applied by adding the fr_savings_pct computation and results.push of an 'FR friction reduction' row in calc_Annular_Frac, mirroring calc_Frac_Through_CT."
+}
