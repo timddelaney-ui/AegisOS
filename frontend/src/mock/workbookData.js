@@ -15,8 +15,8 @@ export const workbookData = {
   CT_Milling: {
     title: "Composite Plug Milling",
     sop: "SOP-CT-25 | Composite Milling Hydraulics & WOB",
-    imp: ["Depth (ft)", "CT OD (in)", "CT Wall (in)", "Upper CT OD (in)", "Taper Depth (ft)", "Casing ID (in)", "Weight on gauge – tagged (lbs)", "Run-in-hole weight (lbs)", "Pump Rate (BPM)", "Viscosity (cp)", "Density (ppg)"],
-    met: ["Depth (m)", "CT OD (mm)", "CT Wall (mm)", "Upper CT OD (mm)", "Taper Depth (m)", "Casing ID (mm)", "Weight on gauge – tagged (daN)", "Run-in-hole weight (daN)", "Pump Rate (L/min)", "Viscosity (cp)", "Density (kg/m3)"],
+    imp: ["Depth (ft)", "CT OD (in)", "CT Wall (in)", "Wall #2 (in)", "Section #2 Length (ft)", "Wall #3 (in)", "Section #3 Length (ft)", "Wall #4 (in)", "Section #4 Length (ft)", "Wall #5 (in)", "Section #5 Length (ft)", "Casing ID (in)", "Weight on gauge – tagged (lbs)", "Run-in-hole weight (lbs)", "Pump Rate (BPM)", "Viscosity (cp)", "Density (ppg)", "Friction Reducer (gpt)"],
+    met: ["Depth (m)", "CT OD (mm)", "CT Wall (mm)", "Wall #2 (mm)", "Section #2 Length (m)", "Wall #3 (mm)", "Section #3 Length (m)", "Wall #4 (mm)", "Section #4 Length (m)", "Wall #5 (mm)", "Section #5 Length (m)", "Casing ID (mm)", "Weight on gauge – tagged (daN)", "Run-in-hole weight (daN)", "Pump Rate (L/min)", "Viscosity (cp)", "Density (kg/m3)", "Friction Reducer (L/m3)"],
   },
   CT_Drilling: {
     title: "Lateral CT Drilling",
@@ -27,8 +27,8 @@ export const workbookData = {
   Pill_Spotting: {
     title: "Chemical Pill Spotting",
     sop: "SOP-CT-10 | Precision Pill Spotting",
-    imp: ["Current Depth (ft)", "Target Depth (ft)", "Pill Vol (bbl)", "CT OD (in)", "CT Wall (in)", "Upper CT OD (in)", "Taper Depth (ft)", "Casing ID (in)", "2nd Casing ID (in)", "2nd Casing MD (ft)", "Pump Rate (BPM)", "Density (ppg)"],
-    met: ["Current Depth (m)", "Target Depth (m)", "Pill Vol (m3)", "CT OD (mm)", "CT Wall (mm)", "Upper CT OD (mm)", "Taper Depth (m)", "Casing ID (mm)", "2nd Casing ID (mm)", "2nd Casing MD (m)", "Pump Rate (L/min)", "Density (kg/m3)"],
+    imp: ["Current Depth (ft)", "Target Depth (ft)", "Pill Vol (bbl)", "CT OD (in)", "CT Wall (in)", "Wall #2 (in)", "Section #2 Length (ft)", "Wall #3 (in)", "Section #3 Length (ft)", "Wall #4 (in)", "Section #4 Length (ft)", "Wall #5 (in)", "Section #5 Length (ft)", "Casing ID (in)", "2nd Casing ID (in)", "2nd Casing MD (ft)", "Pump Rate (BPM)", "Density (ppg)"],
+    met: ["Current Depth (m)", "Target Depth (m)", "Pill Vol (m3)", "CT OD (mm)", "CT Wall (mm)", "Wall #2 (mm)", "Section #2 Length (m)", "Wall #3 (mm)", "Section #3 Length (m)", "Wall #4 (mm)", "Section #4 Length (m)", "Wall #5 (mm)", "Section #5 Length (m)", "Casing ID (mm)", "2nd Casing ID (mm)", "2nd Casing MD (m)", "Pump Rate (L/min)", "Density (kg/m3)"],
   },
   Frac_Through_CT: {
     title: "Frac Through Coiled Tubing",
@@ -433,8 +433,8 @@ export const emergencyCategories = ["All", "Well Control", "HSE", "Equipment", "
 
 export const getDefaultValue = (param, unitSystem) => {
   // Specific compound labels FIRST (before generic single-word catch-alls).
-  if (param.includes("Upper CT OD")) return unitSystem === "imp" ? "2.0" : "50.8";
-  if (param.includes("Taper Depth")) return unitSystem === "imp" ? "8000" : "2440";
+  if (param.match(/^Wall #[2-5]/)) return unitSystem === "imp" ? "0" : "0";
+  if (param.match(/^Section #[2-5] Length/)) return unitSystem === "imp" ? "0" : "0";
   if (param.includes("2nd Casing ID")) return unitSystem === "imp" ? "5.5" : "139.7";
   if (param.includes("2nd Casing MD")) return unitSystem === "imp" ? "8125" : "2477";
   if (param.includes("CT Wall")) return unitSystem === "imp" ? "0.109" : "2.77";

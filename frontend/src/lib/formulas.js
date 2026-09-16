@@ -143,37 +143,46 @@ function deriveCT_ID(vals, params, u) {
   return grab(vals, params, u, ["ct id"]); // legacy fallback
 }
 
-// Tapered-string helpers. Total CT internal volume and buoyed weight when the
-// job program calls for an upper-OD section joined to a lower-OD section.
+// Tapered CT string helper — same OD, DIFFERENT WALL THICKNESSES per section.
+// Model: up to 5 sections numbered from the BOTTOM up.
+//   Section 1 = bottom-most (fills the residual after all named sections)  → uses "CT Wall"
+//   Section i (i=2..5) → uses "Wall #i" over "Section #i Length"
+// Total length equals total_depth_ft. Excess is placed in section 1 (bottom).
 function taperedCT(vals, params, u, total_depth_ft) {
-  const lower_od = grab(vals, params, u, ["ct od"]);
-  const upper_od = grab(vals, params, u, ["upper ct od"]);
-  const taper_ft = grab(vals, params, u, ["taper depth"]);
-  const wall = grab(vals, params, u, ["ct wall"]);
-  if (!lower_od || total_depth_ft == null) return null;
-  const lower_id = wall !== null ? lower_od - 2 * wall : deriveCT_ID(vals, params, u);
-  if (!lower_id) return null;
-  const capLower = capacity_bbl_per_ft(lower_id);
-  if (!upper_od || !taper_ft || taper_ft <= 0 || taper_ft >= total_depth_ft) {
-    // No taper — straight string
-    return {
-      volume_bbl: capLower * total_depth_ft,
-      lower_depth: total_depth_ft,
-      upper_depth: 0,
-      tapered: false,
-    };
+  const od = grab(vals, params, u, ["ct od"]);
+  const wall1 = grab(vals, params, u, ["ct wall"]);
+  if (!od || wall1 == null || total_depth_ft == null || total_depth_ft <= 0) return null;
+
+  // Read the up-to-4 additional sections (indices 2..5) that stack UP from the bottom.
+  const sections = [];
+  for (let i = 2; i <= 5; i++) {
+    const wall = grab(vals, params, u, [`wall #${i}`]);
+    const len = grab(vals, params, u, [`section #${i} length`]);
+    if (wall !== null && wall > 0 && len !== null && len > 0) {
+      const id = od - 2 * wall;
+      if (id > 0) sections.push({ idx: i, wall, length: len, id, od, cap: capacity_bbl_per_ft(id) });
+    }
   }
-  // Assume upper section has same wall thickness as lower section (typical CT reel program)
-  const upper_id = wall !== null ? upper_od - 2 * wall : upper_od - 2 * 0.109;
-  const capUpper = capacity_bbl_per_ft(upper_id);
-  const upperLen = total_depth_ft - taper_ft;
-  const lowerLen = taper_ft;
+
+  const namedLen = sections.reduce((s, x) => s + x.length, 0);
+  const bottomLen = Math.max(0, total_depth_ft - namedLen);
+  const id1 = od - 2 * wall1;
+  const bottom = { idx: 1, wall: wall1, length: bottomLen, id: id1, od, cap: capacity_bbl_per_ft(id1) };
+  const allSections = [bottom, ...sections]; // bottom first, then upward
+
+  const volume_bbl = allSections.reduce((s, x) => s + x.cap * x.length, 0);
+  const tapered = sections.length > 0;
+
   return {
-    volume_bbl: capLower * lowerLen + capUpper * upperLen,
-    lower_depth: lowerLen,
-    upper_depth: upperLen,
-    tapered: true,
-    lower_id, upper_id, lower_od, upper_od,
+    volume_bbl,
+    tapered,
+    sections: allSections,
+    lower_id: id1,
+    upper_id: sections.length ? sections[sections.length - 1].id : id1,
+    lower_od: od,
+    upper_od: od,
+    lower_depth: bottomLen,
+    upper_depth: namedLen,
   };
 }
 
@@ -354,22 +363,29 @@ function calc_CT_Milling(vals, params, u) {
   const q_bpm = grab(vals, params, u, ["pump rate"]);
   const visc = grab(vals, params, u, ["viscosity"]);
   const rho = grab(vals, params, u, ["density"]);
+  const fr_load = grab(vals, params, u, ["friction reducer"]);
 
   // WOB = RIH free-hanging weight − indicator reading with bit tagged.
-  //   • Free hanging (no bit contact): tagged ≈ RIH  → WOB ≈ 0
-  //   • Bit taking weight: tagged < RIH             → WOB > 0
   const WOB = taggedWt !== null && rihWt !== null ? rihWt - taggedWt : null;
   const q_gpm = q_bpm !== null ? q_bpm * 42 : null;
-  const Pf = pipeFriction_psi(q_bpm, ct_id, rho, visc, depth);
+  // FR drag-reduction curve (same as frac): 0 gpt → 1.00, 1 → 0.55, 2 → 0.35, plateau 0.22.
+  const fr_factor = fr_load !== null && fr_load > 0
+    ? Math.max(0.22, 1.0 - 0.30 * Math.log(1 + fr_load))
+    : 1.0;
+  const Pf_raw = pipeFriction_psi(q_bpm, ct_id, rho, visc, depth);
+  const Pf = Pf_raw !== null ? Pf_raw * fr_factor : null;
+  const fr_savings_pct = fr_load !== null && fr_load > 0 ? (1 - fr_factor) * 100 : null;
   const dP_per_1000 = Pf && depth ? (Pf / depth) * 1000 : null;
   const Ph = rho && depth ? 0.052 * rho * depth : null;
   const HHP = q_gpm && Pf ? (Pf * q_gpm) / 1714 : null;
   const A_ann = casing_id && ct_od ? areaCircle(casing_id) - areaCircle(ct_od) : null;
   const v_ann = v_annular_ftmin(q_bpm, A_ann);
+
+  // Tapered CT: sum internal capacity per section, sum buoyed weight per section.
+  const taper = depth !== null ? taperedCT(vals, params, u, depth) : null;
   const capCT = ct_id ? capacity_bbl_per_ft(ct_id) : null;
-  const strVol = capCT && depth ? capCT * depth : null;
-  const buoyed_wt_perft = ct_od && ct_id && rho ? ct_weight_per_ft(ct_od, ct_id) * (1 - rho / 65.4) : null;
-  const buoyed_string_wt = buoyed_wt_perft && depth ? buoyed_wt_perft * depth : null;
+  const strVol = taper !== null ? taper.volume_bbl : (capCT && depth ? capCT * depth : null);
+  const buoyed_string_wt = taper && rho ? taper.sections.reduce((s, x) => s + ct_weight_per_ft(x.od, x.id) * (1 - rho / 65.4) * x.length, 0) : (ct_od && ct_id && rho && depth ? ct_weight_per_ft(ct_od, ct_id) * (1 - rho / 65.4) * depth : null);
 
   const warnings = [];
   if (WOB !== null && WOB > 2000)
@@ -379,21 +395,30 @@ function calc_CT_Milling(vals, params, u) {
   if (v_ann !== null && v_ann < 90)
     warnings.push({ level: "warn", msg: `Annular velocity ${v_ann.toFixed(0)} ft/min may be insufficient for cuttings transport.` });
   if (Pf !== null && Pf > 5000)
-    warnings.push({ level: "warn", msg: `CT friction ${Pf.toFixed(0)} psi is high — consider larger CT or lower rate.` });
+    warnings.push({ level: "warn", msg: `CT friction ${Pf.toFixed(0)} psi is high — consider larger CT, lower rate, or increase FR loading.` });
+  if (fr_load !== null && fr_load > 0 && fr_load < 0.5)
+    warnings.push({ level: "warn", msg: `FR loading ${fr_load.toFixed(2)} ${u==="imp"?"gpt":"L/m³"} is low — 1.0–2.5 typical for milling.` });
+  if (taper && taper.tapered)
+    warnings.push({ level: "info", msg: `Tapered wall string (${taper.sections.length} sections): ${taper.sections.map((s) => `#${s.idx} wall ${s.wall.toFixed(3)}" × ${s.length.toFixed(0)} ft`).join(" · ")}` });
+
+  const results = [
+    { label: "Weight on Bit (WOB)", ...fmt(WOB, u, "force", 0), formula: "WOB = RIH weight − Weight on gauge (tagged)", note: "Target 500–1500 lb for composite" },
+    { label: "Pump rate", ...fmt(q_gpm, u, "rateGPM", 1), note: `= ${q_bpm !== null ? q_bpm.toFixed(2) : "—"} BPM` },
+    { label: "CT friction pressure (net)", ...fmt(Pf, u, "pressure", 0), formula: "Fanning · FR factor", note: fr_load !== null && fr_load > 0 ? `FR ${fr_load.toFixed(2)} ${u==="imp"?"gpt":"L/m³"} → ${(fr_factor*100).toFixed(0)}% of raw friction` : "no FR entered" },
+    { label: "Friction gradient", ...fmt(dP_per_1000, u, "frictionK", 0) },
+    { label: "Hydrostatic pressure", ...fmt(Ph, u, "pressure", 0), formula: "Ph = 0.052 · ρ · TVD" },
+    { label: "Hydraulic HP (surface)", ...fmt(HHP, u, "power", 1), formula: "HHP = ΔP · Q / 1714" },
+    { label: "Annular velocity", ...fmt(v_ann, u, "velocity", 0), note: "≥ 100 ft/min for cuttings" },
+    { label: "CT internal capacity (bottom section)", ...fmt(capCT, u, "capacity", 4) },
+    { label: "🎯 CT internal volume (tapered-aware)", ...fmt(strVol, u, "volume", 2), formula: taper && taper.tapered ? "Σ capᵢ · Lᵢ" : "V = capCT · depth", note: taper && taper.tapered ? `${taper.sections.length}-section wall taper` : "Straight string" },
+    { label: "Buoyed string weight", ...fmt(buoyed_string_wt, u, "force", 0), note: taper && taper.tapered ? "Summed across all sections" : null },
+  ];
+  if (fr_savings_pct !== null) {
+    results.push({ label: "FR friction reduction", value: fr_savings_pct.toFixed(0), unit: "%", note: "Effective drag reduction from FR loading" });
+  }
 
   return {
-    results: [
-      { label: "Weight on Bit (WOB)", ...fmt(WOB, u, "force", 0), formula: "WOB = RIH weight − Weight on gauge (tagged)", note: "Target 500–1500 lb for composite" },
-      { label: "Pump rate", ...fmt(q_gpm, u, "rateGPM", 1), note: `= ${q_bpm !== null ? q_bpm.toFixed(2) : "—"} BPM` },
-      { label: "CT friction pressure (total)", ...fmt(Pf, u, "pressure", 0), formula: "Fanning: ΔP = f·ρ·v²·L / (25.81·d)" },
-      { label: "Friction gradient", ...fmt(dP_per_1000, u, "frictionK", 0) },
-      { label: "Hydrostatic pressure", ...fmt(Ph, u, "pressure", 0), formula: "Ph = 0.052 · ρ · TVD" },
-      { label: "Hydraulic HP (surface)", ...fmt(HHP, u, "power", 1), formula: "HHP = ΔP · Q / 1714" },
-      { label: "Annular velocity", ...fmt(v_ann, u, "velocity", 0), note: "≥ 100 ft/min for cuttings" },
-      { label: "CT internal capacity", ...fmt(capCT, u, "capacity", 4) },
-      { label: "CT internal volume", ...fmt(strVol, u, "volume", 2) },
-      { label: "Buoyed string weight", ...fmt(buoyed_string_wt, u, "force", 0) },
-    ],
+    results,
     warnings,
     formula: "Fanning friction: ΔP = f·ρ·v²·L / (25.81·d)  ·  f = 0.0791/Re^0.25 (turbulent, Blasius)",
     reference: "API RP 5C7 §7 · Bourgoyne et al. · API RP 13D",
@@ -467,7 +492,7 @@ function calc_Pill_Spotting(vals, params, u) {
   if (rate !== null && rate < 0.5)
     warnings.push({ level: "warn", msg: `Pump rate ${rate.toFixed(2)} BPM is very low — placement uncertainty increases.` });
   if (taper && taper.tapered)
-    warnings.push({ level: "info", msg: `Tapered string detected: lower ${taper.lower_od.toFixed(2)}" × ${taper.lower_depth.toFixed(0)} ft + upper ${taper.upper_od.toFixed(2)}" × ${taper.upper_depth.toFixed(0)} ft.` });
+    warnings.push({ level: "info", msg: `Tapered string (${taper.sections.length} sections): ${taper.sections.map((s, i) => `#${s.idx} wall ${s.wall.toFixed(3)}" × ${s.length.toFixed(0)} ft`).join(" · ")}` });
   if (annBlock && annBlock.multi)
     warnings.push({ level: "info", msg: `Multi-casing well: ${annBlock.sections[0].id.toFixed(2)}" × ${annBlock.sections[0].length.toFixed(0)} ft (upper) + ${annBlock.sections[1].id.toFixed(2)}" × ${annBlock.sections[1].length.toFixed(0)} ft (lower).` });
 
