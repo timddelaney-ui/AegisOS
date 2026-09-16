@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { API, useAuth } from "../context/AuthContext";
 import { ArrowLeft, Users, Copy, Check, LogOut, Plus, Loader2 } from "lucide-react";
+import CrewChat from "../components/CrewChat";
 
 const TeamPage = () => {
   const navigate = useNavigate();
@@ -119,6 +120,7 @@ const TeamPage = () => {
               <button onClick={leaveTeam} className="mt-5 w-full flex items-center justify-center gap-2 border border-[#F5C6CB] hover:bg-[#FFF5F5] text-[#C00000] py-2 rounded text-sm font-semibold">
                 <LogOut className="w-4 h-4" /> Leave Team
               </button>
+              <CrewChat currentUserId={user?.user_id} />
             </div>
           ) : mode === "choose" ? (
             <div className="space-y-3">

@@ -870,6 +870,182 @@ async def redeem_invite(body: InviteRedeem, user: dict = Depends(require_user)):
     }
 
 
+# ============ SKIPPER — CREW GROUP CHAT + SAFETY WATCHDOG ============
+CAPE_BRETON_SAFETY_QUIPS = [
+    "Whoa, hold 'er right there, b'y! You're fixin' to twist that string into a pretzel. Back off the brakes before you make a holy mess of things!",
+    "Steady as she goes, me son! You're crowding that limit hard enough to wake the dead. Ease off before the iron starts talkin' back.",
+    "Jeez, look at that! You're drivin' that pressure higher than a Cape Breton gale on New Year's Eve. Pop the pumps down or you'll have pipe parts flyin' across the lease.",
+    "Alright b'y, that's enough — you're deep in the red. Bleed off and reset, and we'll have another go once the numbers cool down.",
+    "Oh me nerves, look at those readings. Shut 'er in for a minute, take a breath, and check the gauges. Better safe than sorry, me son.",
+]
+
+# Per-sheet server-authoritative safety thresholds (Imperial internal units).
+# grab() convention: convert user Metric input → Imperial before comparison.
+SAFETY_THRESHOLDS = {
+    "CT_Milling": [
+        {"id": "wob_high",   "check": lambda v: (v.get("rih") is not None and v.get("tagged") is not None and (v["rih"] - v["tagged"]) > 2000), "msg": "WOB exceeds 2000 lb — sinusoidal buckling risk (API RP 5C7 §7.3)."},
+        {"id": "wob_neg",    "check": lambda v: (v.get("rih") is not None and v.get("tagged") is not None and (v["rih"] - v["tagged"]) < -500), "msg": "Tagged weight far above RIH weight — recheck inputs, WOB is deeply negative."},
+    ],
+    "CT_Drilling": [
+        {"id": "wob_high",   "check": lambda v: (v.get("rih") is not None and v.get("tagged") is not None and (v["rih"] - v["tagged"]) > 2000), "msg": "WOB exceeds 2000 lb — sinusoidal buckling risk."},
+    ],
+    "Frac_Through_CT": [
+        {"id": "surfp_hi",   "check": lambda v: (v.get("surfp") is not None and v["surfp"] > 10000), "msg": "Surface pressure exceeds 10,000 psi CT working limit. IMMEDIATE shut-in (API Spec 5ST)."},
+        {"id": "surfp_90",   "check": lambda v: (v.get("surfp") is not None and 9000 <= v["surfp"] <= 10000), "msg": "Surface pressure at >90% CT working limit. Reduce rate or fluid weight."},
+    ],
+    "Sand_Cleanout": [
+        {"id": "vann_low",   "check": lambda v: (v.get("vann_ftmin") is not None and v["vann_ftmin"] < 90), "msg": "Annular velocity below 90 ft/min — cuttings will fall back on you, b'y."},
+    ],
+}
+
+
+async def _emit_skipper_alert(team_id: str, sheet_key: str, msg: str, source_user_id: str, source_email: str, threshold_id: str):
+    """Insert a Skipper safety alert into the team channel + audit log. Deduplicates within a 60s window per (team, threshold_id)."""
+    from datetime import timedelta as _td
+    now = datetime.now(timezone.utc)
+    cutoff = now - _td(seconds=60)
+    recent = await db.crew_messages.find_one({
+        "team_id": team_id,
+        "is_skipper": True,
+        "threshold_id": threshold_id,
+        "created_at": {"$gte": cutoff},
+    }, {"_id": 0})
+    if recent:
+        return None  # deduped
+    quip = random.choice(CAPE_BRETON_SAFETY_QUIPS)
+    text = f"{quip}\n\nHazard: {msg}\nSheet: {sheet_key}\nTriggered by: {source_email}"
+    doc = {
+        "message_id": f"msg_{uuid.uuid4().hex[:12]}",
+        "team_id": team_id,
+        "sender_user_id": "skipper",
+        "sender_name": "Skipper (Safety Override)",
+        "text": text,
+        "is_alert": True,
+        "is_skipper": True,
+        "threshold_id": threshold_id,
+        "sheet_key": sheet_key,
+        "source_user_id": source_user_id,
+        "created_at": now,
+    }
+    await db.crew_messages.insert_one(doc)
+    await db.crew_alerts.insert_one({
+        **{k: v for k, v in doc.items() if k != "_id"},
+        "audit_id": f"aud_{uuid.uuid4().hex[:12]}",
+    })
+    return doc
+
+
+class SafetyEvalRequest(BaseModel):
+    sheet_key: str
+    values: Dict[str, Optional[float]]  # normalized Imperial values (rih, tagged, surfp, vann_ftmin, etc.)
+
+
+@api_router.post("/crew/safety-eval")
+async def crew_safety_eval(body: SafetyEvalRequest, user: dict = Depends(require_user)):
+    """Client sends normalized Imperial values from the current sheet; server checks thresholds and emits Skipper alerts to the team channel."""
+    team_id = user.get("team_id")
+    if not team_id:
+        return {"alerts": [], "note": "solo mode — no team channel"}
+    rules = SAFETY_THRESHOLDS.get(body.sheet_key, [])
+    fired = []
+    for rule in rules:
+        try:
+            if rule["check"](body.values):
+                alert = await _emit_skipper_alert(
+                    team_id=team_id,
+                    sheet_key=body.sheet_key,
+                    msg=rule["msg"],
+                    source_user_id=user["user_id"],
+                    source_email=user["email"],
+                    threshold_id=rule["id"],
+                )
+                if alert:
+                    fired.append({"threshold_id": rule["id"], "msg": rule["msg"]})
+        except Exception:
+            continue
+    return {"alerts": fired}
+
+
+class CrewMessage(BaseModel):
+    text: str
+
+
+@api_router.post("/crew/chat")
+async def crew_send(body: CrewMessage, user: dict = Depends(require_user)):
+    team_id = user.get("team_id")
+    if not team_id:
+        raise HTTPException(400, "Join or create a team before using crew chat.")
+    text = body.text.strip()
+    if not text:
+        raise HTTPException(400, "Message is empty.")
+    if len(text) > 2000:
+        raise HTTPException(400, "Message too long (2000 char max).")
+
+    now = datetime.now(timezone.utc)
+    user_msg = {
+        "message_id": f"msg_{uuid.uuid4().hex[:12]}",
+        "team_id": team_id,
+        "sender_user_id": user["user_id"],
+        "sender_name": user.get("name") or user["email"].split("@")[0],
+        "sender_email": user["email"],
+        "text": text,
+        "is_alert": False,
+        "is_skipper": False,
+        "created_at": now,
+    }
+    await db.crew_messages.insert_one(user_msg)
+
+    # "hey skipper" or "@skipper" trigger — call Gemini with existing Cape Breton prompt
+    lower = text.lower()
+    if _user_has_ai_access(user) and EMERGENT_LLM_KEY and ("hey skipper" in lower or "@skipper" in lower or lower.startswith("skipper")):
+        query = text
+        for marker in ("hey skipper", "@skipper", "skipper"):
+            if lower.startswith(marker) or marker in lower:
+                query = text.replace(marker, "").replace(marker.title(), "").strip(" ,:.")
+                if query:
+                    break
+        try:
+            session_id = f"skipper_team_{team_id}"
+            chat = LlmChat(
+                api_key=EMERGENT_LLM_KEY,
+                session_id=session_id,
+                system_message=SYSTEM_PROMPTS["assistant"],
+            ).with_model("gemini", GEMINI_MODEL)
+            response = await chat.send_message(UserMessage(text=query or text))
+            await db.crew_messages.insert_one({
+                "message_id": f"msg_{uuid.uuid4().hex[:12]}",
+                "team_id": team_id,
+                "sender_user_id": "skipper",
+                "sender_name": "Skipper (AI Advisor)",
+                "text": response,
+                "is_alert": False,
+                "is_skipper": True,
+                "created_at": datetime.now(timezone.utc),
+            })
+        except Exception as e:
+            logger.exception("Skipper AI reply failed")
+
+    return {"success": True, "message_id": user_msg["message_id"]}
+
+
+@api_router.get("/crew/chat")
+async def crew_list(since: Optional[str] = None, user: dict = Depends(require_user)):
+    team_id = user.get("team_id")
+    if not team_id:
+        return {"messages": [], "team_id": None}
+    query = {"team_id": team_id}
+    if since:
+        try:
+            since_dt = datetime.fromisoformat(since.replace("Z", "+00:00"))
+            if since_dt.tzinfo is None:
+                since_dt = since_dt.replace(tzinfo=timezone.utc)
+            query["created_at"] = {"$gt": since_dt}
+        except ValueError:
+            pass
+    docs = await db.crew_messages.find(query, {"_id": 0}).sort("created_at", 1).to_list(300)
+    return {"messages": [_serialize(d) for d in docs], "team_id": team_id}
+
+
 # ============ APP CONFIG ============
 app.include_router(api_router)
 

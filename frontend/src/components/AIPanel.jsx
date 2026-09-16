@@ -124,9 +124,9 @@ const AIPanel = ({ open, onClose, contextBuilder, initialMode = "assistant" }) =
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-end" onClick={onClose}>
+    <div className="fixed inset-0 h-[100dvh] bg-black/40 z-50 flex items-end sm:items-center justify-end" onClick={onClose}>
       <div
-        className="bg-white w-full sm:w-[440px] h-[85vh] sm:h-[85vh] sm:mr-4 sm:mb-4 rounded-t-lg sm:rounded-lg shadow-2xl flex flex-col"
+        className="bg-white w-full sm:w-[440px] h-[85dvh] sm:h-[85vh] sm:mr-4 sm:mb-4 rounded-t-lg sm:rounded-lg shadow-2xl flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

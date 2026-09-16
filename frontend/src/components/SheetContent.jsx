@@ -1,12 +1,51 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Pin, BarChart3, Play, CheckCircle2, Save, Sparkles, Brain } from "lucide-react";
+import axios from "axios";
 import { workbookData, getDefaultValue } from "../mock/workbookData";
 import SvgSchematic from "./SvgSchematic";
 import SaveJobDialog from "./SaveJobDialog";
 import ResultsPanel from "./ResultsPanel";
 import AIPanel from "./AIPanel";
 import { computeResults } from "../lib/formulas";
-import { useAuth } from "../context/AuthContext";
+import { useAuth, API } from "../context/AuthContext";
+
+// Convert current sheet values to normalized Imperial numbers for the watchdog.
+// Returns { rih, tagged, surfp, vann_ftmin } — undefined when not applicable.
+const buildWatchdogPayload = (sheetKey, values, params, unitSystem, results) => {
+  const payload = {};
+  const pick = (patterns) => {
+    for (let i = 0; i < params.length; i++) {
+      const l = params[i].toLowerCase();
+      if (patterns.some((p) => l.includes(p.toLowerCase()))) {
+        const raw = parseFloat(values[i]);
+        if (isNaN(raw)) return null;
+        // The formulas.grab helper already normalizes to Imperial internally — we replicate the daN conversion here.
+        if (unitSystem === "met") {
+          if (l.includes("(dan)")) return raw * 2.24809;
+          if (l.includes("(mpa)")) return raw * 145.038;
+        }
+        return raw;
+      }
+    }
+    return null;
+  };
+  if (["CT_Milling", "CT_Drilling"].includes(sheetKey)) {
+    payload.rih = pick(["run-in-hole", "run in hole"]);
+    payload.tagged = pick(["weight on gauge", "tagged"]);
+  }
+  if (sheetKey === "Frac_Through_CT") {
+    payload.surfp = pick(["treating p"]);
+  }
+  if (sheetKey === "Sand_Cleanout") {
+    // Pull annular velocity out of computed results (Imperial ft/min).
+    const row = (results?.results || []).find((r) => r.label === "Annular velocity");
+    if (row && row.value !== "—") {
+      const v = parseFloat(row.value);
+      if (!isNaN(v)) payload.vann_ftmin = unitSystem === "met" ? v * 3.28084 : v;
+    }
+  }
+  return payload;
+};
 
 const SheetContent = ({ sheetKey, unitSystem, onUnitChange, initialValues, hasTeam }) => {
   const data = workbookData[sheetKey];
@@ -46,6 +85,19 @@ const SheetContent = ({ sheetKey, unitSystem, onUnitChange, initialValues, hasTe
     () => computeResults(sheetKey, values, params, unitSystem),
     [sheetKey, values, params, unitSystem]
   );
+
+  // Watchdog: debounced server-side safety-eval; fires Skipper alert into team chat.
+  // Only runs when the user is on a team.
+  useEffect(() => {
+    if (!hasTeam) return;
+    const payload = buildWatchdogPayload(sheetKey, values, params, unitSystem, results);
+    const hasSignal = Object.values(payload).some((v) => v !== null && v !== undefined && !isNaN(v));
+    if (!hasSignal) return;
+    const t = setTimeout(() => {
+      axios.post(`${API}/crew/safety-eval`, { sheet_key: sheetKey, values: payload }, { withCredentials: true }).catch(() => {});
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [sheetKey, values, params, unitSystem, results, hasTeam]);
 
   // Build a compact context object for the AI
   const buildAIContext = () => {
@@ -104,9 +156,12 @@ const SheetContent = ({ sheetKey, unitSystem, onUnitChange, initialValues, hasTe
               <td className="px-2.5 py-2 text-[13px] font-medium text-[#444]">{param}</td>
               <td className="px-2.5 py-2">
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
+                  pattern="-?[0-9]*[.,]?[0-9]*"
                   value={values[idx] || ""}
                   onChange={(e) => handleInputChange(idx, e.target.value)}
+                  data-testid={`sheet-input-${idx}`}
                   className="w-full bg-[#FAFAFA] border border-[#CCC] px-2 py-1.5 rounded-sm text-[13px] font-semibold text-[#111] outline-none focus:border-[#107C41] focus:bg-white focus:ring-2 focus:ring-[#107C41]/10"
                 />
               </td>
