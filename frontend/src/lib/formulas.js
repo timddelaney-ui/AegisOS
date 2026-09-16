@@ -321,10 +321,14 @@ function calc_CT_Drilling(vals, params, u) {
   if (conc_pct !== null && conc_pct > 5)
     warnings.push({ level: "warn", msg: `Return cuttings concentration ${conc_pct.toFixed(1)}% > 5%. Reduce ROP or increase flow.` });
 
+  const cuttings_display = cuttings_bbl_hr !== null
+    ? (u === "imp" ? cuttings_bbl_hr : conv.bbl_to_m3(cuttings_bbl_hr)).toFixed(2)
+    : "—";
+
   return {
     results: [
       ...base.results,
-      { label: "Cuttings generation", value: cuttings_bbl_hr !== null ? cuttings_bbl_hr.toFixed(2) : "—", unit: u === "imp" ? "bbl/hr" : "m³/hr", formula: "V̇ = ROP · A · (1−φ)" },
+      { label: "Cuttings generation", value: cuttings_display, unit: u === "imp" ? "bbl/hr" : "m³/hr", formula: "V̇ = ROP · A · (1−φ)" },
       { label: "Cuttings concentration in return", ...fmt(conc_pct, u, "percent", 2), note: "Keep < 5% by volume" },
       { label: "Annular velocity", ...fmt(v_ann, u, "velocity", 0) },
     ],

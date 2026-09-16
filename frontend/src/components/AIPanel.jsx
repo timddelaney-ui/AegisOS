@@ -76,6 +76,12 @@ const AIPanel = ({ open, onClose, contextBuilder, initialMode = "assistant" }) =
   }, [messages, sending]);
 
   useEffect(() => {
+    // Sync mode when parent reopens the panel with a different shortcut
+    // (e.g. clicking "Troubleshoot" after previously using "Assistant").
+    if (open) setMode(initialMode);
+  }, [initialMode, open]);
+
+  useEffect(() => {
     // reset conversation when mode changes
     setMessages([]);
     setSessionId(null);

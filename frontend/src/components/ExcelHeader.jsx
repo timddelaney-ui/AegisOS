@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { FileSpreadsheet, Menu, LogOut, Users, FolderOpen, Sparkles, X, Crown, MessageSquarePlus, ShieldAlert, Gift, Ticket, Home } from "lucide-react";
 import axios from "axios";
-import { useAuth, API } from "../context/AuthContext";
+import { useAuth, API, isProUser } from "../context/AuthContext";
 import FeedbackDialog from "./FeedbackDialog";
 import RedeemDialog from "./RedeemDialog";
 
@@ -13,7 +13,7 @@ const ExcelHeader = () => {
   const [redeemOpen, setRedeemOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const navigate = useNavigate();
-  const isPro = user?.subscription_status === "active";
+  const isPro = isProUser(user);
 
   useEffect(() => {
     if (!user) return;

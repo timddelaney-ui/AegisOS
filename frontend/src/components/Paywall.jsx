@@ -8,7 +8,7 @@ const Paywall = ({ sheetTitle, trialExpired = false }) => {
     <div className="flex flex-col gap-3">
       <div className={`px-2.5 py-2 text-[11px] font-semibold rounded-r flex items-center gap-1.5 border-l-[3px] ${trialExpired ? "bg-[#F8D7DA] border-[#C00000] text-[#721C24]" : "bg-[#FFF3CD] border-[#856404] text-[#856404]"}`}>
         {trialExpired ? <Clock className="w-3 h-3 flex-shrink-0" strokeWidth={2.5} /> : <Lock className="w-3 h-3 flex-shrink-0" strokeWidth={2.5} />}
-        <span>{trialExpired ? "7-DAY TRIAL ENDED — Subscribe to keep working" : "PRO SHEET — Upgrade to unlock"}</span>
+        <span>{trialExpired ? "30-DAY TRIAL ENDED — Subscribe to keep working" : "PRO SHEET — Upgrade to unlock"}</span>
       </div>
       <div className="bg-white border border-[#D4D4D4] rounded-lg p-5 md:p-7 shadow-sm text-center">
         <div className={`w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-3 ${trialExpired ? "bg-[#F8D7DA]" : "bg-[#FFF3CD]"}`}>

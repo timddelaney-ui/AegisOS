@@ -507,18 +507,38 @@ async def delete_job(job_id: str, user: dict = Depends(require_user)):
 EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
 GEMINI_MODEL = "gemini-2.5-flash"
 
-def _user_has_ai_access(user: dict) -> bool:
-    """AI features available during 30-day trial OR for active Pro subscribers."""
-    if user.get("subscription_status") == "active":
-        return True
-    exp = user.get("trial_expires_at")
-    if not exp:
+def _parse_utc(value) -> Optional[datetime]:
+    """Coerce a datetime or ISO string to a timezone-aware UTC datetime."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    if isinstance(value, str):
+        try:
+            dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+        except ValueError:
+            return None
+    return None
+
+
+def _user_is_pro(user: dict) -> bool:
+    """Pro when status is active AND (no expiry set OR expiry is still in the future)."""
+    if user.get("subscription_status") != "active":
         return False
-    if isinstance(exp, str):
-        exp = datetime.fromisoformat(exp)
-    if exp.tzinfo is None:
-        exp = exp.replace(tzinfo=timezone.utc)
+    exp = _parse_utc(user.get("subscription_expires_at"))
+    if exp is None:
+        # Legacy/active subscribers without an expiry recorded — grant access.
+        return True
     return exp > datetime.now(timezone.utc)
+
+
+def _user_has_ai_access(user: dict) -> bool:
+    """AI features available during 30-day trial OR for active (non-expired) Pro subscribers."""
+    if _user_is_pro(user):
+        return True
+    exp = _parse_utc(user.get("trial_expires_at"))
+    return exp is not None and exp > datetime.now(timezone.utc)
 
 
 SYSTEM_PROMPTS = {

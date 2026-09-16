@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
-import { useAuth, API } from "../context/AuthContext";
+import { useAuth, API, isProUser } from "../context/AuthContext";
 import {
   FileSpreadsheet, FolderOpen, Users, Sparkles, ChevronRight, Crown, AlertTriangle,
   MessageSquare, Wrench, GraduationCap, AlertOctagon, FileText, Calendar, Gauge,
@@ -72,13 +72,13 @@ const Hub = () => {
     });
   }, []);
 
-  const isPro = user?.subscription_status === "active";
+  const isPro = isProUser(user);
   const trial = useMemo(() => {
     if (!user?.trial_expires_at) return { active: false, daysLeft: 0 };
     const exp = new Date(user.trial_expires_at).getTime();
     const ms = exp - Date.now();
     if (ms <= 0) return { active: false, daysLeft: 0 };
-    return { active: true, daysLeft: Math.ceil(ms / 86400000) };
+    return { active: true, daysLeft: Math.floor(ms / 86400000) };
   }, [user]);
 
   const firstName = (user?.name || "hand").split(" ")[0];

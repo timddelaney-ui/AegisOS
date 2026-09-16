@@ -16,7 +16,7 @@ import AdminFeedback from "./pages/AdminFeedback";
 import AdminInvites from "./pages/AdminInvites";
 import Hub from "./pages/Hub";
 import { AdvisoryFooter, AdvisoryModal, AdvisoryStrip } from "./components/AdvisoryDisclaimer";
-import { useAuth, API } from "./context/AuthContext";
+import { useAuth, API, isProUser } from "./context/AuthContext";
 import { workbookData } from "./mock/workbookData";
 import { Loader2, Clock } from "lucide-react";
 import axios from "axios";
@@ -53,7 +53,7 @@ const Workbook = () => {
   const [loadedValues, setLoadedValues] = useState(initialLoadJob?.values || null);
   const [hasTeam, setHasTeam] = useState(false);
   const { user } = useAuth();
-  const isPro = user?.subscription_status === "active";
+  const isPro = isProUser(user);
   const trial = getTrialInfo(user);
   // Free tier access: Pro subscribers get everything. Free users get FREE_SHEETS only while trial is active.
   const canAccessFree = isPro || trial.active;
