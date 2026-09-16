@@ -1,0 +1,39 @@
+{
+  "summary": "Frontend-only verification of two fixes: (1) 5-section CT wall-thickness taper on Pill_Spotting + CT_Milling, and (2) Friction Reducer input on CT_Milling. All acceptance criteria met. Also verified regressions (multi-casing on Sand_Cleanout, WOB on CT_Drilling, no LIVE SIMULATION artifacts).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verified_behaviors": [
+    "CT_Milling params (imp): CT Wall (in) + Wall #2..#5 (in) + Section #2..#5 Length (ft) + Friction Reducer (gpt) — Upper CT OD and Taper Depth are GONE.",
+    "CT_Milling params (met): mirror set with (mm), (m), (L/m3).",
+    "Pill_Spotting params: same 5-section wall taper inputs + 2nd Casing ID/MD retained.",
+    "Taper math on CT_Milling with CT OD 1.75, CT Wall 0.109, Wall#2=0.134 × 3000 ft, Wall#3=0.156 × 2000 ft, Depth 10000: '🎯 CT internal volume (tapered-aware)' = 21.82 bbl (expected ≈21.8 ± 0.5). Formula shows 'Σ capᵢ · Lᵢ' with '3-section wall taper' note.",
+    "Info warning present: 'Tapered wall string (3 sections): #1 wall 0.109\" × 5000 ft · #2 wall 0.134\" × 3000 ft · #3 wall 0.156\" × 2000 ft'.",
+    "Straight string (Wall#2..#5 all 0): tapered-aware volume = 22.80 bbl (=capCT×10000 with CT Wall 0.109) and note shows 'Straight string' (no N-section taper text).",
+    "Pill_Spotting taper math with CT Wall 0.109 + Wall#2 0.134 × 3000 ft, Target 8000 ft: '🎯 Coil volume for spotting' = 17.80 bbl (expected 5000·0.00228 + 3000·0.00213 ≈ 17.80). Annular volume row 133.57 bbl also present.",
+    "FR default 1.5 gpt: 'CT friction pressure (net) — Fanning · FR factor — FR 1.50 gpt → 73% of raw friction' and 'FR friction reduction = 27%' rows displayed (fr_factor=1-0.30·ln(2.5)=0.725 → 27%).",
+    "FR=0: 'FR friction reduction' row absent; note reads 'no FR entered'.",
+    "FR=0.3: warning 'FR loading 0.30 gpt is low — 1.0–2.5 typical for milling.' fires.",
+    "Regression — Sand_Cleanout retains 2nd Casing ID/MD; CT_Drilling retains WOB (Weight on gauge – tagged, Run-in-hole weight).",
+    "Regression — No 'LIVE SIMULATION DIAGRAM' text/canvas on workbook sheets.",
+    "Regression — Metric mode CT_Milling default FR 2.0 L/m³ shows fr_factor 67% and matching FR friction reduction row (33%)."
+  ],
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "taperedCT() returns bottom section with length=0 when named sections' total length exceeds total depth. Currently doesn't emit a dedicated warning for over-length input; the info warning still shows but the bottom section silently disappears. Consider a 'warn' level message when Σ named lengths ≥ total_depth.",
+    "CT_Drilling inherits calc_CT_Milling and therefore displays 'CT internal volume (tapered-aware)' and 'Buoyed string weight' even though CT_Drilling sheet has no taper inputs. Not a bug (falls through to straight-string) — but consider hiding the tapered-aware label on sheets where taper params aren't inputs, or add taper inputs to CT_Drilling for symmetry.",
+    "grab() catches 'CT OD' when scanning for 'wall #2 (in)' etc. by substring is safe here because it uses exact 'wall #N' matching — but the more generic patterns like 'depth' can be greedy. No observed defect this iteration."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped)", "frontend": "100%"},
+  "test_credentials": "Created fresh Pro test session: session_token=testtoken_taperfr_c4b3b3b7d905 for user test-pro-taperfr-01 (team_82a99ce97b2f). The prior demo session (dade4ac57f0c496094fde437e8e91f00) returns 401 — expired/absent in DB.",
+  "seed_data_creation": "Inserted user 'test-pro-taperfr-01' and matching user_sessions row for testing.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "The previously advertised demo_session token no longer authenticates. Either re-seed it or use the new session_token above. All fixes for the 5-section wall taper + FR on CT_Milling are working end-to-end. The 🎯 emoji rows are intentional. Watchdog does not read Wall/Section inputs by design.",
+  "rca of the issue": "No bugs found this iteration — both fixes work as specified."
+}
