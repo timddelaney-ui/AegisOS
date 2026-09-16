@@ -9,20 +9,20 @@ export const workbookData = {
   Sand_Cleanout: {
     title: "Sand & Debris Cleanout",
     sop: "SOP-CT-04 | API Spec 5ST Sand Cleanout",
-    imp: ["Flow Rate (BPM)", "Casing ID (in)", "Tubing OD (in)", "Fluid Viscosity (cp)", "Current Depth (ft)"],
-    met: ["Flow Rate (L/min)", "Casing ID (mm)", "Tubing OD (mm)", "Fluid Viscosity (cp)", "Current Depth (m)"],
+    imp: ["Flow Rate (BPM)", "Casing ID (in)", "Tubing OD (in)", "Fluid Viscosity (cp)", "Current Depth (ft)", "Friction Reducer (gpt)"],
+    met: ["Flow Rate (L/min)", "Casing ID (mm)", "Tubing OD (mm)", "Fluid Viscosity (cp)", "Current Depth (m)", "Friction Reducer (L/m3)"],
   },
   CT_Milling: {
     title: "Composite Plug Milling",
     sop: "SOP-CT-25 | Composite Milling Hydraulics & WOB",
-    imp: ["Depth (ft)", "CT OD (in)", "CT ID (in)", "Casing ID (in)", "Surface Wt (lbs)", "Up Weight (lbs)", "Pump Rate (BPM)", "Viscosity (cp)", "Density (ppg)"],
-    met: ["Depth (m)", "CT OD (mm)", "CT ID (mm)", "Casing ID (mm)", "Surface Wt (daN)", "Up Weight (daN)", "Pump Rate (L/min)", "Viscosity (cp)", "Density (kg/m3)"],
+    imp: ["Depth (ft)", "CT OD (in)", "CT ID (in)", "Casing ID (in)", "Weight on gauge – tagged (lbs)", "Run-in-hole weight (lbs)", "Pump Rate (BPM)", "Viscosity (cp)", "Density (ppg)"],
+    met: ["Depth (m)", "CT OD (mm)", "CT ID (mm)", "Casing ID (mm)", "Weight on gauge – tagged (daN)", "Run-in-hole weight (daN)", "Pump Rate (L/min)", "Viscosity (cp)", "Density (kg/m3)"],
   },
   CT_Drilling: {
     title: "Lateral CT Drilling",
     sop: "SOP-CT-27 | Lateral CT Drilling Dynamics",
-    imp: ["Depth (ft)", "CT OD (in)", "CT ID (in)", "Casing ID (in)", "Surface Wt (lbs)", "Up Weight (lbs)", "Pump Rate (BPM)", "ROP (ft/hr)", "Density (ppg)"],
-    met: ["Depth (m)", "CT OD (mm)", "CT ID (mm)", "Casing ID (mm)", "Surface Wt (daN)", "Up Weight (daN)", "Pump Rate (L/min)", "ROP (m/hr)", "Density (kg/m3)"],
+    imp: ["Depth (ft)", "CT OD (in)", "CT ID (in)", "Casing ID (in)", "Weight on gauge – tagged (lbs)", "Run-in-hole weight (lbs)", "Pump Rate (BPM)", "ROP (ft/hr)", "Density (ppg)"],
+    met: ["Depth (m)", "CT OD (mm)", "CT ID (mm)", "Casing ID (mm)", "Weight on gauge – tagged (daN)", "Run-in-hole weight (daN)", "Pump Rate (L/min)", "ROP (m/hr)", "Density (kg/m3)"],
   },
   Pill_Spotting: {
     title: "Chemical Pill Spotting",
@@ -33,14 +33,14 @@ export const workbookData = {
   Frac_Through_CT: {
     title: "Frac Through Coiled Tubing",
     sop: "SOP-CT-19 | Frac Through CT & Friction",
-    imp: ["Depth (ft)", "CT OD (in)", "CT ID (in)", "Casing ID (in)", "Treating P (PSI)", "Pump Rate (BPM)", "Proppant (ppa)", "Density (ppg)"],
-    met: ["Depth (m)", "CT OD (mm)", "CT ID (mm)", "Casing ID (mm)", "Treating P (MPa)", "Pump Rate (L/min)", "Proppant (kg/m3)", "Density (kg/m3)"],
+    imp: ["Depth (ft)", "CT OD (in)", "CT ID (in)", "Casing ID (in)", "Treating P (PSI)", "Pump Rate (BPM)", "Proppant (ppa)", "Density (ppg)", "Friction Reducer (gpt)"],
+    met: ["Depth (m)", "CT OD (mm)", "CT ID (mm)", "Casing ID (mm)", "Treating P (MPa)", "Pump Rate (L/min)", "Proppant (kg/m3)", "Density (kg/m3)", "Friction Reducer (L/m3)"],
   },
   Annular_Frac: {
     title: "CT Annular Fracturing",
     sop: "SOP-CT-18 | AER Dir 009 Annular Fracturing",
-    imp: ["Stage #", "Base Depth (ft)", "Offset (ft)", "Treating P (PSI)", "Pump Rate (BPM)", "Density (ppg)", "Casing ID (in)", "Tubing OD (in)"],
-    met: ["Stage #", "Base Depth (m)", "Offset (m)", "Treating P (MPa)", "Pump Rate (L/min)", "Density (kg/m3)", "Casing ID (mm)", "Tubing OD (mm)"],
+    imp: ["Stage #", "Base Depth (ft)", "Offset (ft)", "Treating P (PSI)", "Pump Rate (BPM)", "Density (ppg)", "Casing ID (in)", "Tubing OD (in)", "Friction Reducer (gpt)"],
+    met: ["Stage #", "Base Depth (m)", "Offset (m)", "Treating P (MPa)", "Pump Rate (L/min)", "Density (kg/m3)", "Casing ID (mm)", "Tubing OD (mm)", "Friction Reducer (L/m3)"],
   },
   Mechanical_Sleeve: {
     title: "Mechanical Sleeve Shift",
@@ -433,6 +433,9 @@ export const emergencyCategories = ["All", "Well Control", "HSE", "Equipment", "
 
 export const getDefaultValue = (param, unitSystem) => {
   if (param.includes("Stage")) return "1";
+  if (param.includes("Friction Reducer")) return unitSystem === "imp" ? "1.5" : "2.0";
+  if (param.includes("Weight on gauge") || param.includes("tagged")) return unitSystem === "imp" ? "18000" : "8010";
+  if (param.includes("Run-in-hole") || param.includes("run-in-hole")) return unitSystem === "imp" ? "19500" : "8680";
   if (param.includes("Target Depth") || param.includes("Plug Depth")) return "5000";
   if (param.includes("Depth") || param.includes("Base")) return "5200";
   if (param.includes("Stretch")) return unitSystem === "imp" ? "3.5" : "88.9";

@@ -216,6 +216,11 @@ function calc_Sand_Cleanout(vals, params, u) {
   const tubing_od = grab(vals, params, u, ["tubing od"]);
   const visc = grab(vals, params, u, ["viscosity"]);
   const depth_ft = grab(vals, params, u, ["current depth"]);
+  // FR loading: imp is gpt (gallons per thousand gal); met is L/m³.
+  //   1 gpt = 1 L/m³ · 1.0 (both dimensionless ratios ×1000)
+  //   Actually: 1 gpt = 1 gal / 1000 gal = 0.001 = 1 L/m³ (since 1 L/m³ = 1e-3)
+  //   So gpt and L/m³ are numerically identical.
+  const fr_load = grab(vals, params, u, ["friction reducer"]);
 
   const A_ann_in2 = casing_id && tubing_od ? areaCircle(casing_id) - areaCircle(tubing_od) : null;
   const v_ann = v_annular_ftmin(q_bpm, A_ann_in2);
@@ -228,22 +233,41 @@ function calc_Sand_Cleanout(vals, params, u) {
   const v_slip = visc ? 175 * Math.pow(dp, 0.667) * Math.pow(rho_ratio, 0.667) / Math.pow(visc, 0.333) : null;
   const transportRatio = v_ann && v_slip ? v_ann / v_slip : null;
 
+  // FR volume per bbl of carrier fluid (1 gpt = 1 gal FR per 1000 gal fluid = 0.042 gal/bbl)
+  const fr_gal_per_bbl = fr_load !== null ? fr_load * 0.042 : null;
+  const fr_gal_per_bottomsup = fr_gal_per_bbl && annVol ? fr_gal_per_bbl * annVol : null;
+
   const warnings = [];
   if (v_ann !== null && v_ann < 100)
     warnings.push({ level: "warn", msg: `Annular velocity ${v_ann.toFixed(0)} ft/min below 100 ft/min minimum for vertical solids transport.` });
   if (transportRatio !== null && transportRatio < 1.5)
     warnings.push({ level: "warn", msg: `Transport ratio ${transportRatio.toFixed(2)} below 1.5× rule of thumb — cuttings may fall back.` });
+  if (fr_load !== null && fr_load < 0.5)
+    warnings.push({ level: "warn", msg: `FR loading ${fr_load.toFixed(2)} gpt is low — typical CT cleanout carriers run 1.0–2.5 gpt.` });
+  if (fr_load !== null && fr_load > 4.0)
+    warnings.push({ level: "warn", msg: `FR loading ${fr_load.toFixed(2)} gpt is high — verify friction-pressure benefit vs cost.` });
+
+  const results = [
+    { label: "Annular flow area", ...fmt(A_ann_in2, u, "area", 3) },
+    { label: "Annular velocity", ...fmt(v_ann, u, "velocity", 0), formula: "Va = Q · 9701.9 / A / 12", note: "≥ 100 ft/min recommended (Moore)" },
+    { label: "Annular capacity", ...fmt(annCap, u, "capacity", 4) },
+    { label: "Total annular volume", ...fmt(annVol, u, "volume", 1) },
+    { label: "Bottoms-up circulation time", ...fmt(bottomsUp_min, u, "time", 1), note: "Circulate ≥ 1.5 BU after tag" },
+    { label: "Slip velocity (est.)", ...fmt(v_slip, u, "velocity", 1), formula: "Moore (1974)" },
+    { label: "Transport ratio (Va/Vs)", ...fmt(transportRatio, u, "ratio", 2), note: "Target ≥ 1.5×" },
+  ];
+  if (fr_gal_per_bottomsup !== null) {
+    results.push({
+      label: "FR volume per bottoms-up",
+      value: (u === "imp" ? fr_gal_per_bottomsup : fr_gal_per_bottomsup * 3.7854).toFixed(1),
+      unit: u === "imp" ? "gal" : "L",
+      formula: "V_FR = load · 0.042 · Vann",
+      note: `Loading: ${fr_load !== null ? fr_load.toFixed(2) : "—"} ${u === "imp" ? "gpt" : "L/m³"}`,
+    });
+  }
 
   return {
-    results: [
-      { label: "Annular flow area", ...fmt(A_ann_in2, u, "area", 3) },
-      { label: "Annular velocity", ...fmt(v_ann, u, "velocity", 0), formula: "Va = Q · 9701.9 / A / 12", note: "≥ 100 ft/min recommended (Moore)" },
-      { label: "Annular capacity", ...fmt(annCap, u, "capacity", 4) },
-      { label: "Total annular volume", ...fmt(annVol, u, "volume", 1) },
-      { label: "Bottoms-up circulation time", ...fmt(bottomsUp_min, u, "time", 1), note: "Circulate ≥ 1.5 BU after tag" },
-      { label: "Slip velocity (est.)", ...fmt(v_slip, u, "velocity", 1), formula: "Moore (1974)" },
-      { label: "Transport ratio (Va/Vs)", ...fmt(transportRatio, u, "ratio", 2), note: "Target ≥ 1.5×" },
-    ],
+    results,
     warnings,
     formula: "Va = Q · 9701.9 / A(in²) / 12 ;  Vs per Moore correlation",
     reference: "API RP 13D · IADC/SPE 130580 · Moore (1974)",
@@ -255,13 +279,16 @@ function calc_CT_Milling(vals, params, u) {
   const ct_od = grab(vals, params, u, ["ct od"]);
   const ct_id = grab(vals, params, u, ["ct id"]);
   const casing_id = grab(vals, params, u, ["casing id"]);
-  const surfWt = grab(vals, params, u, ["surface wt"]);
-  const upWt = grab(vals, params, u, ["up weight"]);
+  const taggedWt = grab(vals, params, u, ["weight on gauge", "tagged"]);
+  const rihWt    = grab(vals, params, u, ["run-in-hole", "run in hole"]);
   const q_bpm = grab(vals, params, u, ["pump rate"]);
   const visc = grab(vals, params, u, ["viscosity"]);
   const rho = grab(vals, params, u, ["density"]);
 
-  const WOB = surfWt !== null && upWt !== null ? surfWt - upWt : null;
+  // WOB = RIH free-hanging weight − indicator reading with bit tagged.
+  //   • Free hanging (no bit contact): tagged ≈ RIH  → WOB ≈ 0
+  //   • Bit taking weight: tagged < RIH             → WOB > 0
+  const WOB = taggedWt !== null && rihWt !== null ? rihWt - taggedWt : null;
   const q_gpm = q_bpm !== null ? q_bpm * 42 : null;
   const Pf = pipeFriction_psi(q_bpm, ct_id, rho, visc, depth);
   const dP_per_1000 = Pf && depth ? (Pf / depth) * 1000 : null;
@@ -278,7 +305,7 @@ function calc_CT_Milling(vals, params, u) {
   if (WOB !== null && WOB > 2000)
     warnings.push({ level: "warn", msg: `WOB ${WOB.toFixed(0)} lb exceeds 2000 lb — sinusoidal buckling risk (API RP 5C7 §7.3).` });
   if (WOB !== null && WOB < 0)
-    warnings.push({ level: "warn", msg: `Negative WOB — mill not tagged. Confirm tag depth before pumping.` });
+    warnings.push({ level: "warn", msg: `Negative WOB — tagged weight exceeds run-in-hole weight. Recheck inputs (RIH should be higher).` });
   if (v_ann !== null && v_ann < 90)
     warnings.push({ level: "warn", msg: `Annular velocity ${v_ann.toFixed(0)} ft/min may be insufficient for cuttings transport.` });
   if (Pf !== null && Pf > 5000)
@@ -286,7 +313,7 @@ function calc_CT_Milling(vals, params, u) {
 
   return {
     results: [
-      { label: "Weight on Bit (WOB)", ...fmt(WOB, u, "force", 0), formula: "WOB = SurfWt − UpWt", note: "Target 500–1500 lb for composite" },
+      { label: "Weight on Bit (WOB)", ...fmt(WOB, u, "force", 0), formula: "WOB = RIH weight − Weight on gauge (tagged)", note: "Target 500–1500 lb for composite" },
       { label: "Pump rate", ...fmt(q_gpm, u, "rateGPM", 1), note: `= ${q_bpm !== null ? q_bpm.toFixed(2) : "—"} BPM` },
       { label: "CT friction pressure (total)", ...fmt(Pf, u, "pressure", 0), formula: "Fanning: ΔP = f·ρ·v²·L / (25.81·d)" },
       { label: "Friction gradient", ...fmt(dP_per_1000, u, "frictionK", 0) },
@@ -386,9 +413,16 @@ function calc_Frac_Through_CT(vals, params, u) {
   const surfP = grab(vals, params, u, ["treating p"]);
   const q_bpm = grab(vals, params, u, ["pump rate"]);
   const rho = grab(vals, params, u, ["density"]);
+  const fr_load = grab(vals, params, u, ["friction reducer"]);
 
   const Ph = rho && depth ? 0.052 * rho * depth : null;
-  const Pf = pipeFriction_psi(q_bpm, ct_id, rho, 1, depth); // frac fluid ~1cp
+  // FR reduces effective turbulent friction. Typical drag-reduction curve for polyacrylamide FR:
+  //   0 gpt → 1.00, 1 gpt → 0.55, 2 gpt → 0.35, 3 gpt → 0.28, plateau ~4 gpt @ 0.22
+  const fr_factor = fr_load !== null && fr_load > 0
+    ? Math.max(0.22, 1.0 - 0.30 * Math.log(1 + fr_load))
+    : 1.0;
+  const Pf_raw = pipeFriction_psi(q_bpm, ct_id, rho, 1, depth);
+  const Pf = Pf_raw !== null ? Pf_raw * fr_factor : null;
   const dP_per_1000 = Pf && depth ? (Pf / depth) * 1000 : null;
   const BHTP = surfP !== null && Ph !== null && Pf !== null ? surfP + Ph - Pf : null;
   const fracGrad = BHTP && depth ? BHTP / depth : null;
@@ -398,6 +432,7 @@ function calc_Frac_Through_CT(vals, params, u) {
   const capAnn = casing && ct_od ? annCap_bbl_per_ft(casing, ct_od) : null;
   const A_ann = casing && ct_od ? areaCircle(casing) - areaCircle(ct_od) : null;
   const vAnn = v_annular_ftmin(q_bpm, A_ann);
+  const fr_savings_pct = fr_load !== null && fr_load > 0 ? (1 - fr_factor) * 100 : null;
 
   const warnings = [];
   const MAX_CT_WP = 10000;
@@ -406,26 +441,33 @@ function calc_Frac_Through_CT(vals, params, u) {
   else if (surfP && surfP > 0.9 * MAX_CT_WP)
     warnings.push({ level: "warn", msg: `Surface pressure at >90% CT working limit. Reduce rate or fluid weight.` });
   if (Pf && Pf > 5000)
-    warnings.push({ level: "warn", msg: `Friction ${Pf.toFixed(0)} psi is very high — consider larger CT ID or reduce rate.` });
+    warnings.push({ level: "warn", msg: `Friction ${Pf.toFixed(0)} psi is very high — consider larger CT ID, reduce rate, or increase FR.` });
   if (fracGrad && fracGrad > 1.0)
     warnings.push({ level: "warn", msg: `Frac gradient ${fracGrad.toFixed(3)} psi/ft at/above overburden — verify formation.` });
   if (hoopStress && hoopStress > 0.8 * CT_YIELD_PSI)
     warnings.push({ level: "warn", msg: `CT hoop stress ${hoopStress.toFixed(0)} psi > 80% yield. Check remaining life on fatigue log.` });
+  if (fr_load !== null && fr_load < 0.5)
+    warnings.push({ level: "warn", msg: `FR loading ${fr_load.toFixed(2)} ${u==="imp"?"gpt":"L/m³"} is low for fracing through CT — 1.5–3.0 typical.` });
+
+  const results = [
+    { label: "Hydrostatic pressure", ...fmt(Ph, u, "pressure", 0), formula: "Ph = 0.052 · ρ · TVD" },
+    { label: "CT friction pressure (net)", ...fmt(Pf, u, "pressure", 0), formula: "Fanning · FR factor", note: fr_load !== null ? `FR ${fr_load.toFixed(2)} ${u==="imp"?"gpt":"L/m³"} → ${(fr_factor*100).toFixed(0)}% of raw friction` : "no FR entered" },
+    { label: "Friction gradient", ...fmt(dP_per_1000, u, "frictionK", 0) },
+    { label: "Bottomhole treating pressure", ...fmt(BHTP, u, "pressure", 0), formula: "BHTP = Psurf + Ph − Pf" },
+    { label: "Frac gradient", ...fmt(fracGrad, u, "pressureGradient", 3), note: "Typical 0.6–0.9 psi/ft" },
+    { label: "CT internal volume", ...fmt(strVol, u, "volume", 1) },
+    { label: "Annular velocity", ...fmt(vAnn, u, "velocity", 0) },
+    { label: "CT hoop stress @ surface P", ...fmt(hoopStress, u, "pressure", 0), formula: "σθ = P · r / t", note: `Yield ${CT_YIELD_PSI/1000}k psi (CT-100)` },
+    { label: "Annular capacity", ...fmt(capAnn, u, "capacity", 4) },
+  ];
+  if (fr_savings_pct !== null) {
+    results.push({ label: "FR friction reduction", value: fr_savings_pct.toFixed(0), unit: "%", note: "Effective drag reduction from FR loading" });
+  }
 
   return {
-    results: [
-      { label: "Hydrostatic pressure", ...fmt(Ph, u, "pressure", 0), formula: "Ph = 0.052 · ρ · TVD" },
-      { label: "CT friction pressure (total)", ...fmt(Pf, u, "pressure", 0), formula: "Fanning: ΔP = f·ρ·v²·L/(25.81·d)" },
-      { label: "Friction gradient", ...fmt(dP_per_1000, u, "frictionK", 0) },
-      { label: "Bottomhole treating pressure", ...fmt(BHTP, u, "pressure", 0), formula: "BHTP = Psurf + Ph − Pf" },
-      { label: "Frac gradient", ...fmt(fracGrad, u, "pressureGradient", 3), note: "Typical 0.6–0.9 psi/ft" },
-      { label: "CT internal volume", ...fmt(strVol, u, "volume", 1) },
-      { label: "Annular velocity", ...fmt(vAnn, u, "velocity", 0) },
-      { label: "CT hoop stress @ surface P", ...fmt(hoopStress, u, "pressure", 0), formula: "σθ = P · r / t", note: `Yield ${CT_YIELD_PSI/1000}k psi (CT-100)` },
-      { label: "Annular capacity", ...fmt(capAnn, u, "capacity", 4) },
-    ],
+    results,
     warnings,
-    formula: "BHTP = Psurf + 0.052·ρ·TVD − Pf  ·  Fanning ΔP = f·ρ·v²·L/(25.81·d)",
+    formula: "BHTP = Psurf + 0.052·ρ·TVD − Pf·FR_factor  ·  Fanning ΔP = f·ρ·v²·L/(25.81·d)",
     reference: "API RP 5C7 · Bourgoyne et al. · Halliburton Red Book",
   };
 }
@@ -438,10 +480,15 @@ function calc_Annular_Frac(vals, params, u) {
   const rho = grab(vals, params, u, ["density"]);
   const casing = grab(vals, params, u, ["casing id"]);
   const tubOD = grab(vals, params, u, ["tubing od"]);
+  const fr_load = grab(vals, params, u, ["friction reducer"]);
 
   const trueDepth = depth !== null && offset !== null ? depth + offset : depth;
   const Ph = rho && trueDepth ? 0.052 * rho * trueDepth : null;
-  const Pf = annularFriction_psi(q_bpm, casing, tubOD, rho, 1, trueDepth);
+  const fr_factor = fr_load !== null && fr_load > 0
+    ? Math.max(0.22, 1.0 - 0.30 * Math.log(1 + fr_load))
+    : 1.0;
+  const Pf_raw = annularFriction_psi(q_bpm, casing, tubOD, rho, 1, trueDepth);
+  const Pf = Pf_raw !== null ? Pf_raw * fr_factor : null;
   const dP_per_1000 = Pf && trueDepth ? (Pf / trueDepth) * 1000 : null;
   const BHTP = surfP !== null && Ph !== null && Pf !== null ? surfP + Ph - Pf : null;
   const fracGrad = BHTP && trueDepth ? BHTP / trueDepth : null;
@@ -455,21 +502,25 @@ function calc_Annular_Frac(vals, params, u) {
     warnings.push({ level: "warn", msg: `Frac gradient ${fracGrad.toFixed(3)} psi/ft — verify formation limits (AER Directive 009).` });
   if (surfP && surfP > 5000)
     warnings.push({ level: "warn", msg: `Surface pressure ${surfP.toFixed(0)} psi — verify wellhead / casing burst rating.` });
+  if (fr_load !== null && fr_load < 0.5)
+    warnings.push({ level: "warn", msg: `FR loading ${fr_load.toFixed(2)} ${u==="imp"?"gpt":"L/m³"} is low for annular frac — 1.0–2.5 typical.` });
+
+  const results = [
+    { label: "True vertical depth (stage)", ...fmt(trueDepth, u, "depth", 0) },
+    { label: "Hydrostatic @ TVD", ...fmt(Ph, u, "pressure", 0) },
+    { label: "Annular friction pressure (net)", ...fmt(Pf, u, "pressure", 0), formula: "Fanning · FR factor", note: fr_load !== null ? `FR ${fr_load.toFixed(2)} ${u==="imp"?"gpt":"L/m³"} → ${(fr_factor*100).toFixed(0)}% of raw friction` : "no FR entered" },
+    { label: "Friction gradient", ...fmt(dP_per_1000, u, "frictionK", 0) },
+    { label: "Bottomhole treating pressure", ...fmt(BHTP, u, "pressure", 0) },
+    { label: "Frac gradient", ...fmt(fracGrad, u, "pressureGradient", 3) },
+    { label: "Annular velocity", ...fmt(vAnn, u, "velocity", 0) },
+    { label: "Annular capacity", ...fmt(capAnn, u, "capacity", 4) },
+    { label: "Total annular volume", ...fmt(totalVol, u, "volume", 1) },
+  ];
 
   return {
-    results: [
-      { label: "True vertical depth (stage)", ...fmt(trueDepth, u, "depth", 0) },
-      { label: "Hydrostatic @ TVD", ...fmt(Ph, u, "pressure", 0) },
-      { label: "Annular friction pressure", ...fmt(Pf, u, "pressure", 0), formula: "Fanning w/ hydraulic diameter" },
-      { label: "Friction gradient", ...fmt(dP_per_1000, u, "frictionK", 0) },
-      { label: "Bottomhole treating pressure", ...fmt(BHTP, u, "pressure", 0) },
-      { label: "Frac gradient", ...fmt(fracGrad, u, "pressureGradient", 3) },
-      { label: "Annular velocity", ...fmt(vAnn, u, "velocity", 0) },
-      { label: "Annular capacity", ...fmt(capAnn, u, "capacity", 4) },
-      { label: "Total annular volume", ...fmt(totalVol, u, "volume", 1) },
-    ],
+    results,
     warnings,
-    formula: "BHTP = Psurf + 0.052·ρ·TVD − Pf(annulus)  ·  Fanning w/ d_h = D−d",
+    formula: "BHTP = Psurf + 0.052·ρ·TVD − Pf·FR_factor  ·  Fanning w/ d_h = D−d",
     reference: "AER Directive 009 · API RP 13D · Bourgoyne et al.",
   };
 }
