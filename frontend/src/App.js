@@ -16,11 +16,15 @@ import AdminFeedback from "./pages/AdminFeedback";
 import AdminInvites from "./pages/AdminInvites";
 import Hub from "./pages/Hub";
 import ManagerDashboard from "./pages/ManagerDashboard";
+import EquipmentPage from "./pages/EquipmentPage";
+import CrewSchedulePage from "./pages/CrewSchedulePage";
 import ManagerGreeting from "./components/ManagerGreeting";
 import { AdvisoryFooter, AdvisoryModal, AdvisoryStrip } from "./components/AdvisoryDisclaimer";
 import RigSelector from "./components/RigSelector";
+import ServiceToggle, { useServiceView } from "./components/ServiceToggle";
 import { useAuth, API, isProUser } from "./context/AuthContext";
 import { workbookData } from "./mock/workbookData";
+import { sheetInService } from "./lib/serviceCatalog";
 import { Loader2, Clock } from "lucide-react";
 import axios from "axios";
 import "./App.css";
@@ -56,10 +60,21 @@ const Workbook = () => {
   const [loadedValues, setLoadedValues] = useState(initialLoadJob?.values || null);
   const [hasTeam, setHasTeam] = useState(false);
   const { user } = useAuth();
+  const { service } = useServiceView();
   const isPro = isProUser(user);
   const trial = getTrialInfo(user);
   // Free tier access: Pro subscribers get everything. Free users get FREE_SHEETS only while trial is active.
   const canAccessFree = isPro || trial.active;
+
+  // If the active sheet leaves the current service view, snap to the first visible sheet.
+  useEffect(() => {
+    if (currentSheet === "EMERGENCY") return;
+    if (!sheetInService(currentSheet, service)) {
+      const first = Object.keys(workbookData).find((k) => sheetInService(k, service));
+      if (first) setCurrentSheet(first);
+    }
+    // eslint-disable-next-line
+  }, [service]);
 
   useEffect(() => {
     setHasTeam(!!user?.team_id);
@@ -97,6 +112,7 @@ const Workbook = () => {
     <div className="workbook-root bg-[#F3F3F3] text-[#262626] flex flex-col h-screen overflow-hidden">
       <ExcelHeader />
       <RigSelector />
+      <ServiceToggle compact />
       <FormulaBar formulaText={getFormulaText()} />
       <AdvisoryStrip />
       {!isPro && trial.active && (
@@ -196,6 +212,8 @@ const AppRouter = () => {
         <Route path="/admin/feedback" element={<ProtectedRoute><AdminFeedback /></ProtectedRoute>} />
         <Route path="/admin/invites" element={<ProtectedRoute><AdminInvites /></ProtectedRoute>} />
         <Route path="/manager" element={<ProtectedRoute><ManagerDashboard /></ProtectedRoute>} />
+        <Route path="/equipment" element={<ProtectedRoute><EquipmentPage /></ProtectedRoute>} />
+        <Route path="/schedule" element={<ProtectedRoute><CrewSchedulePage /></ProtectedRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <AdvisoryFooter />

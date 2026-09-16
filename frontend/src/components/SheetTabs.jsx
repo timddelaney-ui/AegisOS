@@ -1,10 +1,13 @@
 import React, { useRef, useEffect } from "react";
 import { AlertTriangle, Lock } from "lucide-react";
 import { workbookData } from "../mock/workbookData";
+import { sheetInService } from "../lib/serviceCatalog";
+import { useServiceView } from "./ServiceToggle";
 
 const SheetTabs = ({ currentSheet, onSelectSheet, freeSheets = [], isPro = false, trialActive = false }) => {
   const containerRef = useRef(null);
   const activeTabRef = useRef(null);
+  const { service } = useServiceView();
 
   useEffect(() => {
     if (activeTabRef.current && containerRef.current) {
@@ -35,7 +38,7 @@ const SheetTabs = ({ currentSheet, onSelectSheet, freeSheets = [], isPro = false
       className="bg-[#E1E1E1] h-[42px] flex items-center border-t border-[#BCBCBC] flex-shrink-0 overflow-x-auto whitespace-nowrap px-1 gap-[2px]"
       style={{ scrollbarWidth: "thin" }}
     >
-      {Object.keys(workbookData).map((key) => {
+      {Object.keys(workbookData).filter((key) => sheetInService(key, service)).map((key) => {
         const isActive = key === currentSheet;
         const locked = isLocked(key);
         return (

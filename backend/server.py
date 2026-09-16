@@ -1492,6 +1492,448 @@ async def manager_dashboard(hours: int = 24, user: dict = Depends(require_user))
     }
 
 
+# ============ USER PREFERENCES ============
+class UserPrefUpdate(BaseModel):
+    service_view: Optional[str] = None  # coil_tubing | stand_alone_frac | coil_tools | all
+
+
+@api_router.patch("/users/me")
+async def update_user_prefs(body: UserPrefUpdate, user: dict = Depends(require_user)):
+    valid = {"coil_tubing", "stand_alone_frac", "coil_tools", "all"}
+    updates: Dict[str, Any] = {}
+    if body.service_view is not None:
+        if body.service_view not in valid:
+            raise HTTPException(400, f"service_view must be one of {sorted(valid)}")
+        updates["service_view"] = body.service_view
+    if not updates:
+        raise HTTPException(400, "Nothing to update.")
+    updates["updated_at"] = datetime.now(timezone.utc)
+    await db.users.update_one({"user_id": user["user_id"]}, {"$set": updates})
+    doc = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    return _serialize(doc)
+
+
+# ============ EQUIPMENT & ASSET TRACKING ============
+EQUIPMENT_KINDS = {"engine", "injector", "lifting", "bop_pce", "reel_iron"}
+
+
+class EquipmentCreate(BaseModel):
+    kind: str
+    rig_id: Optional[str] = None
+    name: str
+    serial_number: Optional[str] = None
+    # Engine
+    current_hours: Optional[float] = None
+    service_interval_hours: Optional[float] = 250
+    last_service_hours: Optional[float] = None
+    last_service_date: Optional[str] = None
+    # Injector
+    cumulative_meters: Optional[float] = None
+    cumulative_hours: Optional[float] = None
+    cycles_count: Optional[int] = None
+    # Lifting
+    description: Optional[str] = None
+    capacity: Optional[str] = None
+    cert_expiry_date: Optional[str] = None       # ISO date
+    last_inspection_date: Optional[str] = None
+    # BOP / PCE
+    last_test_date: Optional[str] = None
+    test_interval_months: Optional[int] = 6
+    test_type: Optional[str] = None  # function | pressure
+    # Reel / Treating Iron
+    item_type: Optional[str] = None  # reel | iron
+    working_pressure_psi: Optional[float] = None
+    current_pressure_psi: Optional[float] = None
+    note: Optional[str] = None
+
+
+class EquipmentUpdate(BaseModel):
+    name: Optional[str] = None
+    serial_number: Optional[str] = None
+    rig_id: Optional[str] = None
+    current_hours: Optional[float] = None
+    service_interval_hours: Optional[float] = None
+    last_service_hours: Optional[float] = None
+    last_service_date: Optional[str] = None
+    cumulative_meters: Optional[float] = None
+    cumulative_hours: Optional[float] = None
+    cycles_count: Optional[int] = None
+    description: Optional[str] = None
+    capacity: Optional[str] = None
+    cert_expiry_date: Optional[str] = None
+    last_inspection_date: Optional[str] = None
+    last_test_date: Optional[str] = None
+    test_interval_months: Optional[int] = None
+    test_type: Optional[str] = None
+    item_type: Optional[str] = None
+    working_pressure_psi: Optional[float] = None
+    current_pressure_psi: Optional[float] = None
+    note: Optional[str] = None
+
+
+class EquipmentLogEntry(BaseModel):
+    action: str  # e.g. "hours_update" | "service" | "test" | "inspection" | "pressure_update" | "note"
+    hours: Optional[float] = None
+    meters: Optional[float] = None
+    pressure_psi: Optional[float] = None
+    date: Optional[str] = None
+    note: Optional[str] = None
+
+
+def _iso_date(v):
+    if not v:
+        return None
+    try:
+        # Accept 'YYYY-MM-DD' or full ISO
+        if len(v) == 10:
+            return datetime.fromisoformat(v + "T00:00:00+00:00")
+        return datetime.fromisoformat(v.replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+
+def _compute_equipment_status(doc: dict) -> Dict[str, Any]:
+    """Server-side status flags — returned alongside every equipment doc."""
+    now = datetime.now(timezone.utc)
+    kind = doc.get("kind")
+    status = "ok"     # ok | amber | red | expired
+    reasons: List[str] = []
+
+    if kind == "engine":
+        curr = doc.get("current_hours")
+        last_svc = doc.get("last_service_hours") or 0
+        interval = doc.get("service_interval_hours") or 250
+        if curr is not None:
+            due_at = last_svc + interval
+            hours_left = due_at - curr
+            if hours_left <= 0:
+                status = "red"; reasons.append(f"Service overdue by {abs(hours_left):.0f} h (interval {interval:.0f} h).")
+            elif hours_left <= 50:
+                status = "amber"; reasons.append(f"Service due in {hours_left:.0f} h.")
+
+    elif kind == "lifting":
+        exp = _iso_date(doc.get("cert_expiry_date"))
+        if exp:
+            days_left = (exp - now).days
+            if days_left < 0:
+                status = "expired"; reasons.append(f"Certification expired {abs(days_left)} day(s) ago.")
+            elif days_left <= 7:
+                status = "red"; reasons.append(f"Cert expires in {days_left} day(s) — pull from service after next use.")
+            elif days_left <= 30:
+                status = "amber"; reasons.append(f"Cert expires in {days_left} day(s).")
+
+    elif kind == "bop_pce":
+        last = _iso_date(doc.get("last_test_date"))
+        interval_m = doc.get("test_interval_months") or 6
+        if last:
+            due = last + timedelta(days=int(interval_m * 30.44))
+            days_left = (due - now).days
+            if days_left < 0:
+                status = "red"; reasons.append(f"Test overdue by {abs(days_left)} day(s) (AER Dir 037).")
+            elif days_left <= 14:
+                status = "amber"; reasons.append(f"Test due in {days_left} day(s).")
+        else:
+            status = "amber"; reasons.append("No test date on file — schedule a function + pressure test.")
+
+    elif kind == "reel_iron":
+        mawp = doc.get("working_pressure_psi")
+        curr = doc.get("current_pressure_psi")
+        if mawp and curr and mawp > 0:
+            pct = (curr / mawp) * 100.0
+            if pct >= 100:
+                status = "red"; reasons.append(f"At/over MAWP ({pct:.0f}% of {mawp:.0f} psi).")
+            elif pct >= 90:
+                status = "amber"; reasons.append(f"At {pct:.0f}% MAWP — reduce pressure or upgrade iron.")
+
+    return {"status": status, "reasons": reasons}
+
+
+@api_router.get("/equipment")
+async def list_equipment(rig_id: Optional[str] = None, kind: Optional[str] = None, user: dict = Depends(require_user)):
+    team_id = user.get("team_id")
+    if not team_id:
+        return {"items": [], "team_id": None}
+    if kind and kind not in EQUIPMENT_KINDS:
+        raise HTTPException(400, f"kind must be one of {sorted(EQUIPMENT_KINDS)}")
+    query: Dict[str, Any] = {"team_id": team_id}
+    if kind:
+        query["kind"] = kind
+    if rig_id:
+        query["$or"] = [{"rig_id": rig_id}, {"rig_id": None}, {"rig_id": {"$exists": False}}]
+    docs = await db.equipment_items.find(query, {"_id": 0}).sort("updated_at", -1).to_list(500)
+    out = []
+    for d in docs:
+        s = _serialize(d)
+        s.update(_compute_equipment_status(d))
+        out.append(s)
+    return {"items": out, "team_id": team_id, "rig_id": rig_id}
+
+
+@api_router.post("/equipment")
+async def create_equipment(body: EquipmentCreate, user: dict = Depends(require_user)):
+    team_id = user.get("team_id")
+    if not team_id:
+        raise HTTPException(400, "Join or create a team first.")
+    if body.kind not in EQUIPMENT_KINDS:
+        raise HTTPException(400, f"kind must be one of {sorted(EQUIPMENT_KINDS)}")
+    if not body.name.strip():
+        raise HTTPException(400, "Name is required.")
+    now = datetime.now(timezone.utc)
+    doc = body.model_dump()
+    doc.update({
+        "item_id": f"eq_{uuid.uuid4().hex[:12]}",
+        "team_id": team_id,
+        "name": body.name.strip(),
+        "history": [],
+        "created_by": user["email"],
+        "created_by_name": user.get("name") or user["email"].split("@")[0],
+        "created_at": now,
+        "updated_at": now,
+    })
+    await db.equipment_items.insert_one(doc)
+    doc.pop("_id", None)
+    out = _serialize(doc); out.update(_compute_equipment_status(doc))
+    return out
+
+
+@api_router.patch("/equipment/{item_id}")
+async def patch_equipment(item_id: str, body: EquipmentUpdate, user: dict = Depends(require_user)):
+    team_id = user.get("team_id")
+    if not team_id:
+        raise HTTPException(400, "No team.")
+    updates = {k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None}
+    if not updates:
+        raise HTTPException(400, "No fields to update.")
+    updates["updated_at"] = datetime.now(timezone.utc)
+    result = await db.equipment_items.update_one({"item_id": item_id, "team_id": team_id}, {"$set": updates})
+    if result.matched_count == 0:
+        raise HTTPException(404, "Not found.")
+    doc = await db.equipment_items.find_one({"item_id": item_id}, {"_id": 0})
+    out = _serialize(doc); out.update(_compute_equipment_status(doc))
+    return out
+
+
+@api_router.post("/equipment/{item_id}/log")
+async def log_equipment_event(item_id: str, body: EquipmentLogEntry, user: dict = Depends(require_user)):
+    team_id = user.get("team_id")
+    if not team_id:
+        raise HTTPException(400, "No team.")
+    doc = await db.equipment_items.find_one({"item_id": item_id, "team_id": team_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Not found.")
+    now = datetime.now(timezone.utc)
+    event = {
+        "event_id": f"evt_{uuid.uuid4().hex[:12]}",
+        "action": body.action,
+        "hours": body.hours,
+        "meters": body.meters,
+        "pressure_psi": body.pressure_psi,
+        "date": body.date,
+        "note": body.note,
+        "user_name": user.get("name") or user["email"].split("@")[0],
+        "user_email": user["email"],
+        "created_at": now,
+    }
+    updates: Dict[str, Any] = {"updated_at": now}
+    if body.action == "service" and body.hours is not None:
+        updates["last_service_hours"] = body.hours
+        updates["last_service_date"] = body.date or now.date().isoformat()
+    if body.action == "test":
+        updates["last_test_date"] = body.date or now.date().isoformat()
+    if body.action == "inspection":
+        updates["last_inspection_date"] = body.date or now.date().isoformat()
+    if body.action == "hours_update" and body.hours is not None:
+        updates["current_hours"] = body.hours
+    if body.action == "meters_update":
+        if body.meters is not None:
+            updates["cumulative_meters"] = body.meters
+        if body.hours is not None:
+            updates["cumulative_hours"] = body.hours
+    if body.action == "pressure_update" and body.pressure_psi is not None:
+        updates["current_pressure_psi"] = body.pressure_psi
+    await db.equipment_items.update_one(
+        {"item_id": item_id, "team_id": team_id},
+        {"$set": updates, "$push": {"history": event}},
+    )
+    doc = await db.equipment_items.find_one({"item_id": item_id}, {"_id": 0})
+    out = _serialize(doc); out.update(_compute_equipment_status(doc))
+    return out
+
+
+@api_router.delete("/equipment/{item_id}")
+async def delete_equipment(item_id: str, user: dict = Depends(require_user)):
+    team_id = user.get("team_id")
+    if not team_id:
+        raise HTTPException(400, "No team.")
+    r = await db.equipment_items.delete_one({"item_id": item_id, "team_id": team_id})
+    if r.deleted_count == 0:
+        raise HTTPException(404, "Not found.")
+    return {"success": True}
+
+
+# ============ CREW SCHEDULE ============
+SHIFT_ROLES = {"Operator", "Supervisor", "Chief Op", "Swamper", "Pump Op", "Pusher", "Crane Op", "Other"}
+SHIFT_TOURS = {"day", "night"}
+SHIFT_PATTERNS = {"one_off", "14/14", "20/10", "7/7", "custom"}
+
+
+class ScheduleShiftCreate(BaseModel):
+    rig_id: str
+    crew_member_name: str
+    role: str = "Operator"
+    tour: str = "day"                  # day | night
+    start_date: str                    # ISO date YYYY-MM-DD
+    end_date: Optional[str] = None     # ISO date; inclusive
+    pattern: str = "one_off"           # one_off | 14/14 | 20/10 | 7/7 | custom
+    rotation_days_on: Optional[int] = None
+    rotation_days_off: Optional[int] = None
+    repeat_cycles: int = 1             # for rotation patterns, how many on/off cycles to generate
+    note: Optional[str] = None
+
+
+class ScheduleShiftUpdate(BaseModel):
+    crew_member_name: Optional[str] = None
+    role: Optional[str] = None
+    tour: Optional[str] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    note: Optional[str] = None
+
+
+def _parse_ymd(v: str) -> datetime:
+    try:
+        return datetime.fromisoformat(v + "T00:00:00+00:00")
+    except Exception:
+        raise HTTPException(400, f"Bad date: {v}")
+
+
+def _pattern_to_on_off(pattern: str, on: Optional[int], off: Optional[int]):
+    if pattern == "14/14": return 14, 14
+    if pattern == "20/10": return 20, 10
+    if pattern == "7/7":   return 7, 7
+    if pattern == "custom":
+        if not on or not off:
+            raise HTTPException(400, "Custom pattern requires rotation_days_on and rotation_days_off.")
+        return int(on), int(off)
+    return None, None  # one_off
+
+
+@api_router.get("/schedule")
+async def list_shifts(rig_id: Optional[str] = None, start: Optional[str] = None, end: Optional[str] = None, user: dict = Depends(require_user)):
+    team_id = user.get("team_id")
+    if not team_id:
+        return {"shifts": [], "team_id": None}
+    query: Dict[str, Any] = {"team_id": team_id}
+    if rig_id:
+        query["rig_id"] = rig_id
+    if start or end:
+        # A shift is included if its window overlaps [start,end].
+        window: Dict[str, Any] = {}
+        if start:
+            window["start_date"] = start
+        if end:
+            window["end_date_lte"] = end
+        # Simple filter: shift.end_date >= start AND shift.start_date <= end
+        cond: Dict[str, Any] = {}
+        if start: cond["end_date"] = {"$gte": start}
+        if end:   cond["start_date"] = {"$lte": end}
+        query.update(cond)
+    docs = await db.crew_shifts.find(query, {"_id": 0}).sort("start_date", 1).to_list(1000)
+    return {"shifts": [_serialize(d) for d in docs], "team_id": team_id, "rig_id": rig_id}
+
+
+@api_router.post("/schedule")
+async def create_shift(body: ScheduleShiftCreate, user: dict = Depends(require_user)):
+    team_id = user.get("team_id")
+    if not team_id:
+        raise HTTPException(400, "Join or create a team first.")
+    if body.role not in SHIFT_ROLES:
+        raise HTTPException(400, f"role must be one of {sorted(SHIFT_ROLES)}")
+    if body.tour not in SHIFT_TOURS:
+        raise HTTPException(400, "tour must be day|night")
+    if body.pattern not in SHIFT_PATTERNS:
+        raise HTTPException(400, f"pattern must be one of {sorted(SHIFT_PATTERNS)}")
+    start = _parse_ymd(body.start_date)
+    now = datetime.now(timezone.utc)
+
+    shifts_to_insert: List[dict] = []
+
+    if body.pattern == "one_off":
+        end = _parse_ymd(body.end_date) if body.end_date else start
+        if end < start:
+            raise HTTPException(400, "end_date must be on/after start_date.")
+        shifts_to_insert.append({
+            "start_date": start.date().isoformat(),
+            "end_date": end.date().isoformat(),
+        })
+    else:
+        on_d, off_d = _pattern_to_on_off(body.pattern, body.rotation_days_on, body.rotation_days_off)
+        cycles = max(1, min(body.repeat_cycles or 1, 24))
+        cursor = start
+        for _ in range(cycles):
+            on_end = cursor + timedelta(days=on_d - 1)
+            shifts_to_insert.append({
+                "start_date": cursor.date().isoformat(),
+                "end_date": on_end.date().isoformat(),
+            })
+            cursor = on_end + timedelta(days=off_d + 1)
+
+    inserted = []
+    for span in shifts_to_insert:
+        doc = {
+            "shift_id": f"shf_{uuid.uuid4().hex[:12]}",
+            "team_id": team_id,
+            "rig_id": body.rig_id,
+            "crew_member_name": body.crew_member_name.strip()[:120],
+            "role": body.role,
+            "tour": body.tour,
+            "pattern": body.pattern,
+            "rotation_days_on": None if body.pattern == "one_off" else (body.rotation_days_on if body.pattern == "custom" else _pattern_to_on_off(body.pattern, None, None)[0]),
+            "rotation_days_off": None if body.pattern == "one_off" else (body.rotation_days_off if body.pattern == "custom" else _pattern_to_on_off(body.pattern, None, None)[1]),
+            "note": body.note,
+            "created_by": user["email"],
+            "created_by_name": user.get("name") or user["email"].split("@")[0],
+            "created_at": now,
+            "updated_at": now,
+            **span,
+        }
+        await db.crew_shifts.insert_one(doc)
+        doc.pop("_id", None)
+        inserted.append(_serialize(doc))
+    return {"shifts": inserted, "count": len(inserted)}
+
+
+@api_router.patch("/schedule/{shift_id}")
+async def patch_shift(shift_id: str, body: ScheduleShiftUpdate, user: dict = Depends(require_user)):
+    team_id = user.get("team_id")
+    if not team_id:
+        raise HTTPException(400, "No team.")
+    updates = {k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None}
+    if "role" in updates and updates["role"] not in SHIFT_ROLES:
+        raise HTTPException(400, f"role must be one of {sorted(SHIFT_ROLES)}")
+    if "tour" in updates and updates["tour"] not in SHIFT_TOURS:
+        raise HTTPException(400, "tour must be day|night")
+    if not updates:
+        raise HTTPException(400, "No fields to update.")
+    updates["updated_at"] = datetime.now(timezone.utc)
+    r = await db.crew_shifts.update_one({"shift_id": shift_id, "team_id": team_id}, {"$set": updates})
+    if r.matched_count == 0:
+        raise HTTPException(404, "Not found.")
+    doc = await db.crew_shifts.find_one({"shift_id": shift_id}, {"_id": 0})
+    return _serialize(doc)
+
+
+@api_router.delete("/schedule/{shift_id}")
+async def delete_shift(shift_id: str, user: dict = Depends(require_user)):
+    team_id = user.get("team_id")
+    if not team_id:
+        raise HTTPException(400, "No team.")
+    r = await db.crew_shifts.delete_one({"shift_id": shift_id, "team_id": team_id})
+    if r.deleted_count == 0:
+        raise HTTPException(404, "Not found.")
+    return {"success": True}
+
+
 # ============ APP CONFIG ============
 app.include_router(api_router)
 

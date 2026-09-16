@@ -5,7 +5,7 @@ import { useAuth, API, isProUser } from "../context/AuthContext";
 import {
   FileSpreadsheet, FolderOpen, Users, Sparkles, ChevronRight, Crown, AlertTriangle,
   MessageSquare, Wrench, GraduationCap, AlertOctagon, FileText, Calendar, Gauge,
-  Ticket, MessageSquarePlus, Zap, Menu, ShieldCheck,
+  Ticket, MessageSquarePlus, Zap, Menu, ShieldCheck, HardHat,
 } from "lucide-react";
 import { workbookData } from "../mock/workbookData";
 import ExcelHeader from "../components/ExcelHeader";
@@ -262,6 +262,22 @@ const Hub = () => {
 
           {/* Cards row */}
           <div className="grid gap-2 sm:grid-cols-2">
+            <HubCard
+              Icon={Wrench}
+              title="Equipment & Assets"
+              subtitle="Engine hours, injector meters, lifting certs, BOP/PCE tests, reel + iron MAWP — all flagged."
+              accent="bg-[#FCE7C0] text-[#C36600]"
+              onClick={() => navigate("/equipment")}
+              badge="NEW"
+            />
+            <HubCard
+              Icon={Calendar}
+              title="Crew Schedule"
+              subtitle="Assign day/night tours with 14/14, 20/10 rotations. Print or save as PDF."
+              accent="bg-[#DBEAFE] text-[#0056B3]"
+              onClick={() => navigate("/schedule")}
+              badge="NEW"
+            />
             <HubCard
               Icon={AlertOctagon}
               title="Emergency SOPs"
