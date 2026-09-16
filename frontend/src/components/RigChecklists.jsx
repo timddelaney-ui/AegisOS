@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
+import axios from "axios";
 import { ShieldAlert, ClipboardList, Wrench, CheckCircle2, Circle, Plus, Trash2, ChevronDown, ChevronRight } from "lucide-react";
-import { useAuth } from "../context/AuthContext";
+import { API, useAuth } from "../context/AuthContext";
 import { useRig, rigLabel } from "../context/RigContext";
 
 const KEY = (rigId, kind) => `ctp_checklist_v1::${rigId}::${kind}`;
@@ -51,7 +52,7 @@ function saveState(rigId, kind, items) {
 }
 
 const ChecklistTier = ({ kind, expanded, onToggle }) => {
-  const { rigId } = useRig();
+  const { rigId, markSeen, refreshActivity } = useRig();
   const { user } = useAuth();
   const cfg = TIER_CONFIG[kind];
   const [items, setItems] = useState(() => loadState(rigId, kind));
@@ -63,13 +64,33 @@ const ChecklistTier = ({ kind, expanded, onToggle }) => {
   useEffect(() => { setItems(loadState(rigId, kind)); }, [rigId, kind]);
   useEffect(() => { saveState(rigId, kind, items); }, [rigId, kind, items]);
 
+  const emitEvent = async (item, action) => {
+    try {
+      await axios.post(
+        `${API}/crew/checklist-events`,
+        { rig_id: rigId, tier: kind, item_id: item.id, item_label: item.label, cadence: item.cadence, action },
+        { withCredentials: true }
+      );
+      markSeen(rigId, "checklist");
+      refreshActivity && refreshActivity();
+    } catch { /* solo mode or offline — local state still tracks it */ }
+  };
+
   const toggleItem = (id) => {
-    setItems((prev) => prev.map((it) => it.id === id ? {
-      ...it,
-      checked: !it.checked,
-      lastCheckedAt: !it.checked ? new Date().toISOString() : it.lastCheckedAt,
-      lastCheckedBy: !it.checked ? (user?.name || user?.email || "crew") : it.lastCheckedBy,
-    } : it));
+    setItems((prev) => {
+      const next = prev.map((it) => {
+        if (it.id !== id) return it;
+        const willCheck = !it.checked;
+        emitEvent(it, willCheck ? "checked" : "unchecked");
+        return {
+          ...it,
+          checked: willCheck,
+          lastCheckedAt: willCheck ? new Date().toISOString() : it.lastCheckedAt,
+          lastCheckedBy: willCheck ? (user?.name || user?.email || "crew") : it.lastCheckedBy,
+        };
+      });
+      return next;
+    });
   };
   const addItem = () => {
     if (!newLabel.trim()) return;

@@ -7,6 +7,7 @@ import ResultsPanel from "./ResultsPanel";
 import AIPanel from "./AIPanel";
 import { computeResults } from "../lib/formulas";
 import { useAuth, API } from "../context/AuthContext";
+import { useRig } from "../context/RigContext";
 
 // Convert current sheet values to normalized Imperial numbers for the watchdog.
 // Returns { rih, tagged, surfp, vann_ftmin } — undefined when not applicable.
@@ -108,6 +109,7 @@ const SheetContent = ({ sheetKey, unitSystem, onUnitChange, initialValues, hasTe
   const lastFlashRef = useRef({});
   const canvasRef = useRef(null);
   const { user } = useAuth();
+  const { rigId } = useRig();
 
   useEffect(() => {
     if (initialValues) {
@@ -145,10 +147,10 @@ const SheetContent = ({ sheetKey, unitSystem, onUnitChange, initialValues, hasTe
     const hasSignal = Object.values(payload).some((v) => v !== null && v !== undefined && !isNaN(v));
     if (!hasSignal) return;
     const t = setTimeout(() => {
-      axios.post(`${API}/crew/safety-eval`, { sheet_key: sheetKey, values: payload }, { withCredentials: true }).catch(() => {});
+      axios.post(`${API}/crew/safety-eval`, { sheet_key: sheetKey, values: payload, rig_id: rigId }, { withCredentials: true }).catch(() => {});
     }, 1500);
     return () => clearTimeout(t);
-  }, [sheetKey, values, params, unitSystem, results, hasTeam]);
+  }, [sheetKey, values, params, unitSystem, results, hasTeam, rigId]);
 
   // Client-side INSTANT flash: same threshold logic as the server, but fires immediately with
   // a Cape Breton quip so the tool push sees the hazard before the 1.5s server round-trip.

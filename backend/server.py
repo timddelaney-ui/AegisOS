@@ -907,7 +907,7 @@ SAFETY_THRESHOLDS = {
 }
 
 
-async def _emit_skipper_alert(team_id: str, sheet_key: str, msg: str, source_user_id: str, source_email: str, threshold_id: str):
+async def _emit_skipper_alert(team_id: str, sheet_key: str, msg: str, source_user_id: str, source_email: str, threshold_id: str, rig_id: Optional[str] = None):
     """Insert a Skipper safety alert into the team channel + audit log. Deduplicates within a 60s window per (team, threshold_id)."""
     from datetime import timedelta as _td
     now = datetime.now(timezone.utc)
@@ -925,6 +925,7 @@ async def _emit_skipper_alert(team_id: str, sheet_key: str, msg: str, source_use
     doc = {
         "message_id": f"msg_{uuid.uuid4().hex[:12]}",
         "team_id": team_id,
+        "rig_id": rig_id,
         "sender_user_id": "skipper",
         "sender_name": "Skipper (Safety Override)",
         "text": text,
@@ -946,6 +947,7 @@ async def _emit_skipper_alert(team_id: str, sheet_key: str, msg: str, source_use
 class SafetyEvalRequest(BaseModel):
     sheet_key: str
     values: Dict[str, Optional[float]]  # normalized Imperial values (rih, tagged, surfp, vann_ftmin, etc.)
+    rig_id: Optional[str] = None
 
 
 @api_router.post("/crew/safety-eval")
@@ -966,6 +968,7 @@ async def crew_safety_eval(body: SafetyEvalRequest, user: dict = Depends(require
                     source_user_id=user["user_id"],
                     source_email=user["email"],
                     threshold_id=rule["id"],
+                    rig_id=body.rig_id,
                 )
                 if alert:
                     fired.append({"threshold_id": rule["id"], "msg": rule["msg"]})
@@ -976,6 +979,7 @@ async def crew_safety_eval(body: SafetyEvalRequest, user: dict = Depends(require
 
 class CrewMessage(BaseModel):
     text: str
+    rig_id: Optional[str] = None  # RIG1..RIG25 | YARD ; None = legacy / all-rigs
 
 
 @api_router.post("/crew/chat")
@@ -993,6 +997,7 @@ async def crew_send(body: CrewMessage, user: dict = Depends(require_user)):
     user_msg = {
         "message_id": f"msg_{uuid.uuid4().hex[:12]}",
         "team_id": team_id,
+        "rig_id": body.rig_id,
         "sender_user_id": user["user_id"],
         "sender_name": user.get("name") or user["email"].split("@")[0],
         "sender_email": user["email"],
@@ -1023,6 +1028,7 @@ async def crew_send(body: CrewMessage, user: dict = Depends(require_user)):
             await db.crew_messages.insert_one({
                 "message_id": f"msg_{uuid.uuid4().hex[:12]}",
                 "team_id": team_id,
+                "rig_id": body.rig_id,
                 "sender_user_id": "skipper",
                 "sender_name": "Skipper (AI Advisor)",
                 "text": response,
@@ -1037,11 +1043,14 @@ async def crew_send(body: CrewMessage, user: dict = Depends(require_user)):
 
 
 @api_router.get("/crew/chat")
-async def crew_list(since: Optional[str] = None, user: dict = Depends(require_user)):
+async def crew_list(since: Optional[str] = None, rig_id: Optional[str] = None, user: dict = Depends(require_user)):
     team_id = user.get("team_id")
     if not team_id:
         return {"messages": [], "team_id": None}
-    query = {"team_id": team_id}
+    query: Dict[str, Any] = {"team_id": team_id}
+    if rig_id:
+        # Show messages tagged for this rig OR legacy messages with no rig_id.
+        query["$or"] = [{"rig_id": rig_id}, {"rig_id": None}, {"rig_id": {"$exists": False}}]
     if since:
         try:
             since_dt = datetime.fromisoformat(since.replace("Z", "+00:00"))
@@ -1051,7 +1060,7 @@ async def crew_list(since: Optional[str] = None, user: dict = Depends(require_us
         except ValueError:
             pass
     docs = await db.crew_messages.find(query, {"_id": 0}).sort("created_at", 1).to_list(300)
-    return {"messages": [_serialize(d) for d in docs], "team_id": team_id}
+    return {"messages": [_serialize(d) for d in docs], "team_id": team_id, "rig_id": rig_id}
 
 
 # ============ TEAM HUB — INVENTORY / CONSUMABLES / PARTS ORDERS / TO-DOS ============
@@ -1159,6 +1168,159 @@ async def delete_team_item(item_id: str, user: dict = Depends(require_user)):
     if result.deleted_count == 0:
         raise HTTPException(404, "Item not found in your team.")
     return {"success": True, "item_id": item_id}
+
+
+# ============ CHECKLIST EVENTS + HANDOVER SUMMARY ============
+CHECKLIST_TIERS = {"safety", "ops", "pm"}
+
+
+class ChecklistEventCreate(BaseModel):
+    rig_id: str
+    tier: str          # safety | ops | pm
+    item_id: str
+    item_label: str
+    cadence: Optional[str] = None
+    action: str        # "checked" | "unchecked"
+
+
+@api_router.post("/crew/checklist-events")
+async def create_checklist_event(body: ChecklistEventCreate, user: dict = Depends(require_user)):
+    team_id = user.get("team_id")
+    if not team_id:
+        # Solo users: accept silently so the UI still works, but don't persist.
+        return {"success": True, "persisted": False}
+    if body.tier not in CHECKLIST_TIERS:
+        raise HTTPException(400, f"Invalid tier. Must be one of {sorted(CHECKLIST_TIERS)}")
+    if body.action not in ("checked", "unchecked"):
+        raise HTTPException(400, "action must be checked|unchecked")
+    doc = {
+        "event_id": f"cke_{uuid.uuid4().hex[:12]}",
+        "team_id": team_id,
+        "rig_id": body.rig_id,
+        "tier": body.tier,
+        "item_id": body.item_id,
+        "item_label": body.item_label.strip()[:300],
+        "cadence": body.cadence,
+        "action": body.action,
+        "user_id": user["user_id"],
+        "user_name": user.get("name") or user["email"].split("@")[0],
+        "user_email": user["email"],
+        "created_at": datetime.now(timezone.utc),
+    }
+    await db.checklist_events.insert_one(doc)
+    doc.pop("_id", None)
+    return {"success": True, "persisted": True, "event": _serialize(doc)}
+
+
+@api_router.get("/crew/checklist-events")
+async def list_checklist_events(rig_id: Optional[str] = None, hours: int = 24, user: dict = Depends(require_user)):
+    team_id = user.get("team_id")
+    if not team_id:
+        return {"events": [], "team_id": None}
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=max(1, min(hours, 24 * 30)))
+    query: Dict[str, Any] = {"team_id": team_id, "created_at": {"$gte": cutoff}}
+    if rig_id:
+        query["rig_id"] = rig_id
+    docs = await db.checklist_events.find(query, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return {"events": [_serialize(d) for d in docs], "team_id": team_id, "rig_id": rig_id}
+
+
+@api_router.get("/crew/activity-summary")
+async def crew_activity_summary(user: dict = Depends(require_user)):
+    """Latest chat & checklist activity timestamp per rig — powers the RigSelector unread dots."""
+    team_id = user.get("team_id")
+    if not team_id:
+        return {"rigs": {}, "team_id": None}
+
+    rigs: Dict[str, Dict[str, str]] = {}
+
+    # Latest chat per rig (grouped)
+    async for row in db.crew_messages.aggregate([
+        {"$match": {"team_id": team_id, "rig_id": {"$ne": None}}},
+        {"$group": {"_id": "$rig_id", "last_at": {"$max": "$created_at"}}},
+    ]):
+        rid = row["_id"]
+        if not rid:
+            continue
+        rigs.setdefault(rid, {})["last_chat_at"] = row["last_at"].isoformat() if isinstance(row["last_at"], datetime) else row["last_at"]
+
+    # Latest checklist per rig
+    async for row in db.checklist_events.aggregate([
+        {"$match": {"team_id": team_id}},
+        {"$group": {"_id": "$rig_id", "last_at": {"$max": "$created_at"}}},
+    ]):
+        rid = row["_id"]
+        if not rid:
+            continue
+        rigs.setdefault(rid, {})["last_checklist_at"] = row["last_at"].isoformat() if isinstance(row["last_at"], datetime) else row["last_at"]
+
+    return {"rigs": rigs, "team_id": team_id}
+
+
+@api_router.get("/crew/handover-summary")
+async def crew_handover_summary(rig_id: str, hours: int = 12, user: dict = Depends(require_user)):
+    """Aggregate everything relevant for a shift-change handover on the given rig."""
+    team_id = user.get("team_id")
+    if not team_id:
+        raise HTTPException(400, "Join or create a team first.")
+    hours = max(1, min(hours, 24 * 7))
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(hours=hours)
+
+    rig_or_legacy = [{"rig_id": rig_id}, {"rig_id": None}, {"rig_id": {"$exists": False}}]
+
+    # Completed checklist tasks (action = checked) in window, this rig
+    completed_events = await db.checklist_events.find(
+        {"team_id": team_id, "rig_id": rig_id, "action": "checked", "created_at": {"$gte": cutoff}},
+        {"_id": 0},
+    ).sort("created_at", -1).to_list(200)
+
+    # Recent alerts (from crew_alerts audit log)
+    alerts = await db.crew_alerts.find(
+        {"team_id": team_id, "$or": rig_or_legacy, "created_at": {"$gte": cutoff}},
+        {"_id": 0},
+    ).sort("created_at", -1).to_list(100)
+
+    # Inventory / consumables flags — LOW or OOS on this rig (regardless of window)
+    inv_flags = await db.team_items.find(
+        {"team_id": team_id, "kind": {"$in": ["inventory", "consumables"]}, "status": {"$in": ["LOW", "OOS"]},
+         "$or": [{"rig_id": rig_id}, {"rig_id": None}, {"rig_id": {"$exists": False}}]},
+        {"_id": 0},
+    ).sort("updated_at", -1).to_list(100)
+
+    # Open parts orders on this rig
+    parts_open = await db.team_items.find(
+        {"team_id": team_id, "kind": "parts_order", "status": {"$in": ["REQUESTED", "ORDERED"]},
+         "$or": [{"rig_id": rig_id}, {"rig_id": None}, {"rig_id": {"$exists": False}}]},
+        {"_id": 0},
+    ).sort("updated_at", -1).to_list(50)
+
+    # Open to-dos on this rig
+    todos_open = await db.team_items.find(
+        {"team_id": team_id, "kind": "todo", "status": {"$in": ["OPEN", "IN_PROGRESS"]},
+         "$or": [{"rig_id": rig_id}, {"rig_id": None}, {"rig_id": {"$exists": False}}]},
+        {"_id": 0},
+    ).sort("updated_at", -1).to_list(100)
+
+    # Recent chat notes (non-alert, non-skipper) in window
+    chat_notes = await db.crew_messages.find(
+        {"team_id": team_id, "$or": rig_or_legacy, "created_at": {"$gte": cutoff},
+         "is_alert": {"$ne": True}, "is_skipper": {"$ne": True}},
+        {"_id": 0},
+    ).sort("created_at", -1).to_list(30)
+
+    return {
+        "rig_id": rig_id,
+        "hours": hours,
+        "generated_at": now.isoformat(),
+        "generated_by": user.get("name") or user["email"],
+        "completed_tasks": [_serialize(d) for d in completed_events],
+        "alerts": [_serialize(d) for d in alerts],
+        "inventory_flags": [_serialize(d) for d in inv_flags],
+        "parts_open": [_serialize(d) for d in parts_open],
+        "todos_open": [_serialize(d) for d in todos_open],
+        "chat_notes": [_serialize(d) for d in chat_notes],
+    }
 
 
 # ============ APP CONFIG ============

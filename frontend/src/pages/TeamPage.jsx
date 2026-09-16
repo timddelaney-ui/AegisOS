@@ -2,15 +2,17 @@ import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { API, useAuth } from "../context/AuthContext";
-import { ArrowLeft, Users, Copy, Check, LogOut, Plus, Loader2, MessageSquare, Package, Beaker, Wrench, ListChecks } from "lucide-react";
+import { ArrowLeft, Users, Copy, Check, LogOut, Plus, Loader2, MessageSquare, Package, Beaker, Wrench, ListChecks, FileText } from "lucide-react";
 import CrewChat from "../components/CrewChat";
 import TeamItemsList from "../components/TeamItemsList";
 import RigChecklists from "../components/RigChecklists";
 import RigSelector from "../components/RigSelector";
+import HandoverModal from "../components/HandoverModal";
+import { useRig, rigLabel } from "../context/RigContext";
 
 const HUB_TABS = [
-  { id: "chat",        label: "Chat",        Icon: MessageSquare },
-  { id: "rig",         label: "Rig Checks",  Icon: ListChecks    },
+  { id: "chat",        label: "Chat",        Icon: MessageSquare, badge: "chat" },
+  { id: "rig",         label: "Rig Checks",  Icon: ListChecks,    badge: "checklist" },
   { id: "inventory",   label: "Inventory",   Icon: Package },
   { id: "consumables", label: "Consumables", Icon: Beaker },
   { id: "parts_order", label: "Parts",       Icon: Wrench },
@@ -20,15 +22,19 @@ const HUB_TABS = [
 const TeamPage = () => {
   const navigate = useNavigate();
   const { user, checkAuth } = useAuth();
+  const { rigId, unreadFor, markSeen } = useRig();
   const [team, setTeam] = useState(null);
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState("choose"); // choose | create | join
   const [teamName, setTeamName] = useState("");
   const [hubTab, setHubTab] = useState("chat");
+  const [handoverOpen, setHandoverOpen] = useState(false);
   const [inviteCode, setInviteCode] = useState("");
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+
+  const unread = unreadFor(rigId);
 
   const load = async () => {
     setLoading(true);
@@ -139,21 +145,41 @@ const TeamPage = () => {
 
             {/* TEAM HUB — tabs: Chat / Inventory / Consumables / Parts / To-Do */}
             <div className="mt-4">
+              <div className="flex items-center justify-between mb-2 gap-2">
+                <div className="text-[11px] font-bold uppercase tracking-wider text-[#595959]">
+                  {rigLabel(rigId)} Hub
+                </div>
+                <button
+                  data-testid="open-handover"
+                  onClick={() => setHandoverOpen(true)}
+                  className="text-[11px] font-bold text-white bg-[#0D6535] hover:bg-[#0A4F28] px-2.5 py-1 rounded flex items-center gap-1.5"
+                >
+                  <FileText className="w-3.5 h-3.5" strokeWidth={2.5} />
+                  Generate Handover
+                </button>
+              </div>
               <div data-testid="team-hub-tabs" className="flex gap-1 bg-white border border-[#D4D4D4] rounded-t-lg overflow-x-auto p-1">
                 {HUB_TABS.map((t) => {
                   const active = hubTab === t.id;
                   const Icon = t.Icon;
+                  const showDot = !active && t.badge && unread[t.badge];
                   return (
                     <button
                       key={t.id}
                       data-testid={`team-hub-tab-${t.id}`}
-                      onClick={() => setHubTab(t.id)}
-                      className={`flex-1 min-w-0 flex items-center justify-center gap-1 px-2 py-1.5 rounded text-[11px] font-bold uppercase whitespace-nowrap ${
+                      onClick={() => {
+                        setHubTab(t.id);
+                        if (t.badge) markSeen(rigId, t.badge);
+                      }}
+                      className={`flex-1 min-w-0 flex items-center justify-center gap-1 px-2 py-1.5 rounded text-[11px] font-bold uppercase whitespace-nowrap relative ${
                         active ? "bg-[#107C41] text-white" : "text-[#595959] hover:bg-[#F0F9F3]"
                       }`}
                     >
                       <Icon className="w-3.5 h-3.5" strokeWidth={2.5} />
                       <span>{t.label}</span>
+                      {showDot && (
+                        <span data-testid={`hub-tab-unread-${t.id}`} className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-[#DC2626] animate-pulse" />
+                      )}
                     </button>
                   );
                 })}
@@ -164,6 +190,7 @@ const TeamPage = () => {
                 {hubTab !== "chat" && hubTab !== "rig" && <TeamItemsList kind={hubTab} />}
               </div>
             </div>
+            <HandoverModal open={handoverOpen} onClose={() => setHandoverOpen(false)} />
             </>
           ) : mode === "choose" ? (
             <div className="space-y-3">
