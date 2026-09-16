@@ -1,0 +1,31 @@
+{
+  "summary": "Iteration 3 — Phase B (Skipper Watchdog + Crew Group Chat) + 2 UX bug fixes. Full backend + frontend testing on preview URL. 11/11 backend pytest tests pass (including live Gemini AI reply). All 4 features + 2 bug fixes verified end-to-end via Playwright on the deployed preview. No critical issues found.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "CT_Milling calculated results", "issues": ["Cosmetic: 'Annular velocity -0 ft/min may be insufficient…' — negative zero rendered as '-0'. Consider Math.abs or normalising the sign for zero values. Not in scope for Phase B but flagging."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_skipper_phase_b.py",
+    "/app/test_reports/pytest/phase_b.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py:1000 — hey-skipper trigger regex is loose: the marker-stripping loop uses `if lower.startswith(marker) or marker in lower:` which will always execute the first iteration (marker='hey skipper' contained), then `str.replace` strips only that marker. Works but is confusingly written; consider a single regex sub. Non-blocking.",
+    "server.py:944 crew_safety_eval — swallows all rule exceptions with bare `except Exception: continue`. If a threshold lambda has a bug it will silently fail. Add logger.warning inside except.",
+    "SheetContent.jsx buildWatchdogPayload — maps by parameter label matching. If a workbook label changes case/whitespace, safety-eval will silently no-op. Consider co-locating threshold keys in the workbookData definition.",
+    "server.py file is now ~1070 lines — approaching the 700-line guideline. Consider splitting crew/safety module into a separate router file.",
+    "CrewChat 3s polling with no since-cursor on first poll is OK, but subsequent polls should always send `?since=<last_created_at>` to avoid re-fetching 300 messages every 3s. Verify the frontend actually passes `since`."
+  ],
+  "updated_files": ["/app/backend/tests/test_skipper_phase_b.py"],
+  "success_rate": {"backend": "100% (11/11 pytest)", "frontend": "100% (all 4 features + both UX bug fixes verified)"},
+  "test_credentials": "Demo Pro session_token cookie from /app/memory/test_credentials.md; demo user auto-created 'Regression Crew' team when needed.",
+  "seed_data_creation": "Created (or reused) team 'Regression Crew' for demo.pro@example.com via POST /api/teams. Multiple crew_messages inserted during test.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "VERIFIED: (1) Backend /api/crew/chat GET+POST work; hey-skipper trigger produces live Gemini reply with Cape Breton dialect ('b'y','me son','Lord thunderin'') and API/AER/IWCF citations, within ~15s. Empty text returns 400. (2) /api/crew/safety-eval fires alerts for CT_Milling wob_high (rih-tagged>2000), Frac_Through_CT surfp_hi (>10000 psi), Sand_Cleanout vann_low (<90 ft/min). 60s dedupe confirmed (2nd identical call → alerts=[]). Solo-mode returns {alerts:[], note:'solo mode — no team channel'}. Alerts appear in crew chat as sender_name='Skipper (Safety Override)' is_alert=true is_skipper=true, with sheet_key + threshold_id fields. (3) Frontend /team renders <CrewChat data-testid='crew-chat'> with h-[70dvh] sm:h-[600px] class present; chat-input + chat-send-btn work; typed 'hey skipper any red flags with 8000 psi treating pressure?' → user msg + AI advisor msg both appeared within ~10s; no duplicates on 4s idle poll. (4) SheetContent inputs now type='text' inputMode='decimal' pattern='-?[0-9]*[.,]?[0-9]*' with data-testid='sheet-input-<idx>'; typed '-100' and '-3.5' both accepted and echoed. (5) AIPanel opened on 400x800 mobile viewport shows panel div class 'h-[85dvh]' and backdrop class 'h-[100dvh]' in DOM. (6) When on CT_Milling with hasTeam=true, editing sheet inputs triggers exactly 1 debounced POST to /api/crew/safety-eval within ~1.5s of last keystroke (observed via page.on('request')). NOTE: iteration_2 regressions (WOB=670 daN, FR row on Annular_Frac) were NOT retested here but no code changes affected them. The advisory strip is still present on all sheets. Team invite code visible ('TYJTBKSQ'), Leave Team button visible.",
+  "rca of the issue": "N/A — all requested items pass. Note: during pytest run, backend hot-reload was triggered by WatchFiles seeing the tests file being written, which killed one in-flight Gemini call and caused the AI-reply test to fail once. Re-run passed. This is a test-infra quirk (WatchFiles watches /app/backend/tests/), not a product bug."
+}

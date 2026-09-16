@@ -3,38 +3,38 @@ export const workbookData = {
   Pipe_Stretch: {
     title: "Pipe Stretch & Free-Point",
     sop: "SOP-CT-12 | API 5CT Precision Free-Point",
-    imp: ["Measured Stretch (in)", "Overpull (lbs)", "CT OD (in)", "CT ID (in)", "Current Depth (ft)"],
-    met: ["Measured Stretch (mm)", "Overpull (daN)", "CT OD (mm)", "CT ID (mm)", "Current Depth (m)"],
+    imp: ["Measured Stretch (in)", "Overpull (lbs)", "CT OD (in)", "CT Wall (in)", "Current Depth (ft)"],
+    met: ["Measured Stretch (mm)", "Overpull (daN)", "CT OD (mm)", "CT Wall (mm)", "Current Depth (m)"],
   },
   Sand_Cleanout: {
     title: "Sand & Debris Cleanout",
     sop: "SOP-CT-04 | API Spec 5ST Sand Cleanout",
-    imp: ["Flow Rate (BPM)", "Casing ID (in)", "Tubing OD (in)", "Fluid Viscosity (cp)", "Current Depth (ft)", "Friction Reducer (gpt)"],
-    met: ["Flow Rate (L/min)", "Casing ID (mm)", "Tubing OD (mm)", "Fluid Viscosity (cp)", "Current Depth (m)", "Friction Reducer (L/m3)"],
+    imp: ["Flow Rate (BPM)", "Casing ID (in)", "2nd Casing ID (in)", "2nd Casing MD (ft)", "Tubing OD (in)", "Fluid Viscosity (cp)", "Current Depth (ft)", "Friction Reducer (gpt)"],
+    met: ["Flow Rate (L/min)", "Casing ID (mm)", "2nd Casing ID (mm)", "2nd Casing MD (m)", "Tubing OD (mm)", "Fluid Viscosity (cp)", "Current Depth (m)", "Friction Reducer (L/m3)"],
   },
   CT_Milling: {
     title: "Composite Plug Milling",
     sop: "SOP-CT-25 | Composite Milling Hydraulics & WOB",
-    imp: ["Depth (ft)", "CT OD (in)", "CT ID (in)", "Casing ID (in)", "Weight on gauge – tagged (lbs)", "Run-in-hole weight (lbs)", "Pump Rate (BPM)", "Viscosity (cp)", "Density (ppg)"],
-    met: ["Depth (m)", "CT OD (mm)", "CT ID (mm)", "Casing ID (mm)", "Weight on gauge – tagged (daN)", "Run-in-hole weight (daN)", "Pump Rate (L/min)", "Viscosity (cp)", "Density (kg/m3)"],
+    imp: ["Depth (ft)", "CT OD (in)", "CT Wall (in)", "Upper CT OD (in)", "Taper Depth (ft)", "Casing ID (in)", "Weight on gauge – tagged (lbs)", "Run-in-hole weight (lbs)", "Pump Rate (BPM)", "Viscosity (cp)", "Density (ppg)"],
+    met: ["Depth (m)", "CT OD (mm)", "CT Wall (mm)", "Upper CT OD (mm)", "Taper Depth (m)", "Casing ID (mm)", "Weight on gauge – tagged (daN)", "Run-in-hole weight (daN)", "Pump Rate (L/min)", "Viscosity (cp)", "Density (kg/m3)"],
   },
   CT_Drilling: {
     title: "Lateral CT Drilling",
     sop: "SOP-CT-27 | Lateral CT Drilling Dynamics",
-    imp: ["Depth (ft)", "CT OD (in)", "CT ID (in)", "Casing ID (in)", "Weight on gauge – tagged (lbs)", "Run-in-hole weight (lbs)", "Pump Rate (BPM)", "ROP (ft/hr)", "Density (ppg)"],
-    met: ["Depth (m)", "CT OD (mm)", "CT ID (mm)", "Casing ID (mm)", "Weight on gauge – tagged (daN)", "Run-in-hole weight (daN)", "Pump Rate (L/min)", "ROP (m/hr)", "Density (kg/m3)"],
+    imp: ["Depth (ft)", "CT OD (in)", "CT Wall (in)", "Casing ID (in)", "Weight on gauge – tagged (lbs)", "Run-in-hole weight (lbs)", "Pump Rate (BPM)", "ROP (ft/hr)", "Density (ppg)"],
+    met: ["Depth (m)", "CT OD (mm)", "CT Wall (mm)", "Casing ID (mm)", "Weight on gauge – tagged (daN)", "Run-in-hole weight (daN)", "Pump Rate (L/min)", "ROP (m/hr)", "Density (kg/m3)"],
   },
   Pill_Spotting: {
     title: "Chemical Pill Spotting",
     sop: "SOP-CT-10 | Precision Pill Spotting",
-    imp: ["Current Depth (ft)", "Target Depth (ft)", "Pill Vol (bbl)", "CT OD (in)", "CT ID (in)", "Casing ID (in)", "Pump Rate (BPM)", "Density (ppg)"],
-    met: ["Current Depth (m)", "Target Depth (m)", "Pill Vol (m3)", "CT OD (mm)", "CT ID (mm)", "Casing ID (mm)", "Pump Rate (L/min)", "Density (kg/m3)"],
+    imp: ["Current Depth (ft)", "Target Depth (ft)", "Pill Vol (bbl)", "CT OD (in)", "CT Wall (in)", "Upper CT OD (in)", "Taper Depth (ft)", "Casing ID (in)", "2nd Casing ID (in)", "2nd Casing MD (ft)", "Pump Rate (BPM)", "Density (ppg)"],
+    met: ["Current Depth (m)", "Target Depth (m)", "Pill Vol (m3)", "CT OD (mm)", "CT Wall (mm)", "Upper CT OD (mm)", "Taper Depth (m)", "Casing ID (mm)", "2nd Casing ID (mm)", "2nd Casing MD (m)", "Pump Rate (L/min)", "Density (kg/m3)"],
   },
   Frac_Through_CT: {
     title: "Frac Through Coiled Tubing",
     sop: "SOP-CT-19 | Frac Through CT & Friction",
-    imp: ["Depth (ft)", "CT OD (in)", "CT ID (in)", "Casing ID (in)", "Treating P (PSI)", "Pump Rate (BPM)", "Proppant (ppa)", "Density (ppg)", "Friction Reducer (gpt)"],
-    met: ["Depth (m)", "CT OD (mm)", "CT ID (mm)", "Casing ID (mm)", "Treating P (MPa)", "Pump Rate (L/min)", "Proppant (kg/m3)", "Density (kg/m3)", "Friction Reducer (L/m3)"],
+    imp: ["Depth (ft)", "CT OD (in)", "CT Wall (in)", "Casing ID (in)", "Treating P (PSI)", "Pump Rate (BPM)", "Proppant (ppa)", "Density (ppg)", "Friction Reducer (gpt)"],
+    met: ["Depth (m)", "CT OD (mm)", "CT Wall (mm)", "Casing ID (mm)", "Treating P (MPa)", "Pump Rate (L/min)", "Proppant (kg/m3)", "Density (kg/m3)", "Friction Reducer (L/m3)"],
   },
   Annular_Frac: {
     title: "CT Annular Fracturing",
@@ -69,8 +69,8 @@ export const workbookData = {
   Acid_Stimulation: {
     title: "Matrix Acid Stimulation",
     sop: "SOP-CT-15 | AER Dir 035 Matrix Acid Placement",
-    imp: ["Acid Vol (bbl)", "Pump Rate (BPM)", "BHT (deg F)", "Depth (ft)", "CT ID (in)"],
-    met: ["Acid Vol (m3)", "Pump Rate (L/min)", "BHT (deg C)", "Depth (m)", "CT ID (mm)"],
+    imp: ["Acid Vol (bbl)", "Pump Rate (BPM)", "BHT (deg F)", "Depth (ft)", "CT Wall (in)"],
+    met: ["Acid Vol (m3)", "Pump Rate (L/min)", "BHT (deg C)", "Depth (m)", "CT Wall (mm)"],
   },
   Scale_Squeeze: {
     title: "Scale Squeeze Treatment",
@@ -445,7 +445,12 @@ export const getDefaultValue = (param, unitSystem) => {
   if (param.includes("Vol")) return unitSystem === "imp" ? "25" : "3.97";
   if (param.includes("Rate")) return unitSystem === "imp" ? "3.5" : "556";
   if (param.includes("OD")) return unitSystem === "imp" ? "1.5" : "38.1";
-  if (param.includes("Tubing ID") || param.includes("CT ID") || param.includes("Gun OD")) return unitSystem === "imp" ? "1.25" : "31.75";
+  if (param.includes("Tubing ID") || param.includes("Gun OD")) return unitSystem === "imp" ? "1.25" : "31.75";
+  if (param.includes("CT Wall")) return unitSystem === "imp" ? "0.109" : "2.77";
+  if (param.includes("Upper CT OD")) return unitSystem === "imp" ? "2.0" : "50.8";
+  if (param.includes("Taper Depth")) return unitSystem === "imp" ? "8000" : "2440";
+  if (param.includes("2nd Casing ID")) return unitSystem === "imp" ? "5.5" : "139.7";
+  if (param.includes("2nd Casing MD")) return unitSystem === "imp" ? "8125" : "2477";
   if (param.includes("Casing")) return unitSystem === "imp" ? "4.5" : "114.3";
   if (param.includes("Viscosity")) return "35";
   if (param.includes("Density") || param.includes("Slurry Wt")) return unitSystem === "imp" ? "9.5" : "1138";

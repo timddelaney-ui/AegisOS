@@ -99,13 +99,15 @@ const AIPanel = ({ open, onClose, contextBuilder, initialMode = "assistant" }) =
       const { data } = await axios.post(
         `${API}/ai/chat`,
         { mode, message: text, session_id: sessionId, context },
-        { withCredentials: true }
+        { withCredentials: true, timeout: 45000 }
       );
       setSessionId(data.session_id);
       setMessages((m) => [...m, { role: "assistant", content: data.response }]);
     } catch (e) {
-      const msg = e.response?.data?.detail || "AI error — try again.";
-      setMessages((m) => [...m, { role: "assistant", content: `⚠️ ${msg}`, error: true }]);
+      const msg = e.code === "ECONNABORTED"
+        ? "AI timed out after 45s. Skipper's ol' truck won't start — try again in a sec."
+        : (e.response?.data?.detail || e.message || "AI error — try again.");
+      setMessages((m) => [...m, { role: "assistant", content: msg, error: true }]);
     } finally {
       setSending(false);
     }

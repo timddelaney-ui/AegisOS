@@ -134,6 +134,74 @@ const capacity_bbl_per_ft = (id_in) => (id_in * id_in) / 1029.4;
 const annCap_bbl_per_ft = (dCase, dCT) => (dCase * dCase - dCT * dCT) / 1029.4;
 const ct_weight_per_ft = (od, id) => wallArea(od, id) * 3.4;
 
+// Derive CT ID from OD & wall thickness (both inches, Imperial-normalized after grab()).
+// If the sheet supplies both wall & id, wall wins (industry-standard spec).
+function deriveCT_ID(vals, params, u) {
+  const wall = grab(vals, params, u, ["ct wall"]);
+  const od = grab(vals, params, u, ["ct od"]);
+  if (wall !== null && od !== null && wall > 0 && wall < od / 2) return od - 2 * wall;
+  return grab(vals, params, u, ["ct id"]); // legacy fallback
+}
+
+// Tapered-string helpers. Total CT internal volume and buoyed weight when the
+// job program calls for an upper-OD section joined to a lower-OD section.
+function taperedCT(vals, params, u, total_depth_ft) {
+  const lower_od = grab(vals, params, u, ["ct od"]);
+  const upper_od = grab(vals, params, u, ["upper ct od"]);
+  const taper_ft = grab(vals, params, u, ["taper depth"]);
+  const wall = grab(vals, params, u, ["ct wall"]);
+  if (!lower_od || total_depth_ft == null) return null;
+  const lower_id = wall !== null ? lower_od - 2 * wall : deriveCT_ID(vals, params, u);
+  if (!lower_id) return null;
+  const capLower = capacity_bbl_per_ft(lower_id);
+  if (!upper_od || !taper_ft || taper_ft <= 0 || taper_ft >= total_depth_ft) {
+    // No taper — straight string
+    return {
+      volume_bbl: capLower * total_depth_ft,
+      lower_depth: total_depth_ft,
+      upper_depth: 0,
+      tapered: false,
+    };
+  }
+  // Assume upper section has same wall thickness as lower section (typical CT reel program)
+  const upper_id = wall !== null ? upper_od - 2 * wall : upper_od - 2 * 0.109;
+  const capUpper = capacity_bbl_per_ft(upper_id);
+  const upperLen = total_depth_ft - taper_ft;
+  const lowerLen = taper_ft;
+  return {
+    volume_bbl: capLower * lowerLen + capUpper * upperLen,
+    lower_depth: lowerLen,
+    upper_depth: upperLen,
+    tapered: true,
+    lower_id, upper_id, lower_od, upper_od,
+  };
+}
+
+// Multi-casing annular volume: primary casing from surface to (md2) then secondary casing from md2 to TD.
+// If secondary inputs are absent, returns a single-section annular volume.
+function multiCasingAnnular(vals, params, u, ct_od_in, total_depth_ft) {
+  const case1 = grab(vals, params, u, ["casing id"]);
+  const case2 = grab(vals, params, u, ["2nd casing id"]);
+  const md2   = grab(vals, params, u, ["2nd casing md"]);
+  if (!case1 || !ct_od_in || total_depth_ft == null) return null;
+  if (!case2 || !md2 || md2 <= 0 || md2 >= total_depth_ft) {
+    const cap = annCap_bbl_per_ft(case1, ct_od_in);
+    return { volume_bbl: cap * total_depth_ft, sections: [{ id: case1, length: total_depth_ft, cap }], multi: false };
+  }
+  const cap1 = annCap_bbl_per_ft(case1, ct_od_in);
+  const cap2 = annCap_bbl_per_ft(case2, ct_od_in);
+  const upperLen = md2;
+  const lowerLen = total_depth_ft - md2;
+  return {
+    volume_bbl: cap1 * upperLen + cap2 * lowerLen,
+    sections: [
+      { id: case1, length: upperLen, cap: cap1, label: "Upper" },
+      { id: case2, length: lowerLen, cap: cap2, label: "Lower" },
+    ],
+    multi: true,
+  };
+}
+
 // -------- Hydraulics helpers (Bourgoyne / Blasius) --------------------------
 // Reynolds number for Newtonian fluid in pipe/annulus (field units)
 function reynolds(rho_ppg, v_fps, d_in, mu_cp) {
@@ -179,7 +247,7 @@ function calc_Pipe_Stretch(vals, params, u) {
   const stretch_in = grab(vals, params, u, ["stretch"]);
   const overpull_lb = grab(vals, params, u, ["overpull"]);
   const ct_od = grab(vals, params, u, ["ct od"]);
-  const ct_id = grab(vals, params, u, ["ct id"]);
+  const ct_id = deriveCT_ID(vals, params, u);
   const depth_ft = grab(vals, params, u, ["current depth"]);
 
   const wA = ct_od && ct_id ? wallArea(ct_od, ct_id) : null;
@@ -225,7 +293,9 @@ function calc_Sand_Cleanout(vals, params, u) {
   const A_ann_in2 = casing_id && tubing_od ? areaCircle(casing_id) - areaCircle(tubing_od) : null;
   const v_ann = v_annular_ftmin(q_bpm, A_ann_in2);
   const annCap = casing_id && tubing_od ? annCap_bbl_per_ft(casing_id, tubing_od) : null;
-  const annVol = annCap && depth_ft ? annCap * depth_ft : null;
+  // Multi-casing aware annular volume with coil in the well
+  const annBlock = depth_ft !== null && tubing_od !== null ? multiCasingAnnular(vals, params, u, tubing_od, depth_ft) : null;
+  const annVol = annBlock !== null ? annBlock.volume_bbl : (annCap && depth_ft ? annCap * depth_ft : null);
   const bottomsUp_min = annVol && q_bpm ? annVol / q_bpm : null;
 
   // Moore's slip velocity (Newtonian, sand SG = 2.65, dp = 0.03 in)
@@ -251,7 +321,7 @@ function calc_Sand_Cleanout(vals, params, u) {
     { label: "Annular flow area", ...fmt(A_ann_in2, u, "area", 3) },
     { label: "Annular velocity", ...fmt(v_ann, u, "velocity", 0), formula: "Va = Q · 9701.9 / A / 12", note: "≥ 100 ft/min recommended (Moore)" },
     { label: "Annular capacity", ...fmt(annCap, u, "capacity", 4) },
-    { label: "Total annular volume", ...fmt(annVol, u, "volume", 1) },
+    { label: "🎯 Total annular volume (multi-casing aware)", ...fmt(annVol, u, "volume", 1), formula: annBlock && annBlock.multi ? "Σ capᵢ_ann · Lᵢ" : "V_ann = capAnn · depth", note: annBlock && annBlock.multi ? `${annBlock.sections[0].id.toFixed(2)}" × ${annBlock.sections[0].length.toFixed(0)} ft + ${annBlock.sections[1].id.toFixed(2)}" × ${annBlock.sections[1].length.toFixed(0)} ft` : "Single-casing well" },
     { label: "Bottoms-up circulation time", ...fmt(bottomsUp_min, u, "time", 1), note: "Circulate ≥ 1.5 BU after tag" },
     { label: "Slip velocity (est.)", ...fmt(v_slip, u, "velocity", 1), formula: "Moore (1974)" },
     { label: "Transport ratio (Va/Vs)", ...fmt(transportRatio, u, "ratio", 2), note: "Target ≥ 1.5×" },
@@ -277,7 +347,7 @@ function calc_Sand_Cleanout(vals, params, u) {
 function calc_CT_Milling(vals, params, u) {
   const depth = grab(vals, params, u, ["depth"]);
   const ct_od = grab(vals, params, u, ["ct od"]);
-  const ct_id = grab(vals, params, u, ["ct id"]);
+  const ct_id = deriveCT_ID(vals, params, u);
   const casing_id = grab(vals, params, u, ["casing id"]);
   const taggedWt = grab(vals, params, u, ["weight on gauge", "tagged"]);
   const rihWt    = grab(vals, params, u, ["run-in-hole", "run in hole"]);
@@ -370,7 +440,7 @@ function calc_Pill_Spotting(vals, params, u) {
   const tgt = grab(vals, params, u, ["target depth"]);
   const pillV = grab(vals, params, u, ["pill vol"]);
   const ct_od = grab(vals, params, u, ["ct od"]);
-  const ct_id = grab(vals, params, u, ["ct id"]);
+  const ct_id = deriveCT_ID(vals, params, u);
   const casing = grab(vals, params, u, ["casing id"]);
   const rate = grab(vals, params, u, ["pump rate"]);
   const rho = grab(vals, params, u, ["density"]);
@@ -378,7 +448,16 @@ function calc_Pill_Spotting(vals, params, u) {
   const distance = cur !== null && tgt !== null ? Math.abs(tgt - cur) : null;
   const capInt = ct_id ? capacity_bbl_per_ft(ct_id) : null;
   const capAnn = casing && ct_od ? annCap_bbl_per_ft(casing, ct_od) : null;
-  const displaceVol = capInt && tgt ? capInt * tgt : null;
+
+  // Tapered coil volume for spotting: if Upper CT OD + Taper Depth supplied, sum both sections.
+  const taper = tgt !== null ? taperedCT(vals, params, u, tgt) : null;
+  const coilVolForSpotting = taper !== null ? taper.volume_bbl : (capInt && tgt ? capInt * tgt : null);
+
+  // Annular volume with coil in the well (multi-casing aware).
+  const annBlock = tgt !== null ? multiCasingAnnular(vals, params, u, ct_od, tgt) : null;
+  const annularVolWithCoil = annBlock !== null ? annBlock.volume_bbl : (capAnn && tgt ? capAnn * tgt : null);
+
+  const displaceVol = coilVolForSpotting;
   const pillLenInt = pillV && capInt ? pillV / capInt : null;
   const pillLenAnn = pillV && capAnn ? pillV / capAnn : null;
   const timePump = displaceVol && rate ? displaceVol / rate : null;
@@ -387,20 +466,27 @@ function calc_Pill_Spotting(vals, params, u) {
   const warnings = [];
   if (rate !== null && rate < 0.5)
     warnings.push({ level: "warn", msg: `Pump rate ${rate.toFixed(2)} BPM is very low — placement uncertainty increases.` });
+  if (taper && taper.tapered)
+    warnings.push({ level: "info", msg: `Tapered string detected: lower ${taper.lower_od.toFixed(2)}" × ${taper.lower_depth.toFixed(0)} ft + upper ${taper.upper_od.toFixed(2)}" × ${taper.upper_depth.toFixed(0)} ft.` });
+  if (annBlock && annBlock.multi)
+    warnings.push({ level: "info", msg: `Multi-casing well: ${annBlock.sections[0].id.toFixed(2)}" × ${annBlock.sections[0].length.toFixed(0)} ft (upper) + ${annBlock.sections[1].id.toFixed(2)}" × ${annBlock.sections[1].length.toFixed(0)} ft (lower).` });
+
+  const results = [
+    { label: "Distance to target", ...fmt(distance, u, "depth", 0) },
+    { label: "CT internal capacity", ...fmt(capInt, u, "capacity", 4), note: taper && taper.tapered ? "Lower section only" : null },
+    { label: "Annular capacity (upper casing)", ...fmt(capAnn, u, "capacity", 4) },
+    { label: "🎯 Coil volume for spotting (to target)", ...fmt(coilVolForSpotting, u, "volume", 2), formula: taper && taper.tapered ? "Σ capᵢ · Lᵢ (tapered)" : "V = capCT · TargetDepth", note: "Pump this to displace pill from surface to target" },
+    { label: "🎯 Annular volume with coil in well", ...fmt(annularVolWithCoil, u, "volume", 2), formula: annBlock && annBlock.multi ? "Σ capᵢ_ann · Lᵢ (multi-casing)" : "V_ann = capAnn · TVD", note: annBlock && annBlock.multi ? "Sum across all casing sections" : "Single-casing well" },
+    { label: "Pill length inside CT", ...fmt(pillLenInt, u, "depth", 0) },
+    { label: "Pill length in annulus (target zone)", ...fmt(pillLenAnn, u, "depth", 0), note: "Coverage over target zone" },
+    { label: "Total pump time", ...fmt(timePump, u, "time", 1), formula: "t = Vd / Q" },
+    { label: "Hydrostatic @ target", ...fmt(P_hyd_target, u, "pressure", 0) },
+  ];
 
   return {
-    results: [
-      { label: "Distance to target", ...fmt(distance, u, "depth", 0) },
-      { label: "CT internal capacity", ...fmt(capInt, u, "capacity", 4) },
-      { label: "Annular capacity", ...fmt(capAnn, u, "capacity", 4) },
-      { label: "Displacement volume to spot", ...fmt(displaceVol, u, "volume", 2), formula: "Vd = capCT · TargetDepth" },
-      { label: "Pill length inside CT", ...fmt(pillLenInt, u, "depth", 0) },
-      { label: "Pill length in annulus", ...fmt(pillLenAnn, u, "depth", 0), note: "Coverage over target zone" },
-      { label: "Total pump time", ...fmt(timePump, u, "time", 1), formula: "t = Vd / Q" },
-      { label: "Hydrostatic @ target", ...fmt(P_hyd_target, u, "pressure", 0) },
-    ],
+    results,
     warnings,
-    formula: "Vd = capCT × TargetDepth · Coverage = Vpill / capAnnulus",
+    formula: "Vd = capCT × TargetDepth · Coverage = Vpill / capAnnulus · Multi-casing & tapered CT summed",
     reference: "API RP 5C7 §11 · Halliburton CT Placement Manual",
   };
 }
@@ -408,7 +494,7 @@ function calc_Pill_Spotting(vals, params, u) {
 function calc_Frac_Through_CT(vals, params, u) {
   const depth = grab(vals, params, u, ["depth"]);
   const ct_od = grab(vals, params, u, ["ct od"]);
-  const ct_id = grab(vals, params, u, ["ct id"]);
+  const ct_id = deriveCT_ID(vals, params, u);
   const casing = grab(vals, params, u, ["casing id"]);
   const surfP = grab(vals, params, u, ["treating p"]);
   const q_bpm = grab(vals, params, u, ["pump rate"]);
@@ -654,7 +740,7 @@ function calc_Acid_Stimulation(vals, params, u) {
   const rate = grab(vals, params, u, ["pump rate"]);
   const bht = grab(vals, params, u, ["bht"]);
   const depth = grab(vals, params, u, ["depth"]);
-  const ct_id = grab(vals, params, u, ["ct id"]);
+  const ct_id = deriveCT_ID(vals, params, u);
 
   const capCT = ct_id ? capacity_bbl_per_ft(ct_id) : null;
   const displaceVol = capCT && depth ? capCT * depth : null;
