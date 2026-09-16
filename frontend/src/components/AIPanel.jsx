@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { X, Send, Loader2, Sparkles, Brain, AlertOctagon, FileText, Wrench, MessageSquare, GraduationCap } from "lucide-react";
+import { X, Send, Loader2, Sparkles, Brain, AlertOctagon, FileText, Wrench, MessageSquare, GraduationCap, ChevronDown, ChevronRight } from "lucide-react";
 import axios from "axios";
 import { API, useAuth } from "../context/AuthContext";
 
@@ -11,6 +11,56 @@ const MODES = [
   { id: "program", label: "Job Program", Icon: FileText, blurb: "Draft a step-by-step CT job procedure from the current parameters." },
   { id: "emergency", label: "Emergency", Icon: AlertOctagon, blurb: "Well-control and HSE emergency guidance per OH&S, AER, IWCF." },
 ];
+
+// Parse assistant response into ACTION NOW / WHY DETAILS sections.
+// Accepts *bold* markers or plain "ACTION NOW" headers, case-insensitive.
+const parseAiResponse = (raw) => {
+  if (!raw || typeof raw !== "string") return { action: raw || "", details: "" };
+  // Normalize markdown ** headers by stripping the asterisks around header labels
+  const text = raw.replace(/\*\*/g, "");
+  // Split on WHY / DETAILS header (case-insensitive, allow variants)
+  const splitRegex = /(?:^|\n)\s*(?:WHY\s*\/\s*DETAILS|WHY & DETAILS|WHY|DETAILS)\s*:?\s*\n/i;
+  const parts = text.split(splitRegex);
+  if (parts.length < 2) {
+    // No structured markers — fall back to entire body as "action"
+    const cleaned = text.replace(/(?:^|\n)\s*ACTION\s*NOW\s*:?\s*\n?/i, "\n").trim();
+    return { action: cleaned, details: "" };
+  }
+  const [head, ...rest] = parts;
+  const action = head.replace(/(?:^|\n)\s*ACTION\s*NOW\s*:?\s*\n?/i, "\n").trim();
+  const details = rest.join("\n\n").trim();
+  return { action, details };
+};
+
+const AIMessage = ({ content }) => {
+  const [expanded, setExpanded] = useState(false);
+  const { action, details } = parseAiResponse(content);
+  return (
+    <div className="bg-white border border-[#D4D4D4] text-[#262626] mr-6 shadow-sm rounded overflow-hidden" data-testid="ai-message-bubble">
+      {action && (
+        <div className="px-2.5 py-2">
+          <div className="text-[10px] font-bold text-[#107C41] tracking-wider mb-1">ACTION NOW</div>
+          <div className="text-[12px] leading-relaxed whitespace-pre-wrap">{action}</div>
+        </div>
+      )}
+      {details && (
+        <div className="border-t border-[#EFEFEF] bg-[#FAFAFA]">
+          <button
+            onClick={() => setExpanded((v) => !v)}
+            data-testid="ai-toggle-details"
+            className="w-full flex items-center justify-between px-2.5 py-1.5 text-[10px] font-bold text-[#595959] tracking-wider hover:bg-[#F0F9F3]"
+          >
+            <span>WHY / DETAILS</span>
+            {expanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+          </button>
+          {expanded && (
+            <div className="px-2.5 pb-2 text-[12px] leading-relaxed whitespace-pre-wrap text-[#333]">{details}</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const AIPanel = ({ open, onClose, contextBuilder, initialMode = "assistant" }) => {
   const { user } = useAuth();
@@ -121,20 +171,23 @@ const AIPanel = ({ open, onClose, contextBuilder, initialMode = "assistant" }) =
               ))}
             </div>
           )}
-          {messages.map((m, i) => (
-            <div
-              key={i}
-              className={`px-2.5 py-2 rounded text-[12px] leading-relaxed whitespace-pre-wrap ${
-                m.role === "user"
-                  ? "bg-[#107C41] text-white ml-6 self-end"
-                  : m.error
-                  ? "bg-[#F8D7DA] border border-[#F5C6CB] text-[#721C24] mr-6"
-                  : "bg-white border border-[#D4D4D4] text-[#262626] mr-6 shadow-sm"
-              }`}
-            >
-              {m.content}
-            </div>
-          ))}
+          {messages.map((m, i) => {
+            if (m.role === "assistant" && !m.error) {
+              return <AIMessage key={i} content={m.content} />;
+            }
+            return (
+              <div
+                key={i}
+                className={`px-2.5 py-2 rounded text-[12px] leading-relaxed whitespace-pre-wrap ${
+                  m.role === "user"
+                    ? "bg-[#107C41] text-white ml-6 self-end"
+                    : "bg-[#F8D7DA] border border-[#F5C6CB] text-[#721C24] mr-6"
+                }`}
+              >
+                {m.content}
+              </div>
+            );
+          })}
           {sending && (
             <div className="bg-white border border-[#D4D4D4] mr-6 rounded px-2.5 py-2 flex items-center gap-2 text-[12px] text-[#595959]">
               <Loader2 className="w-3.5 h-3.5 animate-spin text-[#107C41]" /> Thinking…

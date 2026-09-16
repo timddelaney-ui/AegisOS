@@ -15,6 +15,7 @@ import JobsPage from "./pages/JobsPage";
 import AdminFeedback from "./pages/AdminFeedback";
 import AdminInvites from "./pages/AdminInvites";
 import Hub from "./pages/Hub";
+import { AdvisoryFooter, AdvisoryModal, AdvisoryStrip } from "./components/AdvisoryDisclaimer";
 import { useAuth, API } from "./context/AuthContext";
 import { workbookData } from "./mock/workbookData";
 import { Loader2, Clock } from "lucide-react";
@@ -48,7 +49,7 @@ const Workbook = () => {
   const location = useLocation();
   const initialLoadJob = location.state?.loadJob;
   const [currentSheet, setCurrentSheet] = useState(initialLoadJob?.sheet_key || "Pipe_Stretch");
-  const [unitSystem, setUnitSystem] = useState(initialLoadJob?.unit_system || "imp");
+  const [unitSystem, setUnitSystem] = useState(initialLoadJob?.unit_system || "met");
   const [loadedValues, setLoadedValues] = useState(initialLoadJob?.values || null);
   const [hasTeam, setHasTeam] = useState(false);
   const { user } = useAuth();
@@ -90,9 +91,10 @@ const Workbook = () => {
       !trial.active);
 
   return (
-    <div className="bg-[#F3F3F3] text-[#262626] flex flex-col h-screen overflow-hidden">
+    <div className="workbook-root bg-[#F3F3F3] text-[#262626] flex flex-col h-screen overflow-hidden">
       <ExcelHeader />
       <FormulaBar formulaText={getFormulaText()} />
+      <AdvisoryStrip />
       {!isPro && trial.active && (
         <div className="bg-[#FFF3CD] border-b border-[#FFE69C] px-3 py-1.5 flex items-center justify-between text-[11px] flex-shrink-0">
           <span className="text-[#856404] font-semibold flex items-center gap-1.5">
@@ -176,20 +178,24 @@ const AppRouter = () => {
     return <AuthCallback />;
   }
   return (
-    <Routes>
-      <Route path="/" element={<LandingRedirect />} />
-      <Route path="/login" element={<Login />} />
-      <Route path="/pricing" element={<Pricing />} />
-      <Route path="/payment/success" element={<PaymentSuccess />} />
-      <Route path="/payment/cancel" element={<PaymentCancel />} />
-      <Route path="/app" element={<ProtectedRoute><Workbook /></ProtectedRoute>} />
-      <Route path="/hub" element={<ProtectedRoute><Hub /></ProtectedRoute>} />
-      <Route path="/team" element={<ProtectedRoute><TeamPage /></ProtectedRoute>} />
-      <Route path="/jobs" element={<ProtectedRoute><JobsPage /></ProtectedRoute>} />
-      <Route path="/admin/feedback" element={<ProtectedRoute><AdminFeedback /></ProtectedRoute>} />
-      <Route path="/admin/invites" element={<ProtectedRoute><AdminInvites /></ProtectedRoute>} />
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+    <>
+      <Routes>
+        <Route path="/" element={<LandingRedirect />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/pricing" element={<Pricing />} />
+        <Route path="/payment/success" element={<PaymentSuccess />} />
+        <Route path="/payment/cancel" element={<PaymentCancel />} />
+        <Route path="/app" element={<ProtectedRoute><Workbook /></ProtectedRoute>} />
+        <Route path="/hub" element={<ProtectedRoute><Hub /></ProtectedRoute>} />
+        <Route path="/team" element={<ProtectedRoute><TeamPage /></ProtectedRoute>} />
+        <Route path="/jobs" element={<ProtectedRoute><JobsPage /></ProtectedRoute>} />
+        <Route path="/admin/feedback" element={<ProtectedRoute><AdminFeedback /></ProtectedRoute>} />
+        <Route path="/admin/invites" element={<ProtectedRoute><AdminInvites /></ProtectedRoute>} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+      <AdvisoryFooter />
+      <AdvisoryModal />
+    </>
   );
 };
 
