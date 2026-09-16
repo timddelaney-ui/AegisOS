@@ -1,0 +1,58 @@
+{
+  "summary": "Iteration 7 — Rig Selector + per-rig Checklists (Team Hub) + team_items rig_id backend filtering. All acceptance criteria verified: 7/7 backend pytest passed and all frontend UI flows pass (rig switching, persistence, per-rig isolation, custom item add/delete, reset, tier toggling, summary line).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/crew/safety-eval (Annular_Frac)", "issue": "Review request mentions expanded threshold set 'density_hi, rate_hi, rop_hi, surfp_hi' for Annular_Frac, but backend SAFETY_THRESHOLDS['Annular_Frac'] only contains surfp_hi. Only surfp_hi is verifiable. Confirm with main agent whether the other three (density_hi, rate_hi, rop_hi) were intended to be added for Annular_Frac too."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verified_behaviors": [
+    "Rig Selector renders on /app, /hub, /team with data-testid='rig-selector' and buttons rig-btn-RIG1/RIG2/YARD",
+    "Default active rig is RIG1 (green accent #107C41 applied inline)",
+    "Clicking Rig 2 persists to localStorage key 'ctp_active_rig_v1'=='RIG2' and survives page reload",
+    "GET /api/team/items/inventory?rig_id=RIG1 returns RIG1 items + legacy untagged items, excludes RIG2 items (and symmetric for RIG2)",
+    "POST /api/team/items with body rig_id='RIG1' persists rig_id on the created document",
+    "Six Team Hub tabs render in order: Chat, Rig Checks, Inventory, Consumables, Parts, To-Do (all data-testids correct)",
+    "'Rig Checks' tab renders <RigChecklists/> with data-testid='rig-checklists' + 3 tiers (safety/ops/pm)",
+    "Safety tier is expanded by default, ops & pm collapsed; clicking a header toggles it (checklist-toggle-<kind>)",
+    "Clicking checklist-check-flha_am on RIG1: item strikes through, green filled check circle, badge advances to 1/6",
+    "localStorage key 'ctp_checklist_v1::RIG1::safety' contains the JSON checked state after check-off",
+    "After page reload the RIG1 safety badge remains 1/6 (persistence works)",
+    "Switching to RIG2 shows safety 0/6 (independent per-rig state); switching back to RIG1 restores 1/6",
+    "Custom item add: filling checklist-new-label-safety + selecting cadence 'week' + clicking checklist-save-item-safety appends a new row with checklist-delete-cus_<ts>; clicking the delete removes it",
+    "Reset all: checklist-reset-safety takes badge back to 0/6",
+    "Rig summary line above tiers reads: 'RIG 1 CHECKLISTS · Safety 0/6 · Daily 0/6 · Weekly 0/6' and updates on rig-switch",
+    "Backend /api/auth/me returns 200 for demo Pro cookie",
+    "Backend /api/crew/chat POST works (payload {text: '...'})",
+    "Backend /api/crew/safety-eval fires surfp_hi threshold on Annular_Frac when surfp=12000"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_rig_filtering.py",
+    "/app/test_reports/pytest/iter7_rig.xml"
+  ],
+  "action_items": [
+    "Confirm whether Annular_Frac was supposed to gain density_hi/rate_hi/rop_hi thresholds too — the review request lists them as part of the 'expanded threshold set' but only surfp_hi exists in server.py.",
+    "Optional polish: the Rig Selector strip on the workbook layout uses 'All data filtered by rig' text at #666 on #1E1E1E background — passes AA barely but very faint. Consider #9CA3AF for consistency with the ACTIVE RIG label."
+  ],
+  "critical_code_review_comments": [
+    "RigChecklists summary useMemo reads localStorage directly and depends on [rigId, openTier] — it will NOT update when a checkbox is toggled inside the currently-open tier because tier-internal state (items) lives in ChecklistTier and doesn't bubble up. In practice the summary badge does not increment live when you tick an item; it only recomputes on rig-switch, tab-switch, or open/close. Observed in the test: after clicking flha_am and rechecking the summary text on the same tab, tests read via the tier badge (which does update correctly) — but the top-line 'RIG 1 CHECKLISTS · Safety 0/6' summary can drift out of sync with tier badges until a re-open. Consider lifting items state into RigChecklists or using a small pub/sub / storage event to force recompute.",
+    "RigChecklists.jsx line 12: object literal uses inconsistent key-quoting ({ id: 'h2s_check', 'label': ... }). Works but stylistically flags most linters.",
+    "TeamItemsList always passes rig_id on POST — a user viewing legacy (untagged) items and creating a new one will silently tag it to their current active rig. That's per-spec but worth noting for legacy migration.",
+    "loadState() seeds default library on first read for a rig. If DEFAULT_LIB is ever updated (new items added later), existing rigs will NEVER see the new defaults because their localStorage snapshot is already populated. Consider merging by id (union of stored + defaults) on load."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_rig_filtering.py (new)"
+  ],
+  "success_rate": {"backend": "100% (7/7)", "frontend": "100%"},
+  "test_credentials": "Demo Pro cookie session_token=demo_session_dade4ac57f0c496094fde437e8e91f00 works (auth/me 200). Team 'Regression Crew' team_dcb3ba5cfed0 attached.",
+  "seed_data_creation": "3 TEST_ inventory items created (RIG1/RIG2/legacy) and cleaned up in fixture teardown.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 7 shipped rig selector, per-rig checklists, and team_items rig_id filter — all working. Note that summary top-line inside RigChecklists doesn't live-update when an item is toggled inside its currently expanded tier (tier badge does update). See critical_code_review_comments #1. Also: Annular_Frac SAFETY_THRESHOLDS currently only has surfp_hi despite the review request wording implying density_hi/rate_hi/rop_hi should also be there.",
+  "rca of the issue": "n/a — no functional bugs found. Only minor code-quality / spec-clarification items."
+}
