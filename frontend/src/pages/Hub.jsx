@@ -5,7 +5,7 @@ import { useAuth, API, isProUser } from "../context/AuthContext";
 import {
   FileSpreadsheet, FolderOpen, Users, Sparkles, ChevronRight, Crown, AlertTriangle,
   MessageSquare, Wrench, GraduationCap, AlertOctagon, FileText, Calendar, Gauge,
-  Ticket, MessageSquarePlus, Zap, Menu,
+  Ticket, MessageSquarePlus, Zap, Menu, ShieldCheck,
 } from "lucide-react";
 import { workbookData } from "../mock/workbookData";
 import ExcelHeader from "../components/ExcelHeader";
@@ -238,6 +238,27 @@ const Hub = () => {
               )}
             </div>
           </div>
+
+          {/* Manager Dashboard shortcut — only visible to Field/Ops Managers */}
+          {(user?.role === "field_manager" || user?.role === "ops_manager") && (
+            <button
+              data-testid="hub-manager-link"
+              onClick={() => navigate("/manager")}
+              className="w-full bg-gradient-to-r from-[#0D6535] to-[#0A4F28] text-white rounded-xl p-4 shadow-md flex items-center gap-3 hover:shadow-lg transition-all"
+            >
+              <ShieldCheck className="w-8 h-8 flex-shrink-0" strokeWidth={2} />
+              <div className="flex-1 text-left">
+                <p className="text-sm font-bold">
+                  Manager Dashboard
+                  <span className="ml-2 text-[10px] bg-white/20 px-1.5 py-[2px] rounded font-bold uppercase">
+                    {user.role === "ops_manager" ? "All teams" : "Your team"}
+                  </span>
+                </p>
+                <p className="text-[11px] opacity-90">Rig activity, safety cert check-offs, PM logs, alerts, low-stock flags — all in one view.</p>
+              </div>
+              <ChevronRight className="w-5 h-5" />
+            </button>
+          )}
 
           {/* Cards row */}
           <div className="grid gap-2 sm:grid-cols-2">

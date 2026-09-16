@@ -15,6 +15,8 @@ import JobsPage from "./pages/JobsPage";
 import AdminFeedback from "./pages/AdminFeedback";
 import AdminInvites from "./pages/AdminInvites";
 import Hub from "./pages/Hub";
+import ManagerDashboard from "./pages/ManagerDashboard";
+import ManagerGreeting from "./components/ManagerGreeting";
 import { AdvisoryFooter, AdvisoryModal, AdvisoryStrip } from "./components/AdvisoryDisclaimer";
 import RigSelector from "./components/RigSelector";
 import { useAuth, API, isProUser } from "./context/AuthContext";
@@ -193,10 +195,12 @@ const AppRouter = () => {
         <Route path="/jobs" element={<ProtectedRoute><JobsPage /></ProtectedRoute>} />
         <Route path="/admin/feedback" element={<ProtectedRoute><AdminFeedback /></ProtectedRoute>} />
         <Route path="/admin/invites" element={<ProtectedRoute><AdminInvites /></ProtectedRoute>} />
+        <Route path="/manager" element={<ProtectedRoute><ManagerDashboard /></ProtectedRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <AdvisoryFooter />
       <AdvisoryModal />
+      <ManagerGreeting />
     </>
   );
 };

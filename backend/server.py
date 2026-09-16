@@ -39,6 +39,7 @@ class User(BaseModel):
     name: str
     picture: Optional[str] = None
     team_id: Optional[str] = None
+    role: str = "crew"  # crew | field_manager | ops_manager
     subscription_status: str = "free"  # free | active | canceled
     subscription_plan: Optional[str] = None  # monthly | yearly
     subscription_expires_at: Optional[datetime] = None
@@ -720,6 +721,7 @@ class InviteCreate(BaseModel):
     grant_days: int = 30           # how many days of Pro on redemption
     note: Optional[str] = None     # who is it for (admin-only note)
     max_uses: int = 1              # 1 = single-use, >1 = shareable up to N times
+    grant_role: Optional[str] = None  # crew | field_manager | ops_manager — promoted on redemption
 
 
 class InviteRedeem(BaseModel):
@@ -778,6 +780,7 @@ async def create_invite(body: InviteCreate, user: dict = Depends(require_user)):
         "note": (body.note or "").strip()[:200],
         "grant_days": body.grant_days,
         "max_uses": body.max_uses,
+        "grant_role": body.grant_role if body.grant_role in ("crew", "field_manager", "ops_manager") else None,
         "use_count": 0,
         "redemptions": [],  # list of {user_id, email, redeemed_at}
         "is_active": True,
@@ -828,6 +831,7 @@ async def redeem_invite(body: InviteRedeem, user: dict = Depends(require_user)):
         raise HTTPException(400, "Code has already been redeemed")
 
     grant_days = int(invite.get("grant_days", 30))
+    grant_role = invite.get("grant_role")
     now = datetime.now(timezone.utc)
     # Extend existing pro expiry if any, else start now
     current = user.get("subscription_expires_at")
@@ -841,13 +845,17 @@ async def redeem_invite(body: InviteRedeem, user: dict = Depends(require_user)):
     base = current if (current and current > now) else now
     new_expires = base + timedelta(days=grant_days)
 
+    user_update = {
+        "subscription_status": "active",
+        "subscription_plan": "invite",
+        "subscription_expires_at": new_expires,
+    }
+    if grant_role in ("crew", "field_manager", "ops_manager"):
+        user_update["role"] = grant_role
+
     await db.users.update_one(
         {"user_id": user["user_id"]},
-        {"$set": {
-            "subscription_status": "active",
-            "subscription_plan": "invite",
-            "subscription_expires_at": new_expires,
-        }},
+        {"$set": user_update},
     )
     await db.invite_codes.update_one(
         {"code": code},
@@ -862,11 +870,21 @@ async def redeem_invite(body: InviteRedeem, user: dict = Depends(require_user)):
             },
         },
     )
+    if grant_role == "ops_manager":
+        greeting = "welcome aboard, Ops Manager!"
+    elif grant_role == "field_manager":
+        greeting = "welcome aboard, Field Manager!"
+    elif grant_role:
+        greeting = "welcome to the crew, b'y!"
+    else:
+        greeting = ""
+
     return {
         "success": True,
         "grant_days": grant_days,
+        "grant_role": grant_role,
         "expires_at": new_expires.isoformat(),
-        "message": f"Pro unlocked for {grant_days} days.",
+        "message": f"Pro unlocked for {grant_days} days. {greeting}".strip(),
     }
 
 
@@ -1320,6 +1338,153 @@ async def crew_handover_summary(rig_id: str, hours: int = 12, user: dict = Depen
         "parts_open": [_serialize(d) for d in parts_open],
         "todos_open": [_serialize(d) for d in todos_open],
         "chat_notes": [_serialize(d) for d in chat_notes],
+    }
+
+
+# ============ MANAGER DASHBOARD ============
+def _user_role(u: dict) -> str:
+    return (u or {}).get("role") or "crew"
+
+
+def _is_manager(u: dict) -> bool:
+    return _user_role(u) in ("field_manager", "ops_manager") or _is_admin(u)
+
+
+@api_router.get("/manager/dashboard")
+async def manager_dashboard(hours: int = 24, user: dict = Depends(require_user)):
+    """
+    Cross-team dashboard for Ops Managers (all teams) or single-team dashboard for Field Managers.
+    Returns:
+      - scope: "cross_team" | "team"
+      - rigs_activity: latest chat + checklist activity per (team, rig)
+      - safety_events: recent 'safety' tier checklist events (proxy for cert check-offs)
+      - maintenance_events: recent 'pm' tier checklist events (equipment maintenance log)
+      - alerts: recent Skipper safety alerts (audit log)
+      - inventory_flags: LOW/OOS inventory + consumables
+      - parts_open: open parts orders
+    """
+    if not _is_manager(user):
+        raise HTTPException(403, "Manager access required. Redeem an Ops/Field Manager invite code first.")
+
+    hours = max(1, min(hours, 24 * 30))
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(hours=hours)
+    cutoff_pm = now - timedelta(days=30)  # PM/maintenance window is always 30d
+
+    role = _user_role(user)
+    cross = role == "ops_manager" or _is_admin(user)
+
+    # Scope filter — cross-team sees everything; field manager only their team
+    if cross:
+        team_filter: Dict[str, Any] = {}
+    else:
+        team_id = user.get("team_id")
+        if not team_id:
+            raise HTTPException(400, "Field Manager needs to be in a team to see this dashboard.")
+        team_filter = {"team_id": team_id}
+
+    # Team name lookup (for cross-team labels)
+    team_names: Dict[str, str] = {}
+    async for t in db.teams.find({}, {"_id": 0, "team_id": 1, "name": 1}):
+        team_names[t["team_id"]] = t.get("name") or t["team_id"]
+
+    # ----- Rigs activity: aggregate latest chat/checklist per (team_id, rig_id) -----
+    rigs_activity: Dict[str, Dict[str, Any]] = {}
+    def _key(team_id: str, rig_id: str) -> str:
+        return f"{team_id}::{rig_id or 'unassigned'}"
+
+    async for row in db.crew_messages.aggregate([
+        {"$match": {**team_filter, "rig_id": {"$ne": None}}},
+        {"$group": {
+            "_id": {"team_id": "$team_id", "rig_id": "$rig_id"},
+            "last_at": {"$max": "$created_at"},
+            "count": {"$sum": 1},
+        }},
+    ]):
+        k = _key(row["_id"]["team_id"], row["_id"]["rig_id"])
+        rigs_activity.setdefault(k, {
+            "team_id": row["_id"]["team_id"],
+            "team_name": team_names.get(row["_id"]["team_id"], row["_id"]["team_id"]),
+            "rig_id": row["_id"]["rig_id"],
+        })
+        rigs_activity[k]["last_chat_at"] = row["last_at"].isoformat() if isinstance(row["last_at"], datetime) else row["last_at"]
+        rigs_activity[k]["chat_count"] = row["count"]
+
+    async for row in db.checklist_events.aggregate([
+        {"$match": team_filter},
+        {"$group": {
+            "_id": {"team_id": "$team_id", "rig_id": "$rig_id"},
+            "last_at": {"$max": "$created_at"},
+            "count": {"$sum": 1},
+        }},
+    ]):
+        k = _key(row["_id"]["team_id"], row["_id"]["rig_id"])
+        rigs_activity.setdefault(k, {
+            "team_id": row["_id"]["team_id"],
+            "team_name": team_names.get(row["_id"]["team_id"], row["_id"]["team_id"]),
+            "rig_id": row["_id"]["rig_id"],
+        })
+        rigs_activity[k]["last_checklist_at"] = row["last_at"].isoformat() if isinstance(row["last_at"], datetime) else row["last_at"]
+        rigs_activity[k]["checklist_count"] = row["count"]
+
+    def _sort_key(r):
+        return max(r.get("last_chat_at") or "", r.get("last_checklist_at") or "")
+    rigs_list = sorted(rigs_activity.values(), key=_sort_key, reverse=True)
+
+    # ----- Recent safety-tier check-offs (last N hours) -----
+    safety_events = await db.checklist_events.find(
+        {**team_filter, "tier": "safety", "action": "checked", "created_at": {"$gte": cutoff}},
+        {"_id": 0},
+    ).sort("created_at", -1).to_list(200)
+
+    # ----- Equipment maintenance log (PM tier, last 30 days) -----
+    maintenance_events = await db.checklist_events.find(
+        {**team_filter, "tier": "pm", "action": "checked", "created_at": {"$gte": cutoff_pm}},
+        {"_id": 0},
+    ).sort("created_at", -1).to_list(200)
+
+    # ----- Recent alerts (audit log) -----
+    alerts = await db.crew_alerts.find(
+        {**team_filter, "created_at": {"$gte": cutoff}},
+        {"_id": 0},
+    ).sort("created_at", -1).to_list(100)
+
+    # ----- Inventory / consumables flags (LOW/OOS) -----
+    inv_flags = await db.team_items.find(
+        {**team_filter, "kind": {"$in": ["inventory", "consumables"]}, "status": {"$in": ["LOW", "OOS"]}},
+        {"_id": 0},
+    ).sort("updated_at", -1).to_list(200)
+
+    # ----- Open parts orders -----
+    parts_open = await db.team_items.find(
+        {**team_filter, "kind": "parts_order", "status": {"$in": ["REQUESTED", "ORDERED"]}},
+        {"_id": 0},
+    ).sort("updated_at", -1).to_list(200)
+
+    # Attach team_name for readability on cross-team view
+    def _attach_team(docs):
+        return [{**d, "team_name": team_names.get(d.get("team_id"), d.get("team_id"))} for d in docs]
+
+    return {
+        "scope": "cross_team" if cross else "team",
+        "role": role,
+        "hours": hours,
+        "generated_at": now.isoformat(),
+        "totals": {
+            "teams_seen": len({r["team_id"] for r in rigs_list}),
+            "rigs_seen": len(rigs_list),
+            "safety_events": len(safety_events),
+            "maintenance_events": len(maintenance_events),
+            "alerts": len(alerts),
+            "inventory_flags": len(inv_flags),
+            "parts_open": len(parts_open),
+        },
+        "rigs_activity": rigs_list,
+        "safety_events": _attach_team([_serialize(d) for d in safety_events]),
+        "maintenance_events": _attach_team([_serialize(d) for d in maintenance_events]),
+        "alerts": _attach_team([_serialize(d) for d in alerts]),
+        "inventory_flags": _attach_team([_serialize(d) for d in inv_flags]),
+        "parts_open": _attach_team([_serialize(d) for d in parts_open]),
     }
 
 

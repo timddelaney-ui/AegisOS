@@ -14,6 +14,7 @@ const AdminInvites = () => {
   const [note, setNote] = useState("");
   const [grantDays, setGrantDays] = useState(30);
   const [maxUses, setMaxUses] = useState(1);
+  const [grantRole, setGrantRole] = useState("");
   const [creating, setCreating] = useState(false);
   const [copied, setCopied] = useState(null);
 
@@ -36,8 +37,10 @@ const AdminInvites = () => {
   const create = async () => {
     setCreating(true);
     try {
-      await axios.post(`${API}/admin/invites`, { note, grant_days: Number(grantDays) || 30, max_uses: Number(maxUses) || 1 }, { withCredentials: true });
-      setShowNew(false); setNote(""); setGrantDays(30); setMaxUses(1);
+      const payload = { note, grant_days: Number(grantDays) || 30, max_uses: Number(maxUses) || 1 };
+      if (grantRole) payload.grant_role = grantRole;
+      await axios.post(`${API}/admin/invites`, payload, { withCredentials: true });
+      setShowNew(false); setNote(""); setGrantDays(30); setMaxUses(1); setGrantRole("");
       await load();
     } catch (e) {
       alert(e.response?.data?.detail || "Failed to create");
@@ -111,6 +114,11 @@ const AdminInvites = () => {
                           <code className="font-mono text-base font-bold text-[#107C41] tracking-wider">{inv.code}</code>
                           <span className={`text-[10px] font-bold px-1.5 py-[2px] rounded uppercase ${statusColor}`}>{status}</span>
                           <span className="text-[10px] text-[#595959]">{used}/{max} used · {inv.grant_days}d grant</span>
+                          {inv.grant_role && (
+                            <span className={`text-[10px] font-bold px-1.5 py-[2px] rounded uppercase ${inv.grant_role === "ops_manager" ? "bg-[#0D6535] text-white" : "bg-[#0056B3] text-white"}`}>
+                              {inv.grant_role === "ops_manager" ? "OPS MGR" : "FIELD MGR"}
+                            </span>
+                          )}
                           <div className="ml-auto flex gap-1">
                             <button onClick={() => copy(inv.code, inv.code)} className="border border-[#D4D4D4] px-2 py-1 rounded text-xs font-semibold hover:border-[#107C41] flex items-center gap-1">
                               {copied === inv.code ? <Check className="w-3 h-3 text-[#107C41]" /> : <Copy className="w-3 h-3" />}
@@ -154,6 +162,17 @@ const AdminInvites = () => {
                       </div>
                     </div>
                     <p className="text-[10px] text-[#595959] mb-3">Set max uses to 1 for a personal one-time invite, or higher for a shareable code.</p>
+                    <label className="text-xs font-semibold block mb-1">Grant role on redemption (optional)</label>
+                    <select
+                      data-testid="invite-grant-role"
+                      value={grantRole}
+                      onChange={(e) => setGrantRole(e.target.value)}
+                      className="w-full mb-3 bg-[#FAFAFA] border border-[#CCC] px-3 py-2 rounded text-sm"
+                    >
+                      <option value="">Crew (default) — no role promotion</option>
+                      <option value="field_manager">Field Manager — team dashboard</option>
+                      <option value="ops_manager">Ops Manager — cross-team dashboard</option>
+                    </select>
                     <div className="flex justify-end gap-2">
                       <button onClick={() => setShowNew(false)} className="border border-[#D4D4D4] px-4 py-2 rounded text-sm font-semibold">Cancel</button>
                       <button onClick={create} disabled={creating} className="bg-[#107C41] hover:bg-[#0D6535] text-white px-4 py-2 rounded text-sm font-semibold flex items-center gap-2">
