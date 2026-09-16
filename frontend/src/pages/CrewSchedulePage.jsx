@@ -80,6 +80,8 @@ const CrewSchedulePage = () => {
       payload.repeat_cycles = parseInt(payload.repeat_cycles, 10) || 1;
       await axios.post(`${API}/schedule`, payload, { withCredentials: true });
       setShowAdd(false);
+      // Jump the grid to the shift's start_date so users see the row they just created
+      if (form.start_date) setAnchor(form.start_date);
       setForm({ ...form, crew_member_name: "", note: "" });
       await load();
     } catch (e) { setError(e.response?.data?.detail || "Failed to save."); }

@@ -57,6 +57,8 @@ Build a pixel-perfect, mobile-friendly clone of an Excel spreadsheet for Coiled 
 - **crew_alerts** — audit log of every Skipper safety alert (with rig_id)
 - **team_items** — unified team-scoped list: kind ∈ {inventory, consumables, parts_order, todo}, name, quantity, unit, location, note, status, priority, due_date, rig_id
 - **checklist_events** — rig-scoped audit log of every checklist check/uncheck: rig_id, tier (safety|ops|pm), item_id, item_label, cadence, action, user_id, user_name, user_email, created_at
+- **equipment_items** — team+rig scoped equipment: kind ∈ {engine, injector, lifting, bop_pce, reel_iron}, name, serial_number, kind-specific fields (current_hours / service_interval_hours / cert_expiry_date / last_test_date / working_pressure_psi / etc.), history[] audit trail
+- **crew_shifts** — team+rig scoped shift rows: crew_member_name, role, tour (day|night), start_date, end_date, pattern (one_off|14/14|20/10|7/7|custom), rotation_days_on/off, note
 
 ## API Endpoints
 ### Auth / Users
@@ -86,11 +88,24 @@ Build a pixel-perfect, mobile-friendly clone of an Excel spreadsheet for Coiled 
 - POST/GET `/api/admin/invites` (body accepts `grant_role`), GET `/api/admin/feedback`
 ### Manager
 - GET `/api/manager/dashboard?hours=<n>` — cross-team for ops_manager/admin, own-team for field_manager
+### Equipment
+- GET `/api/equipment?rig_id=&kind=` — list with computed status
+- POST `/api/equipment` — create
+- PATCH `/api/equipment/{item_id}` — update fields
+- POST `/api/equipment/{item_id}/log` — append history event (service/test/inspection/hours/meters/pressure)
+- DELETE `/api/equipment/{item_id}` — remove
+### Schedule
+- GET `/api/schedule?rig_id=&start=&end=` — list overlapping shifts
+- POST `/api/schedule` — create one_off | 14/14 | 20/10 | 7/7 | custom with repeat_cycles
+- PATCH `/api/schedule/{shift_id}`, DELETE `/api/schedule/{shift_id}`
+### User Preferences
+- PATCH `/api/users/me` — currently supports `service_view` (coil_tubing | stand_alone_frac | coil_tools | all)
 ### Public
 - `/robots.txt`, `/sitemap.xml` — SEO
 
 ## Changelog (recent)
-- **Feb 2026 (iter 9)**: Ops Manager + Field Manager role system. New `role` field on users (default `crew`); invite codes can carry `grant_role` that promotes the redeemer. New `/api/manager/dashboard` — cross-team for `ops_manager`/admin, own-team for `field_manager` — returns rig activity, safety cert check-offs, PM/maintenance events (last 30d), Skipper alerts, low/OOS inventory + open parts orders. New `/manager` page (`ManagerDashboard.jsx`) with 6 stat cards + tabular rig activity + full sections + Copy Report. Fun Cape Breton `ManagerGreeting` modal fires once/day for `field_manager` and `ops_manager` on any protected route. Hub gained a role-gated Manager Dashboard tile (`hub-manager-link`). AdminInvites form has `grant_role` dropdown. Seeded **3 lifetime Ops Manager codes**: OM-NRLB-B8H4, OM-TSLS-BLMC, OM-5D33-AJAN.
+- **Feb 2026 (iter 10)**: Service Toggle (Coil Tubing / Stand-Alone Frac / Coil Tools / All) — filters sheet tabs, persists to `user.service_view` + localStorage. Equipment & Assets page at `/equipment` — 5 sub-sections (engine hours, injector meters, lifting gear, BOP/PCE tests, reel & iron) with server-computed status flags (OK/AMBER/RED/EXPIRED) and per-item log actions (`service`, `test`, `inspection`, `hours_update`, `meters_update`, `pressure_update`) that append to a history audit trail. Alert thresholds: engine 50 h before service, lifting 30d/7d/expired, BOP-PCE 6-mo interval w/ 14d amber, reel/iron >90% MAWP. Crew Schedule at `/schedule` — 14-day grid, rotation patterns (14/14, 20/10, 7/7, custom on/off), role tags, day/night tour, PDF-friendly print. Hub gained Equipment + Schedule tiles with NEW badges. Backend 31/31 pytest pass.
+- **Feb 2026 (iter 9)**: Ops Manager + Field Manager role system. `/api/manager/dashboard`, `/manager` page, Cape Breton ManagerGreeting modal, `grant_role` on invite codes, 3 lifetime OM- codes seeded.
 - **Feb 2026 (iter 8)**: 25 rigs + Yard with searchable RigSelector dropdown. Rig-scoped chat + safety alerts. Server-persisted checklist events. `/api/crew/activity-summary` powers unread red dots. New Handover Modal with Copy-to-Clipboard. 20 lifetime invite codes seeded.
 - **Feb 2026 (iter 5)**: Team Hub with 5 tabs (Chat, Inventory, Consumables, Parts, To-Do), CRUD-backed via team_items collection. Simulation SVG canvas removed per user request. Fixed getDefaultValue precedence bug so tapered/multi-casing defaults populate correctly.
 - **Feb 2026 (iter 4)**: Wall thickness input replacing raw CT ID everywhere; deriveCT_ID helper. Tapered CT strings (Upper OD + Taper Depth). Multi-casing well makeup (2nd Casing ID + MD). AI Panel 45s timeout + clearer error surfacing. Prominent "🎯 Coil volume for spotting" and "🎯 Annular volume with coil in well" rows.

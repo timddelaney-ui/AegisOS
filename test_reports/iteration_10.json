@@ -1,0 +1,36 @@
+{
+  "summary": "Iter 10 full backend + frontend regression. Added 31 pytest cases covering /api/users/me (service_view), /api/equipment CRUD + status computation for engine/lifting/bop_pce/reel_iron, log actions (service/test/inspection/hours_update/meters_update/pressure_update), /api/schedule with one_off + 14/14 + custom rotation expansion (verified 2 cycles produce 2 shifts starting 2026-02-16 & 2026-03-16), invalid-input 400s, list/patch/delete, plus regression on /auth/me, /manager/dashboard, /crew/handover-summary, /team/items. Frontend: Hub NEW badges + navigation, /equipment page create engine 225h → AMBER pill → log service → OK pill → delete, /schedule page open + 14/14 pattern save (backend accepted 2 shifts, cleaned up via API), Service Toggle on /app hides Sand_Cleanout & CT_Milling, keeps Annular_Frac + Frac_Through_CT, localStorage='stand_alone_frac' persists across reload. All 31/31 backend tests pass; all frontend flows pass.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Hub", "issues": ["Three NEW badges (Equipment, Schedule, Training Mode) — matches code but if only Equipment + Schedule were intended to be flagged NEW this iter, consider dropping the Training badge."]},
+      {"screen": "/schedule", "issues": ["14-day grid is anchored at today; shifts created for a date range outside the current window are silently invisible until user navigates via schedule-prev/next. Consider auto-anchoring to the earliest new shift after save, or a toast confirming shift creation with a jump link."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter10_equipment_schedule.py",
+    "/app/test_reports/pytest/iter10_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is now 1957 lines — approaching maintainability threshold. Consider splitting equipment + schedule modules into their own routers (backend/routes/equipment.py, backend/routes/schedule.py).",
+    "/api/schedule GET builds a `window` dict with unused keys ('end_date_lte') before overwriting query with `cond` — the `window` local is dead code; safe to remove.",
+    "Equipment list rig-filter uses `$or: [{rig_id: rig_id}, {rig_id: None}, {rig_id: {'$exists': False}}]` which will return legacy untagged items alongside the requested rig. That's intentional (matches team_items pattern) but users viewing Rig 2 see equipment that was never assigned — worth documenting.",
+    "ScheduleShiftCreate.rotation_days_on/off ignored for non-custom patterns is fine, but _pattern_to_on_off is called 3× per doc during insert (line 1891/1892) — negligible cost but redundant.",
+    "PATCH /users/me: on success returns raw user doc but includes potentially large embedded fields (subscription_status, trial_expires_at) — ok, just note it's an implicit /auth/me subset.",
+    "EquipmentPage KindFields uses `equip-${kind}-${k}` for both text/date/num inputs — duplicates data-testid on `serial_number` (declared both at line 376 and possibly reused). No collision observed but worth auditing.",
+    "CrewSchedule 14-day grid does not auto-scroll to the newly-created shift's start date, causing 'shifts saved but nothing shown' UX confusion (see design_issues)."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter10_equipment_schedule.py"],
+  "success_rate": {"backend": "100% (31/31)", "frontend": "100% of critical flows"},
+  "test_credentials": "session_token=demo_session_dade4ac57f0c496094fde437e8e91f00 (demo.pro@example.com, team_dcb3ba5cfed0). OM- codes NOT redeemed.",
+  "seed_data_creation": "All test rows prefixed TEST_ / UITEST_ and cleaned up via DELETE in fixtures & JS eval. No residual data left in team_dcb3ba5cfed0.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "iter10 backend suite is at /app/backend/tests/test_iter10_equipment_schedule.py — safe to re-run with `pytest backend/tests/test_iter10_equipment_schedule.py -n 0`. Uses env REACT_APP_BACKEND_URL (falls back to /app/frontend/.env). All computed-status inputs are date-relative to _today()_ so the amber/red thresholds keep working over time. Frontend Advisory modal blocks pointer events on first paint — dismiss it before every hub/app interaction. Schedule grid is anchored to today (14-day window); shifts far in the future won't render until schedule-prev/next navigation."
+}
