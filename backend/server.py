@@ -1046,6 +1046,107 @@ async def crew_list(since: Optional[str] = None, user: dict = Depends(require_us
     return {"messages": [_serialize(d) for d in docs], "team_id": team_id}
 
 
+# ============ TEAM HUB — INVENTORY / CONSUMABLES / PARTS ORDERS / TO-DOS ============
+# All four lists live in a single collection (team_items) with a `kind` discriminator so we
+# only maintain one CRUD path. Every item is scoped to team_id and audit-stamped.
+ITEM_KINDS = {"inventory", "consumables", "parts_order", "todo"}
+
+
+class TeamItemCreate(BaseModel):
+    kind: str
+    name: str
+    quantity: Optional[float] = None
+    unit: Optional[str] = None
+    location: Optional[str] = None  # place designation (e.g., "Blue Shed / Rack 3")
+    note: Optional[str] = None
+    status: Optional[str] = None   # inventory: OK|LOW|OOS ; parts: REQUESTED|ORDERED|RECEIVED ; todo: OPEN|DONE
+    priority: Optional[str] = None # todo: LOW|MED|HIGH
+    due_date: Optional[str] = None # ISO
+
+
+class TeamItemUpdate(BaseModel):
+    name: Optional[str] = None
+    quantity: Optional[float] = None
+    unit: Optional[str] = None
+    location: Optional[str] = None
+    note: Optional[str] = None
+    status: Optional[str] = None
+    priority: Optional[str] = None
+    due_date: Optional[str] = None
+
+
+@api_router.get("/team/items/{kind}")
+async def list_team_items(kind: str, user: dict = Depends(require_user)):
+    if kind not in ITEM_KINDS:
+        raise HTTPException(400, f"Invalid kind. Must be one of {sorted(ITEM_KINDS)}")
+    team_id = user.get("team_id")
+    if not team_id:
+        return {"items": [], "team_id": None}
+    docs = await db.team_items.find({"team_id": team_id, "kind": kind}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return {"items": [_serialize(d) for d in docs], "team_id": team_id}
+
+
+@api_router.post("/team/items")
+async def create_team_item(body: TeamItemCreate, user: dict = Depends(require_user)):
+    if body.kind not in ITEM_KINDS:
+        raise HTTPException(400, f"Invalid kind. Must be one of {sorted(ITEM_KINDS)}")
+    team_id = user.get("team_id")
+    if not team_id:
+        raise HTTPException(400, "Join or create a team before adding list items.")
+    if not body.name.strip():
+        raise HTTPException(400, "Name is required.")
+    now = datetime.now(timezone.utc)
+    doc = {
+        "item_id": f"itm_{uuid.uuid4().hex[:12]}",
+        "team_id": team_id,
+        "kind": body.kind,
+        "name": body.name.strip(),
+        "quantity": body.quantity,
+        "unit": body.unit,
+        "location": body.location,
+        "note": body.note,
+        "status": body.status or ("OPEN" if body.kind == "todo" else "OK"),
+        "priority": body.priority or ("MED" if body.kind == "todo" else None),
+        "due_date": body.due_date,
+        "created_by": user["email"],
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.team_items.insert_one(doc)
+    doc.pop("_id", None)
+    return _serialize(doc)
+
+
+@api_router.patch("/team/items/{item_id}")
+async def update_team_item(item_id: str, body: TeamItemUpdate, user: dict = Depends(require_user)):
+    team_id = user.get("team_id")
+    if not team_id:
+        raise HTTPException(400, "No team.")
+    updates = {k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None}
+    if not updates:
+        raise HTTPException(400, "No fields to update.")
+    updates["updated_at"] = datetime.now(timezone.utc)
+    result = await db.team_items.update_one(
+        {"item_id": item_id, "team_id": team_id},
+        {"$set": updates},
+    )
+    if result.matched_count == 0:
+        raise HTTPException(404, "Item not found in your team.")
+    doc = await db.team_items.find_one({"item_id": item_id}, {"_id": 0})
+    return _serialize(doc)
+
+
+@api_router.delete("/team/items/{item_id}")
+async def delete_team_item(item_id: str, user: dict = Depends(require_user)):
+    team_id = user.get("team_id")
+    if not team_id:
+        raise HTTPException(400, "No team.")
+    result = await db.team_items.delete_one({"item_id": item_id, "team_id": team_id})
+    if result.deleted_count == 0:
+        raise HTTPException(404, "Item not found in your team.")
+    return {"success": True, "item_id": item_id}
+
+
 # ============ APP CONFIG ============
 app.include_router(api_router)
 

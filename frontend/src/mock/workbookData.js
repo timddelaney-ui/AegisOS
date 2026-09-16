@@ -432,25 +432,26 @@ export const emergencyProtocols = [
 export const emergencyCategories = ["All", "Well Control", "HSE", "Equipment", "Winter Ops"];
 
 export const getDefaultValue = (param, unitSystem) => {
-  if (param.includes("Stage")) return "1";
-  if (param.includes("Friction Reducer")) return unitSystem === "imp" ? "1.5" : "2.0";
-  if (param.includes("Weight on gauge") || param.includes("tagged")) return unitSystem === "imp" ? "18000" : "8010";
-  if (param.includes("Run-in-hole") || param.includes("run-in-hole")) return unitSystem === "imp" ? "19500" : "8680";
-  if (param.includes("Target Depth") || param.includes("Plug Depth")) return "5000";
-  if (param.includes("Depth") || param.includes("Base")) return "5200";
-  if (param.includes("Stretch")) return unitSystem === "imp" ? "3.5" : "88.9";
-  if (param.includes("Overpull") || param.includes("Up Weight") || param.includes("Surface Wt") || param.includes("Shift Force") || param.includes("Fish Wt") || param.includes("Jar")) return "6500";
-  if (param.includes("String Drag")) return "1200";
-  if (param.includes("Treating P") || param.includes("Firing P") || param.includes("Target P") || param.includes("Surface P")) return unitSystem === "imp" ? "7500" : "51.7";
-  if (param.includes("Vol")) return unitSystem === "imp" ? "25" : "3.97";
-  if (param.includes("Rate")) return unitSystem === "imp" ? "3.5" : "556";
-  if (param.includes("OD")) return unitSystem === "imp" ? "1.5" : "38.1";
-  if (param.includes("Tubing ID") || param.includes("Gun OD")) return unitSystem === "imp" ? "1.25" : "31.75";
-  if (param.includes("CT Wall")) return unitSystem === "imp" ? "0.109" : "2.77";
+  // Specific compound labels FIRST (before generic single-word catch-alls).
   if (param.includes("Upper CT OD")) return unitSystem === "imp" ? "2.0" : "50.8";
   if (param.includes("Taper Depth")) return unitSystem === "imp" ? "8000" : "2440";
   if (param.includes("2nd Casing ID")) return unitSystem === "imp" ? "5.5" : "139.7";
   if (param.includes("2nd Casing MD")) return unitSystem === "imp" ? "8125" : "2477";
+  if (param.includes("CT Wall")) return unitSystem === "imp" ? "0.109" : "2.77";
+  if (param.includes("Target Depth") || param.includes("Plug Depth")) return "5000";
+  if (param.includes("Weight on gauge") || param.includes("tagged")) return unitSystem === "imp" ? "18000" : "8010";
+  if (param.includes("Run-in-hole") || param.includes("run-in-hole")) return unitSystem === "imp" ? "19500" : "8680";
+  if (param.includes("Friction Reducer")) return unitSystem === "imp" ? "1.5" : "2.0";
+  if (param.includes("Treating P") || param.includes("Firing P") || param.includes("Target P") || param.includes("Surface P")) return unitSystem === "imp" ? "7500" : "51.7";
+  if (param.includes("Tubing ID") || param.includes("Gun OD")) return unitSystem === "imp" ? "1.25" : "31.75";
+  if (param.includes("Stage")) return "1";
+  if (param.includes("Depth") || param.includes("Base")) return "5200";
+  if (param.includes("Stretch")) return unitSystem === "imp" ? "3.5" : "88.9";
+  if (param.includes("Overpull") || param.includes("Up Weight") || param.includes("Surface Wt") || param.includes("Shift Force") || param.includes("Fish Wt") || param.includes("Jar")) return "6500";
+  if (param.includes("String Drag")) return "1200";
+  if (param.includes("Vol")) return unitSystem === "imp" ? "25" : "3.97";
+  if (param.includes("Rate")) return unitSystem === "imp" ? "3.5" : "556";
+  if (param.includes("OD")) return unitSystem === "imp" ? "1.5" : "38.1";
   if (param.includes("Casing")) return unitSystem === "imp" ? "4.5" : "114.3";
   if (param.includes("Viscosity")) return "35";
   if (param.includes("Density") || param.includes("Slurry Wt")) return unitSystem === "imp" ? "9.5" : "1138";

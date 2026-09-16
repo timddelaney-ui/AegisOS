@@ -1,0 +1,36 @@
+{
+  "summary": "Iteration 4 — full backend + frontend regression for the AI-fix + wall-thickness + tapered-string + multi-casing changes. Backend: 4/4 pytest passes (AI chat, Pro auth, invalid-mode, unauth rejection). Frontend: All 🎯 rows present, tapered-CT and multi-casing branches trigger correctly when parameters exceed the taper/2nd-casing depth, warnings appear, CT Wall replaces CT ID on 6/7 CT sheets, Sand_Cleanout intentionally uses Tubing OD (no CT-wall needed), AI panel shows response bubble with ACTION NOW / WHY DETAILS parsed and details toggle works, negative numeric inputs accepted, metric mode works. Two ordering bugs found in getDefaultValue that neutralise the tapered-CT feature with defaults.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "workbookData.getDefaultValue", "issue": "Order-of-precedence bug: `param.includes('OD')` and `param.includes('Depth')` are evaluated BEFORE the more specific `param.includes('Upper CT OD')` and `param.includes('Taper Depth')` branches. Result: Upper CT OD default resolves to 1.5 in / 38.1 mm (same as CT OD), and Taper Depth default resolves to 5200 (same as Depth). The tapered-string feature therefore has NO meaningful defaults — users see 'lower 1.50\" × … + upper 1.50\" × …' with taper depth == current depth. Fix: move the Upper CT OD, Taper Depth, Tubing ID/Gun OD, CT Wall, 2nd Casing ID/MD checks ABOVE the generic OD/Depth/Casing catch-alls (or make the generic ones use exact-word regex).", "selector": "/app/frontend/src/mock/workbookData.js getDefaultValue", "priority": "HIGH"},
+      {"component": "Sand_Cleanout sheet", "issue": "Sand_Cleanout has no 'CT Wall' input row — it still uses generic 'Tubing OD'. The review-request line 'Every CT sheet MUST show a CT Wall input' includes Sand_Cleanout in the enumeration. calc_Sand_Cleanout does not call deriveCT_ID so calculations succeed, but the sheet is inconsistent with the rest of the CT family. Decide whether to add 'CT Wall' + rename 'Tubing OD' → 'CT OD' for consistency, or exclude Sand_Cleanout from the requirement.", "selector": "workbookData.Sand_Cleanout.imp/met", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_ai_and_workbook.py",
+    "/app/test_reports/pytest/iter4_backend.xml"
+  ],
+  "action_items": [
+    "Reorder getDefaultValue conditions in /app/frontend/src/mock/workbookData.js so specific keys ('Upper CT OD', 'Taper Depth', 'Tubing ID', 'Gun OD', 'CT Wall', '2nd Casing ID', '2nd Casing MD') are checked BEFORE the catch-all 'OD'/'Depth'/'Casing' branches. Without this fix the tapered-string feature is inert with default values.",
+    "Decide on Sand_Cleanout: either add 'CT Wall' + rename 'Tubing OD' → 'CT OD' to align with the other CT sheets, or document that Sand_Cleanout uses only outer-tubing dimensions."
+  ],
+  "critical_code_review_comments": [
+    "getDefaultValue in workbookData.js uses ordered `param.includes(...)` — this pattern is fragile and already produced 2 shadowing bugs. Recommend a `RULES = [{match: /^Upper CT OD/, imp: '2.0', met: '50.8'}, …]` array iterated in order, or an explicit label→value map keyed on the exact label string.",
+    "formulas.js is 957 lines — approaching the 700-line soft limit. Consider splitting per-sheet calculators into their own files (e.g., calc/pill_spotting.js) to improve maintainability.",
+    "In taperedCT() the fallback path assumes upper section uses the same wall thickness as the lower — code hard-codes 0.109 in when 'ct wall' is null. This is fine but should be surfaced as a UI note when the tapered branch is engaged.",
+    "In grab(), unit-hint parsing uses substring matches like `(m)` — the ordering `if (l.includes('(mm)')) return conv.mm_to_in(raw)` correctly precedes the `(m)` check, but this pattern is fragile if a label like 'MPa' or 'min' were added later. Consider explicit unit tokens."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_ai_and_workbook.py"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "85%"},
+  "test_credentials": "Pro cookie session_token=demo_session_dade4ac57f0c496094fde437e8e91f00 (already provisioned as active Pro).",
+  "seed_data_creation": "None — used existing demo_pro_user.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend AI chat is verified working (POST /api/ai/chat returns 200 with Gemini response in <5s using demo pro session). Frontend all 🎯 rows present on Pill_Spotting and Sand_Cleanout. Two ordering bugs in getDefaultValue mean tapered-CT is inert on defaults; verify by opening Pill_Spotting and checking that Upper CT OD default is 2.0 in (imp) / 50.8 mm (met) and Taper Depth default is 8000 ft / 2440 m — currently both echo the generic OD/Depth defaults (1.5 / 5200). Ordering-fix must place specific branches before generic ones. Regression on WOB (RIH − tagged = 1500 lb), Friction Reducer, Skipper CrewChat and Watchdog were NOT re-tested in this iteration but were fully verified in iteration_3 and no relevant code paths changed.",
+  "rca of the issue": "getDefaultValue is a serial `if (param.includes('X')) return …` chain. 'Upper CT OD (in)' contains substring 'OD', so the earlier `param.includes('OD')` branch matches first and returns '1.5' before the more-specific 'Upper CT OD' branch is reached. Same shadowing hits 'Taper Depth' (masked by 'Depth'). Reproduction: open Pill_Spotting → observe Upper CT OD input pre-filled to 1.5 in and Taper Depth to 5200 ft (should be 2.0 and 8000). Fix: reorder rules — specific-first — or convert to a dictionary keyed on exact label."
+}

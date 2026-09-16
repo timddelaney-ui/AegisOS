@@ -2,8 +2,17 @@ import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { API, useAuth } from "../context/AuthContext";
-import { ArrowLeft, Users, Copy, Check, LogOut, Plus, Loader2 } from "lucide-react";
+import { ArrowLeft, Users, Copy, Check, LogOut, Plus, Loader2, MessageSquare, Package, Beaker, Wrench, ListChecks } from "lucide-react";
 import CrewChat from "../components/CrewChat";
+import TeamItemsList from "../components/TeamItemsList";
+
+const HUB_TABS = [
+  { id: "chat",        label: "Chat",        Icon: MessageSquare },
+  { id: "inventory",   label: "Inventory",   Icon: Package },
+  { id: "consumables", label: "Consumables", Icon: Beaker },
+  { id: "parts_order", label: "Parts",       Icon: Wrench },
+  { id: "todo",        label: "To-Do",       Icon: ListChecks },
+];
 
 const TeamPage = () => {
   const navigate = useNavigate();
@@ -12,6 +21,7 @@ const TeamPage = () => {
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState("choose"); // choose | create | join
   const [teamName, setTeamName] = useState("");
+  const [hubTab, setHubTab] = useState("chat");
   const [inviteCode, setInviteCode] = useState("");
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState(null);
@@ -80,6 +90,7 @@ const TeamPage = () => {
           {loading ? (
             <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-[#107C41]" /></div>
           ) : team ? (
+            <>
             <div className="bg-white border border-[#D4D4D4] rounded-lg shadow-sm p-5">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded bg-[#107C41] flex items-center justify-center">
@@ -120,8 +131,35 @@ const TeamPage = () => {
               <button onClick={leaveTeam} className="mt-5 w-full flex items-center justify-center gap-2 border border-[#F5C6CB] hover:bg-[#FFF5F5] text-[#C00000] py-2 rounded text-sm font-semibold">
                 <LogOut className="w-4 h-4" /> Leave Team
               </button>
-              <CrewChat currentUserId={user?.user_id} />
             </div>
+
+            {/* TEAM HUB — tabs: Chat / Inventory / Consumables / Parts / To-Do */}
+            <div className="mt-4">
+              <div data-testid="team-hub-tabs" className="flex gap-1 bg-white border border-[#D4D4D4] rounded-t-lg overflow-x-auto p-1">
+                {HUB_TABS.map((t) => {
+                  const active = hubTab === t.id;
+                  const Icon = t.Icon;
+                  return (
+                    <button
+                      key={t.id}
+                      data-testid={`team-hub-tab-${t.id}`}
+                      onClick={() => setHubTab(t.id)}
+                      className={`flex-1 min-w-0 flex items-center justify-center gap-1 px-2 py-1.5 rounded text-[11px] font-bold uppercase whitespace-nowrap ${
+                        active ? "bg-[#107C41] text-white" : "text-[#595959] hover:bg-[#F0F9F3]"
+                      }`}
+                    >
+                      <Icon className="w-3.5 h-3.5" strokeWidth={2.5} />
+                      <span>{t.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="border border-t-0 border-[#D4D4D4] rounded-b-lg bg-white p-2">
+                {hubTab === "chat" && <CrewChat currentUserId={user?.user_id} />}
+                {hubTab !== "chat" && <TeamItemsList kind={hubTab} />}
+              </div>
+            </div>
+            </>
           ) : mode === "choose" ? (
             <div className="space-y-3">
               <div className="bg-white border border-[#D4D4D4] rounded-lg p-5 text-center">

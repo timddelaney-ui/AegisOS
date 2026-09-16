@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
-import { Pin, BarChart3, Play, CheckCircle2, Save, Sparkles, Brain } from "lucide-react";
+import { Pin, Play, Save, Sparkles, Brain } from "lucide-react";
 import axios from "axios";
 import { workbookData, getDefaultValue } from "../mock/workbookData";
-import SvgSchematic from "./SvgSchematic";
 import SaveJobDialog from "./SaveJobDialog";
 import ResultsPanel from "./ResultsPanel";
 import AIPanel from "./AIPanel";
@@ -187,22 +186,6 @@ const SheetContent = ({ sheetKey, unitSystem, onUnitChange, initialValues, hasTe
         >
           <Sparkles className="w-4 h-4" strokeWidth={2.5} /> Draft Job Program
         </button>
-      </div>
-
-      <div className="bg-white border border-[#D4D4D4] rounded p-2.5 shadow-sm">
-        <div className="text-[11px] font-bold text-[#107C41] mb-1.5 uppercase flex items-center gap-1.5">
-          <BarChart3 className="w-3 h-3" strokeWidth={2.5} />
-          Live Simulation Diagram // {data.title.toUpperCase()}
-        </div>
-        <div ref={canvasRef} className="bg-[#FAFAFA] border border-[#E0E0E0] rounded h-[140px] flex items-center justify-center relative overflow-hidden">
-          <SvgSchematic sheetKey={sheetKey} results={results} />
-          {showAlert && (
-            <div className="absolute top-2.5 right-2.5 bg-[#D4EDDA] text-[#155724] border border-[#28A745] px-2 py-1 text-[10px] font-bold rounded-sm flex items-center gap-1 animate-in fade-in duration-200">
-              <CheckCircle2 className="w-3 h-3" strokeWidth={3} />
-              MACRO PASS: API VERIFIED
-            </div>
-          )}
-        </div>
       </div>
 
       <div className="grid grid-cols-4 gap-2">
