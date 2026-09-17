@@ -1,0 +1,29 @@
+{
+  "summary": "Iter 13 — Emergent Object Storage attachments + Handover 'Safety alerts' removal. 15/15 backend tests pass (upload PNG, list, download cookie+query auth, 413 size cap, 400 MIME cap for .exe/.txt, 401 unauth, soft-delete + 404, handover-summary alerts=[] with completed_tasks/inventory_flags/chat_notes still present, prior endpoints regression). Frontend Playwright confirmed: Equipment row Files button opens uploader, PNG upload renders thumbnail, client-side 20MB validation shows 'Too big (20.0 MB). Max 15 MB.' inline (no server hit), delete removes thumb immediately. HandoverModal contains 'Handover attachments' section with uploader and NO 'Safety alerts' section. CrewChat uploader mounted. RigChecklists paperclip appears only after item is checked and opens per-item uploader. Startup log shows 'Object storage initialized.' Cross-team 403 not directly exercised (no second-team session available); covered indirectly via 401 unauth test and code path.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter13_attachments_handover.py",
+    "/app/test_reports/pytest/iter13.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is 2199 lines — approaching maintainability limit; consider splitting attachments router into modules/attachments.py in a future iteration.",
+    "Query-param auth (?auth=<session_token>) is convenient for <img src> but leaks the raw session token into browser history, referrer headers, and any proxy logs. Consider signed short-lived download tokens (HMAC of attachment_id+exp) instead. Frontend already uses blob-fetch pattern to avoid it — good — so this endpoint is effectively a fallback and could be locked down further.",
+    "download_attachment returns 200 with Cache-Control: private, max-age=300 but no ETag/Last-Modified; adding these would let browsers 304 on re-fetch after blob URL revoke.",
+    "Attachment list endpoint has no pagination (to_list(500) hard cap) — will silently truncate for busy teams; add cursor or skip/limit before hitting the cap in prod.",
+    "No max file count per context — a rig with 10k attachments will slow both the list endpoint and the AttachmentUploader gallery. Consider rate-limit/quota per team.",
+    "Cross-team 403 branch in download_attachment is present but not covered by an integration test; a follow-up should add a second team fixture.",
+    "Uploader gallery filter uses only context+context_ref (equipment) or rig_id (chat) — chat gallery will show ALL attachments for the rig from any context, not just chat. If that's intentional confirm with product; else scope by context=chat too.",
+    "attachments.updated_at is set on insert but never on delete or edits; if edits are added later, ensure it's touched."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter13_attachments_handover.py"
+  ],
+  "success_rate": {"backend": "100% (15/15)", "frontend": "100% of user-facing checks"},
+  "test_credentials": "demo_session_dade4ac57f0c496094fde437e8e91f00 (demo.pro@example.com, team_dcb3ba5cfed0)",
+  "seed_data_creation": "Test suite uploaded 2 small PNGs (attachments retained in DB — one dedicated attachment was soft-deleted by the delete test). Also created 1 'TEST Engine Uploader' engine equipment row from the frontend test if none existed.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Attachments router lives at /api/attachments (POST list/upload, GET list, GET /{id}/download with ?auth= fallback, DELETE soft). Storage path: ctpocket/team/{team_id}/{context}/{attachment_id}.{ext}. Frontend components: AttachmentUploader (with AttachmentThumb blob-fetch), embedded in EquipmentPage row, CrewChat, HandoverModal, RigChecklists. Handover Safety alerts section fully removed from UI and server (alerts=[] always). Backend tests: /app/backend/tests/test_iter13_attachments_handover.py — use as regression."
+}

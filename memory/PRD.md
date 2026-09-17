@@ -59,6 +59,7 @@ Build a pixel-perfect, mobile-friendly clone of an Excel spreadsheet for Coiled 
 - **checklist_events** — rig-scoped audit log of every checklist check/uncheck: rig_id, tier (safety|ops|pm), item_id, item_label, cadence, action, user_id, user_name, user_email, created_at
 - **equipment_items** — team+rig scoped equipment: kind ∈ {engine, injector, lifting, bop_pce, reel_iron}, name, serial_number, kind-specific fields (current_hours / service_interval_hours / cert_expiry_date / last_test_date / working_pressure_psi / etc.), history[] audit trail
 - **crew_shifts** — team+rig scoped shift rows: crew_member_name, role, tour (day|night), start_date, end_date, pattern (one_off|14/14|20/10|7/7|custom), rotation_days_on/off, note
+- **attachments** — team+context scoped file metadata: attachment_id, context (equipment|chat|handover|checklist), context_ref, rig_id, filename, storage_path (`ctpocket/team/{team_id}/{context}/{id}.{ext}`), content_type, size, kind (image|pdf), uploader info, is_deleted (soft-delete)
 
 ## API Endpoints
 ### Auth / Users
@@ -100,11 +101,17 @@ Build a pixel-perfect, mobile-friendly clone of an Excel spreadsheet for Coiled 
 - PATCH `/api/schedule/{shift_id}`, DELETE `/api/schedule/{shift_id}`
 ### User Preferences
 - PATCH `/api/users/me` — currently supports `service_view` (coil_tubing | stand_alone_frac | coil_tools | all)
+### Attachments (Emergent Object Storage)
+- POST `/api/attachments` (multipart: file, context, context_ref?, rig_id?, caption?) — upload 1 file ≤15 MB
+- GET `/api/attachments?context=&context_ref=&rig_id=` — list (excludes soft-deleted)
+- GET `/api/attachments/{id}/download` — file bytes (cookie or `?auth=<session_token>` for `<img src>`)
+- DELETE `/api/attachments/{id}` — soft-delete (uploader or admin only)
 ### Public
 - `/robots.txt`, `/sitemap.xml` — SEO
 
 ## Changelog (recent)
-- **Feb 2026 (iter 12)**: Team Hub redesigned as a big-tile grid (Crew Chat, Rig Checks, Inventory, Consumables, Parts Order, To-Do) — mobile-friendly, colour-coded, matches the main Hub look. Cramped 6-tab strip retired. Crew Schedule now colour-codes shifts **per crew member** (deterministic hash of name → 20-colour palette) with initials avatars — managers instantly see who's on which rig. Legend renders the crew-name → colour map dynamically. Verified all 23 lifetime codes (20 CT- + 3 OM-) still redeem end-to-end (grant_days=3650, OM promotes to ops_manager). Feedback POST + list confirmed working.
+- **Feb 2026 (iter 13)**: Emergent Object Storage integration — file & media uploads (JPG/PNG/HEIC/WEBP/PDF, 15 MB max) wired to 4 contexts: equipment records, crew chat, handover summary, checklist evidence. `AttachmentUploader` component with blob-fetch thumbnails (cookies never leak to `<img src>`), team-scoped access + soft-delete. Removed the calculation-driven Safety Alerts section from the Handover Summary per user feedback (alerts still visible in Crew Chat + Manager Dashboard). Backend 15/15 pytest pass, frontend end-to-end green.
+- **Feb 2026 (iter 12)**: Team Hub redesigned as a big-tile grid, Crew Schedule now colour-codes per crew member. All 23 lifetime codes (20 CT + 3 OM) verified redeemable.
 - **Feb 2026 (iter 11)**: Code-review cleanup — random→secrets for invite codes, `_compute_equipment_status` refactor, AuthContext/RigContext value memoisation, stable React keys, logged silent catches. 36/36 pytest pass.
 - **Feb 2026 (iter 9)**: Ops Manager + Field Manager role system. `/api/manager/dashboard`, `/manager` page, Cape Breton ManagerGreeting modal, `grant_role` on invite codes, 3 lifetime OM- codes seeded.
 - **Feb 2026 (iter 8)**: 25 rigs + Yard with searchable RigSelector dropdown. Rig-scoped chat + safety alerts. Server-persisted checklist events. `/api/crew/activity-summary` powers unread red dots. New Handover Modal with Copy-to-Clipboard. 20 lifetime invite codes seeded.
