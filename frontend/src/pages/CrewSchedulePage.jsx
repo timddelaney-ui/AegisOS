@@ -179,8 +179,8 @@ const CrewSchedulePage = () => {
                 <thead>
                   <tr>
                     <th className="text-left px-2 py-1.5 bg-[#F9FAFB] border-b border-[#E5E7EB] sticky left-0">Crew / Role</th>
-                    {days.map((d, i) => (
-                      <th key={i} className={`text-center px-1 py-1 bg-[#F9FAFB] border-b border-[#E5E7EB] font-normal ${[0,6].includes(d.getDay()) ? "text-[#C00000]" : "text-[#262626]"}`} style={{ minWidth: 34 }}>
+                    {days.map((d) => (
+                      <th key={isoDate(d)} className={`text-center px-1 py-1 bg-[#F9FAFB] border-b border-[#E5E7EB] font-normal ${[0,6].includes(d.getDay()) ? "text-[#C00000]" : "text-[#262626]"}`} style={{ minWidth: 34 }}>
                         <div className="text-[9px] uppercase">{d.toLocaleDateString(undefined, { weekday: "short" })}</div>
                         <div className="text-[10px] font-bold">{d.getDate()}</div>
                       </th>
@@ -200,10 +200,10 @@ const CrewSchedulePage = () => {
                         <div>{r.name}</div>
                         <div className="text-[9px] font-semibold uppercase" style={{ color: ROLE_COLOR[r.role] || "#0D6535" }}>{r.role}</div>
                       </td>
-                      {days.map((d, i) => {
+                      {days.map((d) => {
                         const covering = r.shifts.filter((s) => shiftCoversDay(s, d));
                         return (
-                          <td key={i} className="p-0 border-l border-[#F0F0F0] align-middle">
+                          <td key={isoDate(d)} className="p-0 border-l border-[#F0F0F0] align-middle">
                             {covering.length === 0 ? (
                               <div className="h-6" />
                             ) : (

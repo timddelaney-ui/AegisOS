@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { API } from "./AuthContext";
 
@@ -27,28 +27,41 @@ const RigContext = createContext({
 });
 
 function readLastSeen() {
-  try { return JSON.parse(localStorage.getItem(LAST_SEEN_KEY) || "{}"); } catch { return {}; }
+  try { return JSON.parse(localStorage.getItem(LAST_SEEN_KEY) || "{}"); }
+  catch (e) { console.warn("RigContext: last-seen read failed", e?.message); return {}; }
 }
 function writeLastSeen(v) {
-  try { localStorage.setItem(LAST_SEEN_KEY, JSON.stringify(v)); } catch {}
+  try { localStorage.setItem(LAST_SEEN_KEY, JSON.stringify(v)); }
+  catch (e) { console.warn("RigContext: last-seen write failed", e?.message); }
 }
 
 export const RigProvider = ({ children }) => {
   const [rigId, setRigIdState] = useState(() => {
-    try { return localStorage.getItem(STORAGE_KEY) || "RIG1"; } catch { return "RIG1"; }
+    try { return localStorage.getItem(STORAGE_KEY) || "RIG1"; }
+    catch (e) { console.warn("RigContext: active-rig read failed", e?.message); return "RIG1"; }
   });
   const [activity, setActivity] = useState({}); // { [rigId]: { last_chat_at, last_checklist_at } }
   const [lastSeen, setLastSeen] = useState(readLastSeen);
   const timerRef = useRef(null);
 
-  useEffect(() => { try { localStorage.setItem(STORAGE_KEY, rigId); } catch {} }, [rigId]);
-  const setRigId = (id) => { if (RIGS.some((r) => r.id === id)) setRigIdState(id); };
+  useEffect(() => {
+    try { localStorage.setItem(STORAGE_KEY, rigId); }
+    catch (e) { console.warn("RigContext: active-rig write failed", e?.message); }
+  }, [rigId]);
+  const setRigId = useCallback((id) => {
+    if (RIGS.some((r) => r.id === id)) setRigIdState(id);
+  }, []);
 
   const fetchActivity = useCallback(async () => {
     try {
       const { data } = await axios.get(`${API}/crew/activity-summary`, { withCredentials: true });
       setActivity(data?.rigs || {});
-    } catch { /* silent — solo mode / not signed in */ }
+    } catch (e) {
+      // Not signed in / solo mode — activity summary requires auth+team. Log at debug volume only.
+      if (e?.response?.status && e.response.status !== 401) {
+        console.debug("RigContext: activity-summary fetch failed", e.response.status);
+      }
+    }
   }, []);
 
   useEffect(() => {
@@ -74,11 +87,12 @@ export const RigProvider = ({ children }) => {
     return { chat: Boolean(chat), checklist: Boolean(checklist) };
   }, [activity, lastSeen]);
 
-  return (
-    <RigContext.Provider value={{ rigId, setRigId, activity, lastSeen, markSeen, unreadFor, refreshActivity: fetchActivity }}>
-      {children}
-    </RigContext.Provider>
+  const value = useMemo(
+    () => ({ rigId, setRigId, activity, lastSeen, markSeen, unreadFor, refreshActivity: fetchActivity }),
+    [rigId, setRigId, activity, lastSeen, markSeen, unreadFor, fetchActivity]
   );
+
+  return <RigContext.Provider value={value}>{children}</RigContext.Provider>;
 };
 
 export const useRig = () => useContext(RigContext);

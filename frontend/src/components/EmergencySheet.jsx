@@ -89,7 +89,7 @@ const EmergencyCard = ({ protocol }) => {
             </h4>
             <ol className="space-y-1 pl-0">
               {protocol.immediate.map((step, i) => (
-                <li key={i} className="flex gap-2 text-[12px] text-[#333] leading-relaxed">
+                <li key={step} className="flex gap-2 text-[12px] text-[#333] leading-relaxed">
                   <span className="flex-shrink-0 w-4 h-4 rounded-sm bg-[#C00000] text-white text-[9px] font-bold flex items-center justify-center mt-0.5">
                     {i + 1}
                   </span>
@@ -105,8 +105,8 @@ const EmergencyCard = ({ protocol }) => {
               Operator Actions · OH&amp;S / Safe Work Practice
             </h4>
             <ul className="space-y-1 pl-0">
-              {protocol.operator.map((step, i) => (
-                <li key={i} className="flex gap-2 text-[12px] text-[#333] leading-relaxed">
+              {protocol.operator.map((step) => (
+                <li key={step} className="flex gap-2 text-[12px] text-[#333] leading-relaxed">
                   <span className="flex-shrink-0 w-1 h-1 rounded-full bg-[#0D6535] mt-2" />
                   <span>{step}</span>
                 </li>

@@ -168,9 +168,9 @@ const AIPanel = ({ open, onClose, contextBuilder, initialMode = "assistant" }) =
           {messages.length === 0 && (
             <div className="space-y-1.5">
               <p className="text-[11px] text-[#595959] font-semibold mb-1">Quick prompts:</p>
-              {(quickPrompts[mode] || []).map((q, i) => (
+              {(quickPrompts[mode] || []).map((q) => (
                 <button
-                  key={i}
+                  key={q}
                   onClick={() => send(q)}
                   className="w-full text-left text-[12px] bg-white border border-[#D4D4D4] hover:border-[#107C41] hover:bg-[#F0F9F3] rounded px-2.5 py-1.5 text-[#333]"
                 >
@@ -180,12 +180,15 @@ const AIPanel = ({ open, onClose, contextBuilder, initialMode = "assistant" }) =
             </div>
           )}
           {messages.map((m, i) => {
+            // Messages are append-only within a session; using role+index gives a stable enough
+            // key without requiring an id from the server.
+            const key = m.id || `${m.role}-${i}`;
             if (m.role === "assistant" && !m.error) {
-              return <AIMessage key={i} content={m.content} />;
+              return <AIMessage key={key} content={m.content} />;
             }
             return (
               <div
-                key={i}
+                key={key}
                 className={`px-2.5 py-2 rounded text-[12px] leading-relaxed whitespace-pre-wrap ${
                   m.role === "user"
                     ? "bg-[#107C41] text-white ml-6 self-end"

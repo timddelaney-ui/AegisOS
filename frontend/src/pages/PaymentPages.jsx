@@ -33,7 +33,10 @@ export const PaymentSuccess = () => {
           if (!cancelled) setStatus("failed");
           return;
         }
-      } catch (e) {}
+      } catch (e) {
+        // Transient — will retry on the next tick; only warn to avoid noisy console during retries.
+        console.debug("Payment status poll failed (will retry):", e?.response?.status || e?.message);
+      }
       if (attempts >= 20) {
         if (!cancelled) setStatus("timeout");
         return;

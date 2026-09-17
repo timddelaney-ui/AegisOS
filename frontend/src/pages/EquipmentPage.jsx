@@ -196,7 +196,7 @@ const ItemRow = ({ item, kind, onLog, onDelete }) => {
           <div className="text-[11px] text-[#595959] mt-0.5 flex flex-wrap items-center gap-1.5">{bodyBits}</div>
           {item.reasons?.length > 0 && (
             <div className="mt-1 flex flex-wrap gap-1">
-              {item.reasons.map((r, i) => <span key={i} className="text-[10px] bg-[#FFF3CD] text-[#856404] px-1.5 py-[1px] rounded">{r}</span>)}
+              {item.reasons.map((r) => <span key={`${item.item_id}-${r}`} className="text-[10px] bg-[#FFF3CD] text-[#856404] px-1.5 py-[1px] rounded">{r}</span>)}
             </div>
           )}
           {item.note && <div className="text-[11px] text-[#444] mt-0.5 italic">{item.note}</div>}

@@ -43,12 +43,15 @@ function loadState(rigId, kind) {
   try {
     const raw = localStorage.getItem(KEY(rigId, kind));
     if (raw) return JSON.parse(raw);
-  } catch {}
+  } catch (e) {
+    console.warn("Checklist: read failed", e?.message);
+  }
   // First visit for this rig → seed with the default library, all unchecked
   return DEFAULT_LIB[kind].map((it) => ({ ...it, checked: false, lastCheckedAt: null, lastCheckedBy: null, custom: false }));
 }
 function saveState(rigId, kind, items) {
-  try { localStorage.setItem(KEY(rigId, kind), JSON.stringify(items)); } catch {}
+  try { localStorage.setItem(KEY(rigId, kind), JSON.stringify(items)); }
+  catch (e) { console.warn("Checklist: write failed", e?.message); }
 }
 
 const ChecklistTier = ({ kind, expanded, onToggle }) => {
@@ -73,7 +76,10 @@ const ChecklistTier = ({ kind, expanded, onToggle }) => {
       );
       markSeen(rigId, "checklist");
       refreshActivity && refreshActivity();
-    } catch { /* solo mode or offline — local state still tracks it */ }
+    } catch (e) {
+      // Solo mode or offline — local state still tracks the check-off; log for debug only.
+      console.debug("Checklist: server sync failed", e?.response?.status || e?.message);
+    }
   };
 
   const toggleItem = (id) => {

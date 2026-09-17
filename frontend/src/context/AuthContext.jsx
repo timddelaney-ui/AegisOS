@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useState, useCallback } from "react";
 import axios from "axios";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -38,16 +38,19 @@ export const AuthProvider = ({ children }) => {
   const logout = async () => {
     try {
       await axios.post(`${API}/auth/logout`, {}, { withCredentials: true });
-    } catch (e) {}
+    } catch (e) {
+      console.warn("Logout call failed (session may already be gone):", e?.message);
+    }
     setUser(null);
     window.location.href = "/";
   };
 
-  return (
-    <AuthContext.Provider value={{ user, setUser, loading, checkAuth, logout }}>
-      {children}
-    </AuthContext.Provider>
+  const value = useMemo(
+    () => ({ user, setUser, loading, checkAuth, logout }),
+    [user, loading, checkAuth]
   );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
 export { API, BACKEND_URL };

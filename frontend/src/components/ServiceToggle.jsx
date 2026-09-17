@@ -7,9 +7,13 @@ import { SERVICES } from "../lib/serviceCatalog";
 const STORAGE_KEY = "ctp_service_view_v1";
 
 const readLocal = () => {
-  try { return localStorage.getItem(STORAGE_KEY) || null; } catch { return null; }
+  try { return localStorage.getItem(STORAGE_KEY) || null; }
+  catch (e) { console.warn("ServiceToggle: read failed", e?.message); return null; }
 };
-const writeLocal = (v) => { try { localStorage.setItem(STORAGE_KEY, v); } catch {} };
+const writeLocal = (v) => {
+  try { localStorage.setItem(STORAGE_KEY, v); }
+  catch (e) { console.warn("ServiceToggle: write failed", e?.message); }
+};
 
 export const useServiceView = () => {
   const { user, setUser } = useAuth();
@@ -27,7 +31,10 @@ export const useServiceView = () => {
       try {
         const { data } = await axios.patch(`${API}/users/me`, { service_view: id }, { withCredentials: true });
         setUser && setUser(data);
-      } catch { /* offline — local still wins */ }
+      } catch (e) {
+        // Offline / not signed in — localStorage keeps the pick.
+        console.debug("ServiceToggle: server sync failed", e?.response?.status || e?.message);
+      }
     }
   };
 

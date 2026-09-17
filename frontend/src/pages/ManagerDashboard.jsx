@@ -85,7 +85,8 @@ const ManagerDashboard = () => {
     try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 2500); }
     catch {
       const ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta); ta.select();
-      try { document.execCommand("copy"); setCopied(true); setTimeout(() => setCopied(false), 2500); } catch {}
+      try { document.execCommand("copy"); setCopied(true); setTimeout(() => setCopied(false), 2500); }
+      catch (err) { console.warn("Clipboard copy fallback failed:", err?.message); }
       document.body.removeChild(ta);
     }
   };

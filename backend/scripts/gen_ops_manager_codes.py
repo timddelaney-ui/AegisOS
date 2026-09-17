@@ -1,5 +1,5 @@
 """Seed 3 lifetime Ops Manager invite codes (grant_days=3650, grant_role='ops_manager')."""
-import asyncio, os, random
+import asyncio, os, secrets
 from datetime import datetime, timezone
 from motor.motor_asyncio import AsyncIOMotorClient
 from dotenv import load_dotenv
@@ -12,7 +12,7 @@ db = client[os.environ["DB_NAME"]]
 
 def new_code():
     alpha = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-    p = lambda: "".join(random.choices(alpha, k=4))
+    p = lambda: "".join(secrets.choice(alpha) for _ in range(4))
     return f"OM-{p()}-{p()}"
 
 

@@ -8,6 +8,7 @@ import logging
 import uuid
 import string
 import random
+import secrets
 import httpx
 import stripe
 from pathlib import Path
@@ -123,7 +124,8 @@ async def require_user(user: Optional[dict] = Depends(get_current_user)) -> dict
 
 
 def _generate_invite_code(length=8) -> str:
-    return "".join(random.choices(string.ascii_uppercase + string.digits, k=length))
+    # Cryptographically-secure so codes can't be guessed / brute-forced.
+    return "".join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(length))
 
 
 def _serialize(doc: dict) -> dict:
@@ -754,9 +756,9 @@ async def admin_whoami(user: dict = Depends(require_user)):
 
 # ============ INVITE CODE ROUTES ============
 def _new_invite_code():
-    # Human-friendly: CT-XXXX-XXXX, avoids ambiguous chars
+    # Human-friendly: CT-XXXX-XXXX, avoids ambiguous chars. Cryptographically-secure.
     alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-    part = lambda: "".join(random.choices(alphabet, k=4))
+    part = lambda: "".join(secrets.choice(alphabet) for _ in range(4))
     return f"CT-{part()}-{part()}"
 
 
@@ -1592,60 +1594,79 @@ def _iso_date(v):
         return None
 
 
+def _engine_status(doc: dict) -> Optional[tuple]:
+    curr = doc.get("current_hours")
+    if curr is None:
+        return None
+    last_svc = doc.get("last_service_hours") or 0
+    interval = doc.get("service_interval_hours") or 250
+    hours_left = (last_svc + interval) - curr
+    if hours_left <= 0:
+        return "red", f"Service overdue by {abs(hours_left):.0f} h (interval {interval:.0f} h)."
+    if hours_left <= 50:
+        return "amber", f"Service due in {hours_left:.0f} h."
+    return None
+
+
+def _lifting_status(doc: dict) -> Optional[tuple]:
+    exp = _iso_date(doc.get("cert_expiry_date"))
+    if not exp:
+        return None
+    days_left = (exp - datetime.now(timezone.utc)).days
+    if days_left < 0:
+        return "expired", f"Certification expired {abs(days_left)} day(s) ago."
+    if days_left <= 7:
+        return "red", f"Cert expires in {days_left} day(s) — pull from service after next use."
+    if days_left <= 30:
+        return "amber", f"Cert expires in {days_left} day(s)."
+    return None
+
+
+def _bop_status(doc: dict) -> Optional[tuple]:
+    last = _iso_date(doc.get("last_test_date"))
+    interval_m = doc.get("test_interval_months") or 6
+    if not last:
+        return "amber", "No test date on file — schedule a function + pressure test."
+    due = last + timedelta(days=int(interval_m * 30.44))
+    days_left = (due - datetime.now(timezone.utc)).days
+    if days_left < 0:
+        return "red", f"Test overdue by {abs(days_left)} day(s) (AER Dir 037)."
+    if days_left <= 14:
+        return "amber", f"Test due in {days_left} day(s)."
+    return None
+
+
+def _reel_iron_status(doc: dict) -> Optional[tuple]:
+    mawp = doc.get("working_pressure_psi")
+    curr = doc.get("current_pressure_psi")
+    if not (mawp and curr and mawp > 0):
+        return None
+    pct = (curr / mawp) * 100.0
+    if pct >= 100:
+        return "red", f"At/over MAWP ({pct:.0f}% of {mawp:.0f} psi)."
+    if pct >= 90:
+        return "amber", f"At {pct:.0f}% MAWP — reduce pressure or upgrade iron."
+    return None
+
+
+_STATUS_CALCULATORS = {
+    "engine":    _engine_status,
+    "lifting":   _lifting_status,
+    "bop_pce":   _bop_status,
+    "reel_iron": _reel_iron_status,
+}
+
+
 def _compute_equipment_status(doc: dict) -> Dict[str, Any]:
     """Server-side status flags — returned alongside every equipment doc."""
-    now = datetime.now(timezone.utc)
-    kind = doc.get("kind")
-    status = "ok"     # ok | amber | red | expired
-    reasons: List[str] = []
-
-    if kind == "engine":
-        curr = doc.get("current_hours")
-        last_svc = doc.get("last_service_hours") or 0
-        interval = doc.get("service_interval_hours") or 250
-        if curr is not None:
-            due_at = last_svc + interval
-            hours_left = due_at - curr
-            if hours_left <= 0:
-                status = "red"; reasons.append(f"Service overdue by {abs(hours_left):.0f} h (interval {interval:.0f} h).")
-            elif hours_left <= 50:
-                status = "amber"; reasons.append(f"Service due in {hours_left:.0f} h.")
-
-    elif kind == "lifting":
-        exp = _iso_date(doc.get("cert_expiry_date"))
-        if exp:
-            days_left = (exp - now).days
-            if days_left < 0:
-                status = "expired"; reasons.append(f"Certification expired {abs(days_left)} day(s) ago.")
-            elif days_left <= 7:
-                status = "red"; reasons.append(f"Cert expires in {days_left} day(s) — pull from service after next use.")
-            elif days_left <= 30:
-                status = "amber"; reasons.append(f"Cert expires in {days_left} day(s).")
-
-    elif kind == "bop_pce":
-        last = _iso_date(doc.get("last_test_date"))
-        interval_m = doc.get("test_interval_months") or 6
-        if last:
-            due = last + timedelta(days=int(interval_m * 30.44))
-            days_left = (due - now).days
-            if days_left < 0:
-                status = "red"; reasons.append(f"Test overdue by {abs(days_left)} day(s) (AER Dir 037).")
-            elif days_left <= 14:
-                status = "amber"; reasons.append(f"Test due in {days_left} day(s).")
-        else:
-            status = "amber"; reasons.append("No test date on file — schedule a function + pressure test.")
-
-    elif kind == "reel_iron":
-        mawp = doc.get("working_pressure_psi")
-        curr = doc.get("current_pressure_psi")
-        if mawp and curr and mawp > 0:
-            pct = (curr / mawp) * 100.0
-            if pct >= 100:
-                status = "red"; reasons.append(f"At/over MAWP ({pct:.0f}% of {mawp:.0f} psi).")
-            elif pct >= 90:
-                status = "amber"; reasons.append(f"At {pct:.0f}% MAWP — reduce pressure or upgrade iron.")
-
-    return {"status": status, "reasons": reasons}
+    calc = _STATUS_CALCULATORS.get(doc.get("kind"))
+    if not calc:
+        return {"status": "ok", "reasons": []}
+    result = calc(doc)
+    if not result:
+        return {"status": "ok", "reasons": []}
+    status, reason = result
+    return {"status": status, "reasons": [reason]}
 
 
 @api_router.get("/equipment")
