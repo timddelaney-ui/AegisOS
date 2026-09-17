@@ -11,12 +11,12 @@ import HandoverModal from "../components/HandoverModal";
 import { useRig, rigLabel } from "../context/RigContext";
 
 const HUB_TABS = [
-  { id: "chat",        label: "Chat",        Icon: MessageSquare, badge: "chat" },
-  { id: "rig",         label: "Rig Checks",  Icon: ListChecks,    badge: "checklist" },
-  { id: "inventory",   label: "Inventory",   Icon: Package },
-  { id: "consumables", label: "Consumables", Icon: Beaker },
-  { id: "parts_order", label: "Parts",       Icon: Wrench },
-  { id: "todo",        label: "To-Do",       Icon: ListChecks },
+  { id: "chat",        label: "Crew Chat",   Icon: MessageSquare, badge: "chat",      color: "#0D6535", sub: "Team messages, Skipper AI, safety alerts" },
+  { id: "rig",         label: "Rig Checks",  Icon: ListChecks,    badge: "checklist", color: "#C00000", sub: "Safety / Ops / PM check-offs" },
+  { id: "inventory",   label: "Inventory",   Icon: Package,       color: "#856404",   sub: "Stock levels, locations" },
+  { id: "consumables", label: "Consumables", Icon: Beaker,        color: "#7C3AED",   sub: "Fluids, additives, chemistry" },
+  { id: "parts_order", label: "Parts Order", Icon: Wrench,        color: "#C36600",   sub: "Requested / ordered / received" },
+  { id: "todo",        label: "To-Do List",  Icon: ListChecks,    color: "#0056B3",   sub: "Open jobs, priority, due dates" },
 ];
 
 const TeamPage = () => {
@@ -27,7 +27,7 @@ const TeamPage = () => {
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState("choose"); // choose | create | join
   const [teamName, setTeamName] = useState("");
-  const [hubTab, setHubTab] = useState("chat");
+  const [hubTab, setHubTab] = useState(null);
   const [handoverOpen, setHandoverOpen] = useState(false);
   const [inviteCode, setInviteCode] = useState("");
   const [copied, setCopied] = useState(false);
@@ -143,7 +143,7 @@ const TeamPage = () => {
               </button>
             </div>
 
-            {/* TEAM HUB — tabs: Chat / Inventory / Consumables / Parts / To-Do */}
+            {/* TEAM HUB — big tap-friendly tiles instead of a cramped tab strip */}
             <div className="mt-4">
               <div className="flex items-center justify-between mb-2 gap-2">
                 <div className="text-[11px] font-bold uppercase tracking-wider text-[#595959]">
@@ -158,37 +158,82 @@ const TeamPage = () => {
                   Generate Handover
                 </button>
               </div>
-              <div data-testid="team-hub-tabs" className="flex gap-1 bg-white border border-[#D4D4D4] rounded-t-lg overflow-x-auto p-1">
-                {HUB_TABS.map((t) => {
-                  const active = hubTab === t.id;
-                  const Icon = t.Icon;
-                  const showDot = !active && t.badge && unread[t.badge];
-                  return (
+
+              {!hubTab && (
+                <div data-testid="team-hub-tiles" className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {HUB_TABS.map((t) => {
+                    const Icon = t.Icon;
+                    const showDot = t.badge && unread[t.badge];
+                    return (
+                      <button
+                        key={t.id}
+                        data-testid={`team-hub-tile-${t.id}`}
+                        onClick={() => {
+                          setHubTab(t.id);
+                          if (t.badge) markSeen(rigId, t.badge);
+                        }}
+                        className="relative group bg-white border border-[#D4D4D4] hover:border-[#107C41] hover:shadow-md hover:-translate-y-0.5 transition-all rounded-xl p-3 sm:p-4 text-left overflow-hidden"
+                        style={{ borderTop: `3px solid ${t.color || "#107C41"}` }}
+                      >
+                        <div className="flex items-start gap-2">
+                          <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: `${t.color || "#107C41"}18`, color: t.color || "#107C41" }}>
+                            <Icon className="w-5 h-5" strokeWidth={2.5} />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-[13px] font-bold text-[#262626] leading-tight">{t.label}</div>
+                            <div className="text-[10px] text-[#595959] mt-0.5">{t.sub}</div>
+                          </div>
+                          {showDot && (
+                            <span data-testid={`hub-tile-unread-${t.id}`} className="w-2 h-2 rounded-full bg-[#DC2626] animate-pulse absolute top-2 right-2" />
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {hubTab && (
+                <>
+                  <div className="flex items-center justify-between mb-2 mt-1">
                     <button
-                      key={t.id}
-                      data-testid={`team-hub-tab-${t.id}`}
-                      onClick={() => {
-                        setHubTab(t.id);
-                        if (t.badge) markSeen(rigId, t.badge);
-                      }}
-                      className={`flex-1 min-w-0 flex items-center justify-center gap-1 px-2 py-1.5 rounded text-[11px] font-bold uppercase whitespace-nowrap relative ${
-                        active ? "bg-[#107C41] text-white" : "text-[#595959] hover:bg-[#F0F9F3]"
-                      }`}
+                      data-testid="team-hub-back-to-tiles"
+                      onClick={() => setHubTab(null)}
+                      className="text-[12px] font-semibold text-[#0D6535] hover:underline flex items-center gap-1"
                     >
-                      <Icon className="w-3.5 h-3.5" strokeWidth={2.5} />
-                      <span>{t.label}</span>
-                      {showDot && (
-                        <span data-testid={`hub-tab-unread-${t.id}`} className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-[#DC2626] animate-pulse" />
-                      )}
+                      ← All Hub sections
                     </button>
-                  );
-                })}
-              </div>
-              <div className="border border-t-0 border-[#D4D4D4] rounded-b-lg bg-white p-2">
-                {hubTab === "chat" && <CrewChat currentUserId={user?.user_id} />}
-                {hubTab === "rig" && <RigChecklists />}
-                {hubTab !== "chat" && hubTab !== "rig" && <TeamItemsList kind={hubTab} />}
-              </div>
+                    <div className="flex items-center gap-2">
+                      {HUB_TABS.map((t) => {
+                        const active = hubTab === t.id;
+                        const Icon = t.Icon;
+                        const showDot = !active && t.badge && unread[t.badge];
+                        return (
+                          <button
+                            key={t.id}
+                            data-testid={`team-hub-quicktab-${t.id}`}
+                            onClick={() => {
+                              setHubTab(t.id);
+                              if (t.badge) markSeen(rigId, t.badge);
+                            }}
+                            title={t.label}
+                            className={`relative w-8 h-8 rounded flex items-center justify-center transition-colors ${active ? "text-white" : "text-[#595959] hover:bg-[#F0F9F3]"}`}
+                            style={active ? { background: t.color || "#107C41" } : {}}
+                          >
+                            <Icon className="w-4 h-4" strokeWidth={2.5} />
+                            {showDot && <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-[#DC2626]" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div className="bg-white border border-[#D4D4D4] rounded-lg p-2">
+                    {hubTab === "chat" && <CrewChat currentUserId={user?.user_id} />}
+                    {hubTab === "rig" && <RigChecklists />}
+                    {hubTab !== "chat" && hubTab !== "rig" && <TeamItemsList kind={hubTab} />}
+                  </div>
+                </>
+              )}
             </div>
             <HandoverModal open={handoverOpen} onClose={() => setHandoverOpen(false)} />
             </>

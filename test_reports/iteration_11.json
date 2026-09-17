@@ -1,0 +1,32 @@
+{
+  "summary": "Iter 11 regression pass for the code-review cleanup (random→secrets, _compute_equipment_status refactor, useMemo on Auth/RigContext, stable React keys across 5 components, logged silent catches). Backend: re-ran iter10 suite (31/31 PASS) + added new /app/backend/tests/test_iter11_invite_secrets.py (5 new tests: format regex ^CT-[A-Z0-9]{4}-[A-Z0-9]{4}$, ambiguity-free alphabet ABCDEFGHJKLMNPQRSTUVWXYZ23456789, list shape, redeem end-to-end, batch-uniqueness of 10 codes). Total 36/36 PASS. Frontend: /hub /equipment /schedule /app /manager all render — ZERO React key warnings and ZERO uncaught console errors across every route (only one unrelated ERR_CONNECTION_CLOSED for a background resource). Equipment CRUD E2E: create engine row → open log form → log service → delete — item_id round-trip clean, row removed from DOM (equip-row-<id> count == 0). Manager dashboard renders with populated Teams/Rigs/Alerts arrays plus working Copy Report button. Silent catches now emit console.debug/warn as designed and are not surfacing as errors. No new API surface; existing endpoint contracts unchanged.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter10_equipment_schedule.py",
+    "/app/backend/tests/test_iter11_invite_secrets.py",
+    "/app/test_reports/pytest/iter11_iter10regression.xml",
+    "/app/test_reports/pytest/iter11_invite.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py still 1979 lines — refactor point remains from iter10 (split equipment/schedule/invites into routers). The invite-code helper _new_invite_code is now the only random-source touchpoint; good candidate to move into a small utils/security.py alongside future crypto helpers.",
+    "AuthContext / RigContext value now correctly memoised, but the dependency arrays should be spot-checked: consumers relying on referential stability of nested objects (e.g. user.subscription_status) will still re-render if the entire user object is replaced on refresh — expected, not a bug.",
+    "EquipmentPage engine input field is named data-testid=\"equip-engine-current_hours\" (not hours_current). Iter10 report referenced the old name; harmless but worth aligning in future test scaffolds.",
+    "Advisory modal on /equipment blocks pointer events on first paint (already noted iter10) — sat in the way of automated CRUD until dismissed. Not a regression but a persistent UX friction for scripted flows and possibly for first-time users on slow connections."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter11_invite_secrets.py"
+  ],
+  "success_rate": { "backend": "100% (36/36)", "frontend": "100% of critical flows, 0 React key warnings" },
+  "test_credentials": "session_token=demo_session_dade4ac57f0c496094fde437e8e91f00 (demo.pro@example.com; ADMIN_EMAILS covers this). No OM- / lifetime CT- codes redeemed.",
+  "seed_data_creation": "Iter11 invite tests mint TEST_iter11_* codes and DELETE them in fixture teardown / finally blocks. Frontend engine row TEST_ITER11_<ts> created and deleted in the same run. No residual data in team_dcb3ba5cfed0.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Two backend regression suites now: test_iter10_equipment_schedule.py (31 cases: equipment status/log, schedule 14/14+custom, /auth/me, /manager/dashboard, /crew/handover-summary, /team/items) and test_iter11_invite_secrets.py (5 cases: invite-code format + alphabet + redeem + batch uniqueness). Run together with: `pytest backend/tests/test_iter10_equipment_schedule.py backend/tests/test_iter11_invite_secrets.py -v`. Both use REACT_APP_BACKEND_URL from /app/frontend/.env. Advisory modal ('I understand — Continue') gates /equipment interaction — always dismiss before CRUD. Correct engine testids: equip-engine-current_hours / last_service_hours / service_interval_hours (NOT hours_current). No key warnings in current DOM — array-index-as-key fix verified across AIPanel/EmergencySheet/EquipmentPage/CrewSchedulePage.",
+  "rca of the issue": "N/A — no regressions. secrets.choice preserves the CT-XXXX-XXXX format because the alphabet and length are unchanged; only the underlying entropy source shifted from random.SystemRandom-ish to secrets (cryptographically secure). _compute_equipment_status dispatch table produces identical outputs vs the pre-refactor branch tree (verified by 9 status-computation tests covering all 4 kinds × amber/red/expired variants)."
+}

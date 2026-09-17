@@ -15,11 +15,21 @@ const PATTERNS = [
   { id: "custom",  label: "Custom on/off" },
 ];
 
-const ROLE_COLOR = {
-  Operator:   "#0D6535", Supervisor: "#0056B3", "Chief Op": "#7C3AED",
-  Swamper:    "#C36600", "Pump Op":   "#0891B2", Pusher:    "#DB2777",
-  "Crane Op": "#059669", Other:      "#6B7280",
+// Per-crew-member colour so managers can see at a glance who's on what rig.
+// A stable hash of the name → index into this palette.
+const CREW_PALETTE = [
+  "#0D6535", "#0056B3", "#7C3AED", "#C36600", "#DB2777",
+  "#059669", "#B91C1C", "#0891B2", "#4338CA", "#CA8A04",
+  "#0F766E", "#9333EA", "#EA580C", "#65A30D", "#BE185D",
+  "#0369A1", "#7C2D12", "#4D7C0F", "#6D28D9", "#B45309",
+];
+const hashName = (name) => {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  return h;
 };
+const crewColor = (name) => CREW_PALETTE[hashName(name || "?") % CREW_PALETTE.length];
+const crewInitials = (name) => (name || "?").trim().split(/\s+/).map((p) => p[0]?.toUpperCase() || "").join("").slice(0, 2) || "?";
 
 const daysBetween = (a, b) => Math.round((new Date(b) - new Date(a)) / 86400000);
 const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
@@ -197,8 +207,19 @@ const CrewSchedulePage = () => {
                   {rows.map((r) => (
                     <tr key={r.name} data-testid={`sched-row-${r.name}`} className="border-b border-[#F0F0F0]">
                       <td className="px-2 py-1.5 text-[11px] font-bold sticky left-0 bg-white">
-                        <div>{r.name}</div>
-                        <div className="text-[9px] font-semibold uppercase" style={{ color: ROLE_COLOR[r.role] || "#0D6535" }}>{r.role}</div>
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className="w-5 h-5 rounded-full text-white flex items-center justify-center text-[9px] font-bold flex-shrink-0"
+                            style={{ background: crewColor(r.name) }}
+                            title={r.name}
+                          >
+                            {crewInitials(r.name)}
+                          </span>
+                          <div className="min-w-0">
+                            <div className="truncate">{r.name}</div>
+                            <div className="text-[9px] font-semibold uppercase text-[#595959]">{r.role}</div>
+                          </div>
+                        </div>
                       </td>
                       {days.map((d) => {
                         const covering = r.shifts.filter((s) => shiftCoversDay(s, d));
@@ -214,7 +235,7 @@ const CrewSchedulePage = () => {
                                     onClick={() => remove(s)}
                                     title={`${s.crew_member_name} · ${s.role} · ${s.tour} · ${s.start_date}${s.end_date && s.end_date !== s.start_date ? " → " + s.end_date : ""}${s.note ? " · " + s.note : ""}\n(Click to delete)`}
                                     className="h-5 rounded text-[9px] font-bold text-white flex items-center justify-center print:text-black print:bg-white print:border"
-                                    style={{ background: ROLE_COLOR[s.role] || "#0D6535", opacity: s.tour === "night" ? 0.72 : 1 }}
+                                    style={{ background: crewColor(s.crew_member_name), opacity: s.tour === "night" ? 0.72 : 1 }}
                                     data-testid={`sched-cell-${s.shift_id}`}
                                   >
                                     {s.tour === "night" ? "N" : "D"}
@@ -231,10 +252,17 @@ const CrewSchedulePage = () => {
               </table>
             </div>
             <div className="px-3 py-2 bg-[#F9FAFB] flex flex-wrap gap-3 text-[10px] print:bg-white">
-              {Object.entries(ROLE_COLOR).map(([role, c]) => (
-                <span key={role} className="flex items-center gap-1"><span className="w-3 h-3 rounded" style={{ background: c }} /> {role}</span>
+              {rows.map((r) => (
+                <span key={r.name} className="flex items-center gap-1">
+                  <span className="w-3 h-3 rounded-full text-white flex items-center justify-center text-[7px] font-bold" style={{ background: crewColor(r.name) }}>
+                    {crewInitials(r.name)}
+                  </span>
+                  <span className="font-semibold text-[#262626]">{r.name}</span>
+                  <span className="text-[#8A8A8A]">· {r.role}</span>
+                </span>
               ))}
-              <span className="ml-auto italic text-[#595959]">D = day tour · N = night tour · click a cell to delete</span>
+              {rows.length > 0 && <span className="ml-auto italic text-[#595959]">D = day tour · N = night tour · click a cell to delete</span>}
+              {rows.length === 0 && <span className="italic text-[#595959]">Colour blocks are assigned per crew member so managers see who's on which rig at a glance.</span>}
             </div>
           </div>
         </div>
