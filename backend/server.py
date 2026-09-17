@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, Cookie, Header
+from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, Cookie, Header, UploadFile, File, Form
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -10,6 +10,7 @@ import string
 import random
 import secrets
 import httpx
+import requests
 import stripe
 from pathlib import Path
 from pydantic import BaseModel, Field
@@ -1299,11 +1300,9 @@ async def crew_handover_summary(rig_id: str, hours: int = 12, user: dict = Depen
         {"_id": 0},
     ).sort("created_at", -1).to_list(200)
 
-    # Recent alerts (from crew_alerts audit log)
-    alerts = await db.crew_alerts.find(
-        {"team_id": team_id, "$or": rig_or_legacy, "created_at": {"$gte": cutoff}},
-        {"_id": 0},
-    ).sort("created_at", -1).to_list(100)
+    # Recent alerts removed from handover: users found the calc-triggered watchdog alerts too
+    # noisy for a shift report; alerts still live in the Skipper chat + Manager Dashboard.
+    alerts: List[Any] = []
 
     # Inventory / consumables flags — LOW or OOS on this rig (regardless of window)
     inv_flags = await db.team_items.find(
@@ -1955,6 +1954,220 @@ async def delete_shift(shift_id: str, user: dict = Depends(require_user)):
     return {"success": True}
 
 
+# ============ FILE / MEDIA STORAGE (Emergent Object Storage) ============
+STORAGE_BASE = (os.environ.get("INTEGRATION_PROXY_URL") or "").strip() or "https://integrations.emergentagent.com"
+STORAGE_URL = STORAGE_BASE.rstrip("/") + "/objstore/api/v1/storage"
+STORAGE_APP_NAME = "ctpocket"
+_storage_key: Optional[str] = None
+
+MAX_UPLOAD_BYTES = 15 * 1024 * 1024  # 15 MB
+ALLOWED_EXT_MIME = {
+    "jpg":  "image/jpeg",
+    "jpeg": "image/jpeg",
+    "png":  "image/png",
+    "webp": "image/webp",
+    "heic": "image/heic",
+    "heif": "image/heif",
+    "pdf":  "application/pdf",
+}
+# Which contexts a file can be attached to
+ATTACHMENT_CONTEXTS = {"equipment", "chat", "handover", "checklist"}
+
+
+def init_storage() -> Optional[str]:
+    """Called once at startup; also lazily on first upload if startup init failed."""
+    global _storage_key
+    if _storage_key:
+        return _storage_key
+    if not EMERGENT_LLM_KEY:
+        logger.warning("EMERGENT_LLM_KEY not configured — object storage disabled.")
+        return None
+    try:
+        r = requests.post(f"{STORAGE_URL}/init", json={"emergent_key": EMERGENT_LLM_KEY}, timeout=30)
+        r.raise_for_status()
+        _storage_key = r.json().get("storage_key")
+        logger.info("Object storage initialized.")
+        return _storage_key
+    except Exception as e:
+        logger.error("Object storage init failed: %s", e)
+        return None
+
+
+def _put_object(path: str, data: bytes, content_type: str) -> dict:
+    key = init_storage()
+    if not key:
+        raise HTTPException(503, "Object storage unavailable — retry shortly.")
+    r = requests.put(
+        f"{STORAGE_URL}/objects/{path}",
+        headers={"X-Storage-Key": key, "Content-Type": content_type},
+        data=data, timeout=120,
+    )
+    if r.status_code == 439:
+        raise HTTPException(507, "Storage quota exceeded on this account.")
+    r.raise_for_status()
+    return r.json()
+
+
+def _get_object(path: str) -> tuple:
+    key = init_storage()
+    if not key:
+        raise HTTPException(503, "Object storage unavailable.")
+    r = requests.get(f"{STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": key}, timeout=60)
+    if r.status_code == 404:
+        raise HTTPException(404, "File not found in storage.")
+    r.raise_for_status()
+    return r.content, r.headers.get("Content-Type", "application/octet-stream")
+
+
+def _mime_for_ext(ext: str) -> str:
+    return ALLOWED_EXT_MIME.get(ext.lower(), "application/octet-stream")
+
+
+class AttachmentCreate(BaseModel):
+    context: str                        # equipment | chat | handover | checklist
+    context_ref: Optional[str] = None   # item_id / message_id / rig_id / event_id etc
+    rig_id: Optional[str] = None
+    caption: Optional[str] = None
+
+
+@api_router.post("/attachments")
+async def upload_attachment(
+    file: UploadFile = File(...),
+    context: str = Form(...),
+    context_ref: Optional[str] = Form(None),
+    rig_id: Optional[str] = Form(None),
+    caption: Optional[str] = Form(None),
+    user: dict = Depends(require_user),
+):
+    """Upload a photo/PDF up to 15 MB. Team-scoped; attached to a context (equipment / chat / handover / checklist)."""
+    team_id = user.get("team_id")
+    if not team_id:
+        raise HTTPException(400, "Join or create a team before uploading.")
+    if context not in ATTACHMENT_CONTEXTS:
+        raise HTTPException(400, f"context must be one of {sorted(ATTACHMENT_CONTEXTS)}")
+
+    # Validate filename + extension
+    raw_name = (file.filename or "upload.bin").strip()
+    ext = raw_name.rsplit(".", 1)[-1].lower() if "." in raw_name else "bin"
+    if ext not in ALLOWED_EXT_MIME:
+        raise HTTPException(400, f"Unsupported file type .{ext}. Allowed: {sorted(ALLOWED_EXT_MIME.keys())}")
+
+    # Read + size cap
+    data = await file.read()
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise HTTPException(413, f"File too large ({len(data)/1024/1024:.1f} MB). Max 15 MB.")
+    if len(data) == 0:
+        raise HTTPException(400, "Empty file.")
+    mime = _mime_for_ext(ext)
+
+    # Storage path
+    file_id = f"att_{uuid.uuid4().hex[:16]}"
+    storage_path = f"{STORAGE_APP_NAME}/team/{team_id}/{context}/{file_id}.{ext}"
+    try:
+        result = _put_object(storage_path, data, mime)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Upload failed: %s", e)
+        raise HTTPException(500, "Upload failed — try again.")
+
+    now = datetime.now(timezone.utc)
+    doc = {
+        "attachment_id": file_id,
+        "team_id": team_id,
+        "context": context,
+        "context_ref": context_ref,
+        "rig_id": rig_id,
+        "caption": (caption or "").strip()[:300] or None,
+        "filename": raw_name[:200],
+        "storage_path": result.get("path", storage_path),
+        "content_type": mime,
+        "size": result.get("size", len(data)),
+        "kind": "image" if mime.startswith("image/") else "pdf",
+        "uploader_user_id": user["user_id"],
+        "uploader_name": user.get("name") or user["email"].split("@")[0],
+        "uploader_email": user["email"],
+        "is_deleted": False,
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.attachments.insert_one(doc)
+    doc.pop("_id", None)
+    out = _serialize(doc)
+    out["download_url"] = f"/api/attachments/{file_id}/download"
+    return out
+
+
+@api_router.get("/attachments")
+async def list_attachments(
+    context: Optional[str] = None,
+    context_ref: Optional[str] = None,
+    rig_id: Optional[str] = None,
+    user: dict = Depends(require_user),
+):
+    team_id = user.get("team_id")
+    if not team_id:
+        return {"attachments": [], "team_id": None}
+    q: Dict[str, Any] = {"team_id": team_id, "is_deleted": False}
+    if context:      q["context"] = context
+    if context_ref:  q["context_ref"] = context_ref
+    if rig_id:       q["rig_id"] = rig_id
+    docs = await db.attachments.find(q, {"_id": 0}).sort("created_at", -1).to_list(500)
+    out = []
+    for d in docs:
+        s = _serialize(d)
+        s["download_url"] = f"/api/attachments/{d['attachment_id']}/download"
+        out.append(s)
+    return {"attachments": out, "team_id": team_id}
+
+
+@api_router.get("/attachments/{attachment_id}/download")
+async def download_attachment(attachment_id: str, auth: Optional[str] = None, user: Optional[dict] = Depends(get_current_user)):
+    """
+    Serves the file. Auth via cookie (normal flow) OR `?auth=<session_token>` for <img src>.
+    """
+    if not user and auth:
+        session = await db.user_sessions.find_one({"session_token": auth}, {"_id": 0})
+        if session and session.get("user_id"):
+            user = await db.users.find_one({"user_id": session["user_id"]}, {"_id": 0})
+    if not user:
+        raise HTTPException(401, "Not authenticated.")
+    doc = await db.attachments.find_one({"attachment_id": attachment_id, "is_deleted": False}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Not found.")
+    if doc.get("team_id") and doc["team_id"] != user.get("team_id") and not _is_admin(user):
+        raise HTTPException(403, "Attachment belongs to another team.")
+    try:
+        data, ctype = _get_object(doc["storage_path"])
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Download failed: %s", e)
+        raise HTTPException(500, "Download failed.")
+    return Response(content=data, media_type=doc.get("content_type") or ctype, headers={
+        "Content-Disposition": f'inline; filename="{doc.get("filename","file")}"',
+        "Cache-Control": "private, max-age=300",
+    })
+
+
+@api_router.delete("/attachments/{attachment_id}")
+async def delete_attachment(attachment_id: str, user: dict = Depends(require_user)):
+    team_id = user.get("team_id")
+    if not team_id:
+        raise HTTPException(400, "No team.")
+    doc = await db.attachments.find_one({"attachment_id": attachment_id, "team_id": team_id, "is_deleted": False}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Not found.")
+    # Uploader or admin can delete
+    if doc["uploader_user_id"] != user["user_id"] and not _is_admin(user):
+        raise HTTPException(403, "Only the uploader or an admin can delete this attachment.")
+    await db.attachments.update_one(
+        {"attachment_id": attachment_id},
+        {"$set": {"is_deleted": True, "deleted_at": datetime.now(timezone.utc), "deleted_by": user["email"]}},
+    )
+    return {"success": True}
+
+
 # ============ APP CONFIG ============
 app.include_router(api_router)
 
@@ -1976,3 +2189,11 @@ logger = logging.getLogger(__name__)
 @app.on_event("shutdown")
 async def shutdown_db_client():
     client.close()
+
+
+@app.on_event("startup")
+async def _init_storage_on_boot():
+    try:
+        init_storage()
+    except Exception as e:
+        logger.warning("Storage boot init deferred: %s", e)

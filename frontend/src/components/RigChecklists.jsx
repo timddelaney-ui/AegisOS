@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
-import { ShieldAlert, ClipboardList, Wrench, CheckCircle2, Circle, Plus, Trash2, ChevronDown, ChevronRight } from "lucide-react";
+import { ShieldAlert, ClipboardList, Wrench, CheckCircle2, Circle, Plus, Trash2, ChevronDown, ChevronRight, Paperclip } from "lucide-react";
 import { API, useAuth } from "../context/AuthContext";
 import { useRig, rigLabel } from "../context/RigContext";
+import AttachmentUploader from "./AttachmentUploader";
 
 const KEY = (rigId, kind) => `ctp_checklist_v1::${rigId}::${kind}`;
 
@@ -62,6 +63,7 @@ const ChecklistTier = ({ kind, expanded, onToggle }) => {
   const [addOpen, setAddOpen] = useState(false);
   const [newLabel, setNewLabel] = useState("");
   const [newCadence, setNewCadence] = useState("daily");
+  const [openAttFor, setOpenAttFor] = useState(null);
 
   // Reload when the active rig changes
   useEffect(() => { setItems(loadState(rigId, kind)); }, [rigId, kind]);
@@ -130,30 +132,43 @@ const ChecklistTier = ({ kind, expanded, onToggle }) => {
         <>
           <div className="divide-y divide-[#F0F0F0]">
             {items.map((it) => (
-              <div key={it.id} data-testid={`checklist-item-${it.id}`} className="flex items-start gap-2 px-3 py-2 hover:bg-[#FAFAFA]">
-                <button
-                  data-testid={`checklist-check-${it.id}`}
-                  onClick={() => toggleItem(it.id)}
-                  className="mt-0.5 flex-shrink-0"
-                >
-                  {it.checked
-                    ? <CheckCircle2 className="w-5 h-5" style={{ color: cfg.accent }} strokeWidth={2.5} />
-                    : <Circle className="w-5 h-5 text-[#B0B0B0]" strokeWidth={2} />
-                  }
-                </button>
-                <div className="flex-1 min-w-0">
-                  <div className={`text-[13px] ${it.checked ? "line-through text-[#8A8A8A]" : "text-[#262626] font-medium"}`}>{it.label}</div>
-                  <div className="flex items-center gap-2 mt-0.5 text-[10px] text-[#8A8A8A]">
-                    <span className="uppercase tracking-wide font-semibold">{it.cadence}</span>
-                    {it.lastCheckedAt && (
-                      <span>• {new Date(it.lastCheckedAt).toLocaleString()} by {it.lastCheckedBy || "—"}</span>
-                    )}
-                  </div>
-                </div>
-                {it.custom && (
-                  <button onClick={() => remove(it.id)} className="text-[#C00000] hover:bg-[#F8D7DA] rounded p-1" data-testid={`checklist-delete-${it.id}`}>
-                    <Trash2 className="w-3.5 h-3.5" />
+              <div key={it.id} data-testid={`checklist-item-${it.id}`} className="px-3 py-2 hover:bg-[#FAFAFA]">
+                <div className="flex items-start gap-2">
+                  <button
+                    data-testid={`checklist-check-${it.id}`}
+                    onClick={() => toggleItem(it.id)}
+                    className="mt-0.5 flex-shrink-0"
+                  >
+                    {it.checked
+                      ? <CheckCircle2 className="w-5 h-5" style={{ color: cfg.accent }} strokeWidth={2.5} />
+                      : <Circle className="w-5 h-5 text-[#B0B0B0]" strokeWidth={2} />
+                    }
                   </button>
+                  <div className="flex-1 min-w-0">
+                    <div className={`text-[13px] ${it.checked ? "line-through text-[#8A8A8A]" : "text-[#262626] font-medium"}`}>{it.label}</div>
+                    <div className="flex items-center gap-2 mt-0.5 text-[10px] text-[#8A8A8A]">
+                      <span className="uppercase tracking-wide font-semibold">{it.cadence}</span>
+                      {it.lastCheckedAt && (
+                        <span>• {new Date(it.lastCheckedAt).toLocaleString()} by {it.lastCheckedBy || "—"}</span>
+                      )}
+                    </div>
+                  </div>
+                  {it.checked && (
+                    <button data-testid={`checklist-att-toggle-${it.id}`} onClick={() => setOpenAttFor((cur) => cur === it.id ? null : it.id)} className="text-[#0D6535] hover:bg-[#F0F9F3] rounded p-1" title="Attach evidence">
+                      <Paperclip className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  {it.custom && (
+                    <button onClick={() => remove(it.id)} className="text-[#C00000] hover:bg-[#F8D7DA] rounded p-1" data-testid={`checklist-delete-${it.id}`}>
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+                {openAttFor === it.id && (
+                  <div className="mt-1.5 ml-7 p-2 bg-[#F9FAFB] border border-[#E5E7EB] rounded" data-testid={`checklist-att-${it.id}`}>
+                    <div className="text-[10px] uppercase font-bold text-[#595959] mb-1">Evidence: JHA signatures, PPE photos, lock-out tickets</div>
+                    <AttachmentUploader context="checklist" contextRef={`${rigId}::${kind}::${it.id}`} />
+                  </div>
                 )}
               </div>
             ))}

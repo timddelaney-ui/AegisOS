@@ -3,6 +3,7 @@ import axios from "axios";
 import { Send, Loader2, MessageSquare, AlertOctagon, Sparkles } from "lucide-react";
 import { API } from "../context/AuthContext";
 import { useRig, rigLabel } from "../context/RigContext";
+import AttachmentUploader from "./AttachmentUploader";
 
 /**
  * CrewChat — polled, rig-scoped group chat for a team.
@@ -139,25 +140,30 @@ const CrewChat = ({ currentUserId }) => {
 
       {error && <div className="px-3 py-1.5 bg-[#F8D7DA] border-t border-[#F5C6CB] text-[11px] text-[#721C24]">{error}</div>}
 
-      <div className="border-t border-[#D4D4D4] p-2 flex gap-2 flex-shrink-0 bg-white">
-        <input
-          type="text"
-          value={input}
-          data-testid="chat-input"
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && send()}
-          placeholder={`Message ${rigLabel(rigId)} crew or ask hey skipper…`}
-          className="flex-1 bg-[#FAFAFA] border border-[#CCC] px-2.5 py-2 rounded text-sm outline-none focus:border-[#107C41] focus:ring-2 focus:ring-[#107C41]/10"
-          disabled={sending}
-        />
-        <button
-          onClick={send}
-          disabled={sending || !input.trim()}
-          data-testid="chat-send-btn"
-          className="bg-[#107C41] hover:bg-[#0D6535] text-white px-3 rounded disabled:opacity-50 flex items-center justify-center"
-        >
-          {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-        </button>
+      <div className="border-t border-[#D4D4D4] p-2 flex flex-col gap-1.5 flex-shrink-0 bg-white">
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={input}
+            data-testid="chat-input"
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && send()}
+            placeholder={`Message ${rigLabel(rigId)} crew or ask hey skipper…`}
+            className="flex-1 bg-[#FAFAFA] border border-[#CCC] px-2.5 py-2 rounded text-sm outline-none focus:border-[#107C41] focus:ring-2 focus:ring-[#107C41]/10"
+            disabled={sending}
+          />
+          <button
+            onClick={send}
+            disabled={sending || !input.trim()}
+            data-testid="chat-send-btn"
+            className="bg-[#107C41] hover:bg-[#0D6535] text-white px-3 rounded disabled:opacity-50 flex items-center justify-center"
+          >
+            {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+          </button>
+        </div>
+        <div className="border-t border-[#F0F0F0] pt-1.5">
+          <AttachmentUploader context="chat" contextRef={rigId} />
+        </div>
       </div>
     </div>
   );

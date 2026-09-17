@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
-import { X, Copy, Check, Loader2, FileText, AlertTriangle, ClipboardCheck, Package, Wrench, ListChecks, MessageSquare } from "lucide-react";
+import { X, Copy, Check, Loader2, FileText, ClipboardCheck, Package, Wrench, ListChecks, MessageSquare, Paperclip } from "lucide-react";
 import { API } from "../context/AuthContext";
 import { useRig, rigLabel } from "../context/RigContext";
+import AttachmentUploader from "./AttachmentUploader";
 
 const fmt = (iso) => {
   try { return new Date(iso).toLocaleString(); } catch { return iso; }
@@ -20,14 +21,6 @@ const buildText = (rigLabelStr, s) => {
   if (s.completed_tasks.length === 0) lines.push("  — none");
   for (const t of s.completed_tasks) {
     lines.push(`  • [${(t.tier || "").toUpperCase()}] ${t.item_label} — ${t.user_name} @ ${fmt(t.created_at)}`);
-  }
-  lines.push("");
-
-  lines.push(`SAFETY ALERTS FIRED (${s.alerts.length})`);
-  if (s.alerts.length === 0) lines.push("  — none");
-  for (const a of s.alerts) {
-    lines.push(`  • ${fmt(a.created_at)} — ${a.threshold_id || "alert"} on ${a.sheet_key || "sheet"}`);
-    if (a.text) lines.push(`    ${a.text.split("\n")[0]}`);
   }
   lines.push("");
 
@@ -185,22 +178,6 @@ const HandoverModal = ({ open, onClose }) => {
                 )}
               </Section>
 
-              <Section title="Safety alerts" Icon={AlertTriangle} accent="#C00000" count={summary.alerts.length}>
-                {summary.alerts.length === 0 ? (
-                  <div className="text-[#8A8A8A] italic px-1">No Skipper alerts in this window.</div>
-                ) : (
-                  <ul className="divide-y divide-[#F0F0F0]">
-                    {summary.alerts.map((a) => (
-                      <li key={a.audit_id || a.message_id} className="py-1.5">
-                        <div className="text-[11px] font-bold text-[#C00000]">{(a.threshold_id || "alert").toUpperCase()} on {a.sheet_key || "sheet"}</div>
-                        <div className="text-[11px] text-[#595959]">{fmt(a.created_at)}</div>
-                        <div className="text-[12px] text-[#262626] whitespace-pre-wrap mt-0.5">{a.text?.split("\n").slice(1).join("\n") || a.text}</div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </Section>
-
               <Section title="Inventory / consumables flags" Icon={Package} accent="#856404" count={summary.inventory_flags.length}>
                 {summary.inventory_flags.length === 0 ? (
                   <div className="text-[#8A8A8A] italic px-1">All green.</div>
@@ -267,6 +244,11 @@ const HandoverModal = ({ open, onClose }) => {
                     ))}
                   </ul>
                 )}
+              </Section>
+
+              <Section title="Handover attachments" Icon={Paperclip} accent="#7C3AED" count={0}>
+                <div className="text-[10px] text-[#595959] mb-1">Photos, cert docs, tickets attached to this rig's handover.</div>
+                <AttachmentUploader context="handover" contextRef={rigId} />
               </Section>
             </>
           )}

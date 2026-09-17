@@ -3,11 +3,12 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import {
   ArrowLeft, Cog, Truck, Anchor, ShieldAlert, Gauge, Plus, Trash2, Loader2,
-  Wrench, ChevronRight, Calendar, X, AlertTriangle, CheckCircle2, Edit3,
+  Wrench, ChevronRight, Calendar, X, AlertTriangle, CheckCircle2, Edit3, Paperclip,
 } from "lucide-react";
 import { API, useAuth } from "../context/AuthContext";
 import { useRig, rigLabel } from "../context/RigContext";
 import RigSelector from "../components/RigSelector";
+import AttachmentUploader from "../components/AttachmentUploader";
 
 const KIND_TABS = [
   { id: "engine",    label: "Engine Hours",     Icon: Cog,         accent: "#0056B3" },
@@ -131,6 +132,7 @@ const KindFields = ({ kind, form, setForm }) => {
 
 const ItemRow = ({ item, kind, onLog, onDelete }) => {
   const [openLog, setOpenLog] = useState(false);
+  const [openAtt, setOpenAtt] = useState(false);
   const [logForm, setLogForm] = useState({ hours: "", meters: "", pressure_psi: "", date: "", note: "" });
 
   const bodyBits = (() => {
@@ -203,9 +205,16 @@ const ItemRow = ({ item, kind, onLog, onDelete }) => {
         </div>
         <div className="flex flex-col gap-1">
           <button data-testid={`equip-log-open-${item.item_id}`} onClick={() => setOpenLog((v) => !v)} className="text-[10px] font-bold text-white bg-[#0D6535] hover:bg-[#0A4F28] px-2 py-1 rounded flex items-center gap-1"><Edit3 className="w-3 h-3" />Log</button>
+          <button data-testid={`equip-att-open-${item.item_id}`} onClick={() => setOpenAtt((v) => !v)} className="text-[10px] font-bold text-[#0D6535] border border-[#0D6535] hover:bg-[#F0F9F3] px-2 py-1 rounded flex items-center gap-1"><Paperclip className="w-3 h-3" />Files</button>
           <button data-testid={`equip-delete-${item.item_id}`} onClick={() => onDelete(item)} className="text-[#C00000] hover:bg-[#F8D7DA] rounded p-1"><Trash2 className="w-3.5 h-3.5" /></button>
         </div>
       </div>
+      {openAtt && (
+        <div className="mt-2 p-2 bg-[#F9FAFB] border border-[#E5E7EB] rounded" data-testid={`equip-att-panel-${item.item_id}`}>
+          <div className="text-[10px] uppercase font-bold text-[#595959] mb-1.5">Cert docs, ticket photos, serial-plate pics</div>
+          <AttachmentUploader context="equipment" contextRef={item.item_id} compact={false} />
+        </div>
+      )}
       {openLog && (
         <div className="mt-2 p-2 bg-[#F9FAFB] border border-[#E5E7EB] rounded space-y-1.5" data-testid={`equip-log-form-${item.item_id}`}>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
