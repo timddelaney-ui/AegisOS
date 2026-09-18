@@ -225,7 +225,7 @@ const SvgSchematic = ({ sheetKey, results }) => {
         return (
           <>
             <rect x="144" y="80" width="12" height="20" fill="#333" stroke="#C00000" />
-            {[85, 90, 95].map((y) => (
+            {[85, 90, 95].map((y, i) => (
               <React.Fragment key={`grid-${y}`}>
                 <line x1="156" y1={y} x2="170" y2={y - 2} stroke="#C00000" strokeWidth="1.5">
                   <animate attributeName="opacity" values="0;1;0" dur="0.6s" begin={`${i * 0.15}s`} repeatCount="indefinite" />

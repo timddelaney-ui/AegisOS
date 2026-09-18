@@ -22,8 +22,9 @@ const proTips = [
   "Ask the AI 'Troubleshoot' about surface symptoms and it'll walk you through diagnosis.",
 ];
 
-const HubCard = ({ Icon, title, subtitle, onClick, accent, badge, gradient }) => (
+const HubCard = ({ Icon, title, subtitle, onClick, accent, badge, gradient, "data-testid": testId }) => (
   <button
+    data-testid={testId}
     onClick={onClick}
     className={`group relative overflow-hidden rounded-xl border border-[#D4D4D4] bg-white p-4 text-left shadow-sm hover:shadow-md hover:border-[#107C41] transition-all hover:-translate-y-0.5 ${gradient || ""}`}
   >
@@ -294,6 +295,7 @@ const Hub = () => {
               badge="NEW"
             />
             <HubCard
+              data-testid="hub-redeem-tile"
               Icon={Ticket}
               title="Have an Invite Code?"
               subtitle="Redeem a code from your admin for exclusive Pro access."
@@ -301,6 +303,7 @@ const Hub = () => {
               onClick={() => document.dispatchEvent(new CustomEvent("open-redeem"))}
             />
             <HubCard
+              data-testid="hub-feedback-tile"
               Icon={MessageSquarePlus}
               title="Send Feedback"
               subtitle="Bug, idea, or feature request — every submission gets reviewed."

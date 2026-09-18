@@ -19,6 +19,8 @@ import ManagerDashboard from "./pages/ManagerDashboard";
 import EquipmentPage from "./pages/EquipmentPage";
 import CrewSchedulePage from "./pages/CrewSchedulePage";
 import ManagerGreeting from "./components/ManagerGreeting";
+import RedeemDialog from "./components/RedeemDialog";
+import FeedbackDialog from "./components/FeedbackDialog";
 import { AdvisoryFooter, AdvisoryModal, AdvisoryStrip } from "./components/AdvisoryDisclaimer";
 import RigSelector from "./components/RigSelector";
 import ServiceToggle, { useServiceView } from "./components/ServiceToggle";
@@ -219,6 +221,8 @@ const AppRouter = () => {
       <AdvisoryFooter />
       <AdvisoryModal />
       <ManagerGreeting />
+      <RedeemDialog />
+      <FeedbackDialog />
     </>
   );
 };
