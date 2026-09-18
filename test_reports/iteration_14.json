@@ -1,0 +1,35 @@
+{
+  "summary": "Iter 17 — Pre-demo Playwright UI-only sweep. Covered /hub (desktop+mobile), /app (workbook), /team, /equipment, /schedule, /manager, /admin/invites. All pages load with no console.error or unhandled promise rejections (only expected favicon 'net::ERR_CONNECTION_CLOSED' asset warning, not app code). Redeem + Feedback dialogs both mount and open from Hub tiles; feedback submission works and shows a 'sent' confirmation. Team hub 6-tile grid intact; CrewChat sends and renders. RigChecklists 'Generate Handover' opens the handover-modal with attachments section and NO safety-alerts section (iter13 removal confirmed). Equipment 5 tabs render; add form appears and saves. Manager Dashboard loads for admin demo user with 'All Teams (Ops Manager)' scope, 6 stat cards visible, Copy Report button present. manager-greeting NOT shown for crew role (correct). Admin Invites shows 22 CT-* + 3 OM-* codes, none marked used except one legacy; New Invite modal opens with grant_role dropdown. Rig selector has 26 rigs. Cleanup: deleted TEST_iter17 equipment row via /api/equipment/{id}. FOUND ONE MEANINGFUL BUG (details below) that could visibly affect the demo on the workbook page (/app).",
+  "backend_issues": {"critical": [], "minor": [
+    {"endpoint": "/api/feedback/{id} DELETE", "issue": "Returns 405 Method Not Allowed — no DELETE handler exists. Task allowed cleanup skip if endpoint absent, but if you want a self-cleaning admin panel you'd add DELETE."}
+  ]},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "RedeemDialog + FeedbackDialog", "issue": "DUPLICATE global mount — both dialogs are mounted in App.js (iter15 fix) AND ALSO still mounted inside components/ExcelHeader.jsx. Result: on any page that renders ExcelHeader (workbook /app in particular), the DOM has TWO instances of `[data-testid=\"redeem-dialog\"]` and TWO instances of `[data-testid=\"redeem-close\"]` after the `open-redeem` custom event fires. Both instances listen to the event so both open; clicking the X on one only closes that instance — the second remains as a full-screen overlay that blocks the page. Reproduced 100% on /app with `document.dispatchEvent(new CustomEvent('open-redeem'))` → 2 nodes. Same duplication path exists for FeedbackDialog. On /hub itself only one instance is mounted so /hub demo path is safe, BUT if the presenter navigates to /app and any control (or a stray keystroke) triggers redeem/feedback, they'll see a stuck overlay.", "selector": "[data-testid=\"redeem-dialog\"], [data-testid=\"feedback-dialog\"]", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Manager Dashboard", "issues": ["Stat cards (Teams / Rigs Active / Safety Cert / Maintenance / Alerts / Inv Flags) have NO data-testid=\"manager-stat-*\" attributes — the task spec named them but they aren't wired. Visually 6 cards are present, so this is a testability gap only, not a demo blocker."]},
+      {"screen": "Skipper safety alerts panel on /manager", "issues": ["20 real alerts show (VANN_LOW · Sand_Cleanout · Rig 1 · Regression Crew, etc.). Not a bug — but the presenter should be aware these will be visible in the live demo screenshot."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "REMOVE the duplicate `<RedeemDialog />` and `<FeedbackDialog />` mounts from /app/frontend/src/components/ExcelHeader.jsx (lines 96–97). Both dialogs are already mounted globally in App.js (lines 224–225) and self-listen to `open-redeem` / `open-feedback` custom events, so the ExcelHeader copies are dead-weight + cause a stuck ghost overlay after close on /app and any other page that renders ExcelHeader.",
+    "(Nice-to-have) Add `data-testid=\"manager-stat-{teams|rigs|safety|maintenance|alerts|inv}\"` on the 6 stat cards in ManagerDashboard so pre-demo UI tests can assert count === 6 by selector.",
+    "(Nice-to-have) Implement DELETE /api/feedback/{id} for admin cleanup, or hide the endpoint expectation from cleanup docs."
+  ],
+  "critical_code_review_comments": [
+    "ExcelHeader.jsx imports and renders RedeemDialog + FeedbackDialog even though App.js already mounts them globally (iter15). Delete the duplicate mounts and the stale imports.",
+    "RedeemDialog and FeedbackDialog accept `open` / `onClose` props from ExcelHeader.jsx but the current implementations don't consume props — they self-manage state via the `open-redeem` / `open-feedback` custom events. Either standardize on the event API (delete props usage) or standardize on props (delete event listeners). Right now the mixed pattern is what created the ghost-overlay bug.",
+    "Equipment add form uses placeholder-based inputs with no `name=` attributes; testability suffers (had to fall back to placeholder selectors during the sweep). Consider adding data-testid on each field (`equipment-add-field-current_hours`, etc.)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (UI-only sweep)", "frontend": "~95% — 1 HIGH ghost-overlay bug on /app"},
+  "test_credentials": "demo_session_dade4ac57f0c496094fde437e8e91f00 (demo.pro@example.com, team_9af2d0d38747, admin via ADMIN_EMAILS)",
+  "seed_data_creation": "Created 1 TEST_iter17 feedback row (fb_ff2973a4c323) — kept (DELETE endpoint returns 405). Created 1 TEST_iter17 Engine equipment row — DELETED after test (200 OK). No invite codes redeemed.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "The duplicate dialog mount is a two-line fix: remove `<FeedbackDialog ... />` and `<RedeemDialog ... />` (lines 96–97) plus their imports (lines 6–7) from /app/frontend/src/components/ExcelHeader.jsx. After the fix, re-verify on /app that `document.dispatchEvent(new CustomEvent('open-redeem'))` produces exactly 1 `[data-testid=\"redeem-dialog\"]` node and clicking `[data-testid=\"redeem-close\"]` fully dismisses it. All other flows (feedback submit, team chat, handover modal, equipment CRUD, manager copy report, admin invites new-invite modal) are green.",
+  "rca of the issue": "Iter15 moved the RedeemDialog and FeedbackDialog mounts to App.js so the Hub tiles (which dispatch `open-redeem` / `open-feedback` custom events) could trigger them globally. That move was correct, but the old per-header mounts in ExcelHeader.jsx were never removed. Both instances subscribe to the same `open-redeem` event listener in a useEffect, so BOTH show when the event fires, and each maintains its own React `open` state. Clicking the close X on one instance only calls that instance's `setOpen(false)`; the sibling instance's state is untouched and stays visible as a full-screen backdrop. Fix: delete the ExcelHeader mounts + imports."
+}

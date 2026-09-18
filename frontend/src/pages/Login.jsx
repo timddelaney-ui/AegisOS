@@ -74,7 +74,7 @@ const Login = () => {
           <div className="text-center">
             <h2 className="text-2xl md:text-3xl font-bold text-[#262626] mb-3">Built for the doghouse, not the classroom</h2>
             <p className="text-sm text-[#595959] max-w-2xl mx-auto">
-              CT Field Workbook replaces the greasy notebook and half-broken Excel file every coiled-tubing crew ends up passing around. Seventeen operation sheets, seventeen emergency SOPs, a Cape Breton-accented AI hand on call — all in your pocket, offline-friendly, Metric or Imperial.
+              CT Field Workbook replaces the greasy notebook and half-broken Excel file every coiled-tubing crew ends up passing around. Seventeen operation sheets, seventeen emergency SOPs, an AI Field Assistant on call — all in your pocket, offline-friendly, Metric or Imperial.
             </p>
           </div>
 

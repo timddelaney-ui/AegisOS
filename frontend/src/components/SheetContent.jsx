@@ -56,7 +56,7 @@ const buildWatchdogPayload = (sheetKey, values, params, unitSystem, results) => 
   return payload;
 };
 
-// Mirror of the server thresholds so we can flash a Cape Breton quip *instantly*
+// Mirror of the server thresholds so we can flash a quip *instantly*
 // (before the 1.5s server-side debounce fires the durable crew-channel alert).
 const CLIENT_THRESHOLDS = {
   CT_Milling: [
@@ -90,11 +90,11 @@ const CLIENT_THRESHOLDS = {
 };
 
 const CLIENT_QUIPS = [
-  "Whoa, hold 'er right there, b'y! You're fixin' to twist that string into a pretzel.",
-  "Steady as she goes, me son! Ease off before the iron talks back.",
-  "Jeez, look at those readings. Pop the pumps down before pipe parts fly across the lease.",
-  "Oh me nerves — shut 'er in a sec and check the gauges.",
-  "Alright b'y, that's enough — you're deep in the red. Reset and try again.",
+  "Whoa — hold up! You're about to twist that string into a pretzel. Back it off.",
+  "Steady on. Ease off before the iron starts complaining.",
+  "Yikes, those readings are climbing. Pop the pumps down before something goes flying.",
+  "Deep breath — shut 'er in for a sec and check the gauges.",
+  "That's enough — you're deep in the red. Reset and try again.",
 ];
 
 const SheetContent = ({ sheetKey, unitSystem, onUnitChange, initialValues, hasTeam }) => {
@@ -153,7 +153,7 @@ const SheetContent = ({ sheetKey, unitSystem, onUnitChange, initialValues, hasTe
   }, [sheetKey, values, params, unitSystem, results, hasTeam, rigId]);
 
   // Client-side INSTANT flash: same threshold logic as the server, but fires immediately with
-  // a Cape Breton quip so the tool push sees the hazard before the 1.5s server round-trip.
+  // a client-side quip so the tool push sees the hazard before the 1.5s server round-trip.
   // Non-persistent — the durable crew-channel alert is still the server watchdog's job.
   useEffect(() => {
     const payload = buildWatchdogPayload(sheetKey, values, params, unitSystem, results);
