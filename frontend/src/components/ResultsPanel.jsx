@@ -46,12 +46,12 @@ const ResultsPanel = ({ data }) => {
       {/* Warnings first */}
       {warnings.length > 0 && (
         <div className="px-3 py-2 space-y-1.5 border-b border-[#EFEFEF]">
-          {warnings.map((w, i) => {
+          {warnings.map((w) => {
             const s = warningStyle[w.level] || warningStyle.warn;
             const Icon = s.Icon;
             return (
               <div
-                key={i}
+                key={`${w.level || "warn"}-${w.msg}`}
                 className={`${s.bg} border-l-[3px] ${s.border} ${s.text} px-2.5 py-1.5 rounded-r flex items-start gap-2`}
               >
                 <Icon className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" strokeWidth={2.5} />
@@ -65,9 +65,9 @@ const ResultsPanel = ({ data }) => {
       {/* Results table */}
       <table className="w-full border-collapse">
         <tbody>
-          {results.map((r, i) => (
+          {results.map((r) => (
             <tr
-              key={i}
+              key={r.label}
               className="border-b border-[#EFEFEF] last:border-b-0 hover:bg-[#FAFAFA]"
             >
               <td className="px-3 py-2 text-[12px] text-[#444] font-medium align-top w-[55%]">

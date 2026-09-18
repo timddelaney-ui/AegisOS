@@ -134,8 +134,8 @@ const AdminInvites = () => {
                         {inv.redemptions?.length > 0 && (
                           <div className="mt-2 pt-2 border-t border-[#EFEFEF]">
                             <p className="text-[10px] font-semibold text-[#595959] mb-1">Redeemed by:</p>
-                            {inv.redemptions.map((r, i) => (
-                              <p key={i} className="text-[11px] text-[#333]">{r.email} — {new Date(r.redeemed_at).toLocaleString()}</p>
+                            {inv.redemptions.map((r) => (
+                              <p key={`${r.email}-${r.redeemed_at}`} className="text-[11px] text-[#333]">{r.email} — {new Date(r.redeemed_at).toLocaleString()}</p>
                             ))}
                           </div>
                         )}

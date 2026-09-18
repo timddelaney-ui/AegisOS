@@ -37,8 +37,8 @@ const Paywall = ({ sheetTitle, trialExpired = false }) => {
             </div>
           </div>
           <ul className="mt-4 space-y-1.5">
-            {["All 17 operation sheets", "AI Field Assistant + Training mode", "Emergency SOPs & saved jobs", "Cancel anytime"].map((f, i) => (
-              <li key={i} className="flex items-center gap-2 text-xs text-[#444]"><Check className="w-3.5 h-3.5 text-[#107C41]" strokeWidth={3} />{f}</li>
+            {["All 17 operation sheets", "AI Field Assistant + Training mode", "Emergency SOPs & saved jobs", "Cancel anytime"].map((f) => (
+              <li key={f} className="flex items-center gap-2 text-xs text-[#444]"><Check className="w-3.5 h-3.5 text-[#107C41]" strokeWidth={3} />{f}</li>
             ))}
           </ul>
         </div>

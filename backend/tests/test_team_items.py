@@ -5,7 +5,8 @@ import pytest
 import requests
 
 BASE_URL = os.environ["REACT_APP_BACKEND_URL"].rstrip("/")
-DEMO_TOKEN = "demo_session_dade4ac57f0c496094fde437e8e91f00"
+# Test fixture — override in CI via CTP_TEST_SESSION_TOKEN. Seeded by /app/backend/scripts/seed_demo_pro.py.
+DEMO_TOKEN = os.environ.get("CTP_TEST_SESSION_TOKEN", "demo_session_dade4ac57f0c496094fde437e8e91f00")
 
 
 @pytest.fixture(scope="module")

@@ -249,7 +249,7 @@ const SheetContent = ({ sheetKey, unitSystem, onUnitChange, initialValues, hasTe
         </thead>
         <tbody>
           {params.map((param, idx) => (
-            <tr key={idx} className="border-b border-[#EFEFEF] last:border-b-0">
+            <tr key={param} className="border-b border-[#EFEFEF] last:border-b-0">
               <td className="px-2.5 py-2 text-[13px] font-medium text-[#444]">{param}</td>
               <td className="px-2.5 py-2">
                 <input

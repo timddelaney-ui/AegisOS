@@ -86,7 +86,7 @@ const SvgSchematic = ({ sheetKey, results }) => {
             </path>
             <text x="200" y="30" fill={flowColor} fontSize="8" fontWeight="bold">RETURN {v ? `${v.toFixed(0)} ft/min` : ""}</text>
             {[0, 1, 2, 3].map((i) => (
-              <circle key={i} cx={148 + (i % 2) * 4} cy={85 + i * 3} r="1.6" fill="#8B4513">
+              <circle key={`solid-${i}`} cx={148 + (i % 2) * 4} cy={85 + i * 3} r="1.6" fill="#8B4513">
                 <animate attributeName="cy" values={`${85 + i * 3};${45};${85 + i * 3}`} dur={`${flowSpeed * 2}s`} repeatCount="indefinite" />
               </circle>
             ))}
@@ -146,7 +146,7 @@ const SvgSchematic = ({ sheetKey, results }) => {
               const x2 = 150 + Math.cos(angle) * 40;
               const y2 = 65 + Math.sin(angle) * 25;
               return (
-                <line key={i} x1="150" y1="65" x2={x2} y2={y2} stroke="#C00000" strokeWidth="1.5">
+                <line key={`fpath-${i}`} x1="150" y1="65" x2={x2} y2={y2} stroke="#C00000" strokeWidth="1.5">
                   <animate attributeName="opacity" values="0.3;1;0.3" dur="1.6s" begin={`${i * 0.15}s`} repeatCount="indefinite" />
                 </line>
               );
@@ -176,7 +176,7 @@ const SvgSchematic = ({ sheetKey, results }) => {
         return (
           <>
             {[0, 1, 2, 3, 4].map((i) => (
-              <circle key={i} cx={148 + (i % 2) * 4} cy={85 - i * 12} r="2.5" fill="#5DADE2" opacity="0.85">
+              <circle key={`n2-${i}`} cx={148 + (i % 2) * 4} cy={85 - i * 12} r="2.5" fill="#5DADE2" opacity="0.85">
                 <animate attributeName="cy" values={`90;10`} dur={`${flowSpeed * 2}s`} begin={`${i * 0.35}s`} repeatCount="indefinite" />
                 <animate attributeName="opacity" values="0;0.9;0" dur={`${flowSpeed * 2}s`} begin={`${i * 0.35}s`} repeatCount="indefinite" />
               </circle>
@@ -195,7 +195,7 @@ const SvgSchematic = ({ sheetKey, results }) => {
             </rect>
             <text x="150" y="96" fill="#FFF" fontSize="6" fontWeight="bold" textAnchor="middle">CHEM</text>
             {[0, 1, 2].map((i) => (
-              <path key={i} d={`M120,${85 + i * 4} L100,${85 + i * 4}`} stroke="#E74C3C" strokeWidth="1" strokeDasharray="2">
+              <path key={`chem-l-${i}`} d={`M120,${85 + i * 4} L100,${85 + i * 4}`} stroke="#E74C3C" strokeWidth="1" strokeDasharray="2">
                 <animate attributeName="stroke-dashoffset" from="0" to="-8" dur="1.5s" begin={`${i * 0.2}s`} repeatCount="indefinite" />
               </path>
             ))}
@@ -225,8 +225,8 @@ const SvgSchematic = ({ sheetKey, results }) => {
         return (
           <>
             <rect x="144" y="80" width="12" height="20" fill="#333" stroke="#C00000" />
-            {[85, 90, 95].map((y, i) => (
-              <React.Fragment key={i}>
+            {[85, 90, 95].map((y) => (
+              <React.Fragment key={`grid-${y}`}>
                 <line x1="156" y1={y} x2="170" y2={y - 2} stroke="#C00000" strokeWidth="1.5">
                   <animate attributeName="opacity" values="0;1;0" dur="0.6s" begin={`${i * 0.15}s`} repeatCount="indefinite" />
                 </line>

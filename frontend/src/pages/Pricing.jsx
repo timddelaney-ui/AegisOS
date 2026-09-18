@@ -99,8 +99,8 @@ const Pricing = () => {
           <div className="bg-white border border-[#D4D4D4] rounded-lg p-5 mt-6">
             <h4 className="text-sm font-bold text-[#262626] mb-3">What's included:</h4>
             <ul className="grid md:grid-cols-2 gap-2">
-              {features.map((f, i) => (
-                <li key={i} className="flex items-start gap-2 text-sm text-[#444]">
+              {features.map((f) => (
+                <li key={f} className="flex items-start gap-2 text-sm text-[#444]">
                   <Check className="w-4 h-4 text-[#107C41] mt-0.5 flex-shrink-0" strokeWidth={3} />
                   <span>{f}</span>
                 </li>

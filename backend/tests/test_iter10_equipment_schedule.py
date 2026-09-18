@@ -23,7 +23,8 @@ def _load_base_url():
 
 
 BASE_URL = _load_base_url()
-SESSION_TOKEN = "demo_session_dade4ac57f0c496094fde437e8e91f00"
+# Test fixture — override in CI via CTP_TEST_SESSION_TOKEN. Seeded by /app/backend/scripts/seed_demo_pro.py.
+SESSION_TOKEN = os.environ.get("CTP_TEST_SESSION_TOKEN", "demo_session_dade4ac57f0c496094fde437e8e91f00")
 
 
 @pytest.fixture(scope="session")
@@ -307,6 +308,13 @@ class TestScheduleCreate:
 
 class TestScheduleReadUpdateDelete:
     def test_list_range(self, client):
+        # Ensure at least one shift exists in the window so the test is deterministic
+        # under any pytest ordering / worker distribution.
+        client.post(f"{BASE_URL}/api/schedule", json={
+            "rig_id": RIG, "crew_member_name": "TEST_ListRangeSeed", "role": "Operator",
+            "tour": "day", "pattern": "one_off",
+            "start_date": "2026-02-16", "end_date": "2026-02-20",
+        })
         r = client.get(f"{BASE_URL}/api/schedule", params={
             "rig_id": RIG, "start": "2026-02-01", "end": "2026-03-15",
         })
@@ -316,8 +324,22 @@ class TestScheduleReadUpdateDelete:
         assert len(j["shifts"]) >= 1
 
     def test_patch(self, client):
-        assert _shift_ids, "need a shift first"
-        sid = _shift_ids[0]
+        # Look up a live shift from the API so this test doesn't rely on shared
+        # module state (pytest-xdist runs each class in its own worker process).
+        r = client.get(f"{BASE_URL}/api/schedule", params={"rig_id": RIG})
+        shifts = r.json().get("shifts", [])
+        if not shifts:
+            # Create one on-demand so the patch/delete flow is exercised even when
+            # the create class landed on a different worker.
+            r0 = client.post(f"{BASE_URL}/api/schedule", json={
+                "rig_id": RIG, "crew_member_name": "TEST_PatchTarget", "role": "Operator",
+                "tour": "day", "pattern": "one_off",
+                "start_date": "2026-02-16", "end_date": "2026-02-20",
+            })
+            assert r0.status_code == 200, r0.text
+            sid = r0.json()["shifts"][0]["shift_id"]
+        else:
+            sid = shifts[0]["shift_id"]
         r = client.patch(f"{BASE_URL}/api/schedule/{sid}", json={"note": "updated"})
         assert r.status_code == 200
         assert r.json().get("note") == "updated"
