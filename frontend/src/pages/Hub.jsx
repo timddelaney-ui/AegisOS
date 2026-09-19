@@ -5,7 +5,7 @@ import { useAuth, API, isProUser } from "../context/AuthContext";
 import {
   FileSpreadsheet, FolderOpen, Users, Sparkles, ChevronRight, Crown, AlertTriangle,
   MessageSquare, Wrench, GraduationCap, AlertOctagon, FileText, Calendar, Gauge,
-  Ticket, MessageSquarePlus, Zap, Menu, ShieldCheck, HardHat,
+  Ticket, MessageSquarePlus, Zap, Menu, ShieldCheck, HardHat, ClipboardList,
 } from "lucide-react";
 import { workbookData } from "../mock/workbookData";
 import ExcelHeader from "../components/ExcelHeader";
@@ -59,17 +59,21 @@ const Hub = () => {
   const { user } = useAuth();
   const [jobs, setJobs] = useState([]);
   const [team, setTeam] = useState(null);
+  const [activeTreatment, setActiveTreatment] = useState(null);
   const [loading, setLoading] = useState(true);
   const [aiOpen, setAiOpen] = useState(false);
   const [aiMode, setAiMode] = useState("assistant");
 
   useEffect(() => {
+    const rigId = (() => { try { return localStorage.getItem("ctp_active_rig_v2") || "RIG1"; } catch { return "RIG1"; } })();
     Promise.all([
       axios.get(`${API}/jobs`, { withCredentials: true }).then((r) => r.data).catch(() => []),
       axios.get(`${API}/teams/me`, { withCredentials: true }).then((r) => r.data).catch(() => null),
-    ]).then(([j, t]) => {
+      axios.get(`${API}/treatments/active`, { params: { rig_id: rigId }, withCredentials: true }).then((r) => r.data?.treatment).catch(() => null),
+    ]).then(([j, t, trt]) => {
       setJobs(j || []);
       setTeam(t);
+      setActiveTreatment(trt || null);
       setLoading(false);
     });
   }, []);
@@ -278,6 +282,17 @@ const Hub = () => {
               accent="bg-[#DBEAFE] text-[#0056B3]"
               onClick={() => navigate("/schedule")}
               badge="NEW"
+            />
+            <HubCard
+              data-testid="hub-treatment-tile"
+              Icon={ClipboardList}
+              title={activeTreatment ? `Treatment: ${activeTreatment.name}` : "Treatment Log"}
+              subtitle={activeTreatment
+                ? `LIVE · ${activeTreatment.entry_count || 0} entries · started by ${activeTreatment.created_by_name}. Tap to continue logging.`
+                : "Timestamped job log everyone on the rig sees in real time. Perfect for handovers and post-jobs."}
+              accent={activeTreatment ? "bg-[#DCFCE7] text-[#065F46]" : "bg-[#F0F9F3] text-[#0D6535]"}
+              onClick={() => navigate("/treatment")}
+              badge={activeTreatment ? "LIVE" : "NEW"}
             />
             <HubCard
               Icon={AlertOctagon}

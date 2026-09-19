@@ -2208,6 +2208,164 @@ async def delete_crew(crew_id: str, user: dict = Depends(require_user)):
     return {"success": True}
 
 
+# ============ TREATMENT REPORTING (live rig-scoped job log) ============
+class TreatmentCreate(BaseModel):
+    rig_id: str
+    name: str
+    well_or_job_no: Optional[str] = None
+    note: Optional[str] = None
+
+
+class TreatmentEntryCreate(BaseModel):
+    text: str
+
+
+@api_router.get("/treatments")
+async def list_treatments(rig_id: Optional[str] = None, status: Optional[str] = None, user: dict = Depends(require_user)):
+    team_id = user.get("team_id")
+    if not team_id:
+        return {"treatments": [], "team_id": None}
+    q: Dict[str, Any] = {"team_id": team_id}
+    if rig_id: q["rig_id"] = rig_id
+    if status in ("active", "closed"): q["status"] = status
+    docs = await db.treatments.find(q, {"_id": 0}).sort("created_at", -1).to_list(200)
+    return {"treatments": [_serialize(d) for d in docs], "team_id": team_id, "rig_id": rig_id}
+
+
+@api_router.get("/treatments/active")
+async def get_active_treatment(rig_id: str, user: dict = Depends(require_user)):
+    team_id = user.get("team_id")
+    if not team_id:
+        return {"treatment": None}
+    doc = await db.treatments.find_one({"team_id": team_id, "rig_id": rig_id, "status": "active"}, {"_id": 0}, sort=[("created_at", -1)])
+    return {"treatment": _serialize(doc) if doc else None}
+
+
+@api_router.post("/treatments")
+async def start_treatment(body: TreatmentCreate, user: dict = Depends(require_user)):
+    team_id = user.get("team_id")
+    if not team_id:
+        raise HTTPException(400, "Join or create a team first.")
+    name = (body.name or "").strip()[:160]
+    if not name:
+        raise HTTPException(400, "Give the treatment a name (e.g. well number or job).")
+    now = datetime.now(timezone.utc)
+    # Auto-close any existing active treatment on this rig (one at a time per rig)
+    await db.treatments.update_many(
+        {"team_id": team_id, "rig_id": body.rig_id, "status": "active"},
+        {"$set": {"status": "closed", "closed_at": now, "closed_by": user["email"]}},
+    )
+    doc = {
+        "treatment_id": f"trt_{uuid.uuid4().hex[:12]}",
+        "team_id": team_id,
+        "rig_id": body.rig_id,
+        "name": name,
+        "well_or_job_no": (body.well_or_job_no or "").strip()[:80] or None,
+        "note": (body.note or "").strip()[:400] or None,
+        "status": "active",
+        "created_by": user["email"],
+        "created_by_name": user.get("name") or user["email"].split("@")[0],
+        "created_at": now,
+        "updated_at": now,
+        "closed_at": None,
+        "closed_by": None,
+        "entry_count": 0,
+        "last_entry_at": None,
+    }
+    await db.treatments.insert_one(doc)
+    doc.pop("_id", None)
+    return _serialize(doc)
+
+
+@api_router.post("/treatments/{treatment_id}/close")
+async def close_treatment(treatment_id: str, user: dict = Depends(require_user)):
+    team_id = user.get("team_id")
+    if not team_id:
+        raise HTTPException(400, "No team.")
+    now = datetime.now(timezone.utc)
+    r = await db.treatments.update_one(
+        {"treatment_id": treatment_id, "team_id": team_id, "status": "active"},
+        {"$set": {"status": "closed", "closed_at": now, "closed_by": user["email"]}},
+    )
+    if r.matched_count == 0:
+        raise HTTPException(404, "Active treatment not found.")
+    doc = await db.treatments.find_one({"treatment_id": treatment_id}, {"_id": 0})
+    return _serialize(doc)
+
+
+@api_router.delete("/treatments/{treatment_id}")
+async def delete_treatment(treatment_id: str, user: dict = Depends(require_user)):
+    team_id = user.get("team_id")
+    if not team_id:
+        raise HTTPException(400, "No team.")
+    trt = await db.treatments.find_one({"treatment_id": treatment_id, "team_id": team_id}, {"_id": 0})
+    if not trt:
+        raise HTTPException(404, "Treatment not found.")
+    # Only creator or admin can delete
+    if trt.get("created_by") != user["email"] and not _is_admin(user):
+        raise HTTPException(403, "Only the treatment owner or an admin can delete.")
+    await db.treatment_entries.delete_many({"treatment_id": treatment_id, "team_id": team_id})
+    await db.treatments.delete_one({"treatment_id": treatment_id, "team_id": team_id})
+    return {"success": True}
+
+
+@api_router.get("/treatments/{treatment_id}/entries")
+async def list_treatment_entries(treatment_id: str, since: Optional[str] = None, user: dict = Depends(require_user)):
+    team_id = user.get("team_id")
+    if not team_id:
+        return {"entries": [], "treatment": None}
+    trt = await db.treatments.find_one({"treatment_id": treatment_id, "team_id": team_id}, {"_id": 0})
+    if not trt:
+        raise HTTPException(404, "Treatment not found.")
+    q: Dict[str, Any] = {"treatment_id": treatment_id, "team_id": team_id}
+    if since:
+        try:
+            since_dt = datetime.fromisoformat(since.replace("Z", "+00:00"))
+            if since_dt.tzinfo is None:
+                since_dt = since_dt.replace(tzinfo=timezone.utc)
+            q["created_at"] = {"$gt": since_dt}
+        except Exception:
+            pass  # bad since — return all
+    docs = await db.treatment_entries.find(q, {"_id": 0}).sort("created_at", 1).to_list(2000)
+    return {"entries": [_serialize(d) for d in docs], "treatment": _serialize(trt)}
+
+
+@api_router.post("/treatments/{treatment_id}/entries")
+async def add_treatment_entry(treatment_id: str, body: TreatmentEntryCreate, user: dict = Depends(require_user)):
+    team_id = user.get("team_id")
+    if not team_id:
+        raise HTTPException(400, "Join or create a team first.")
+    text = (body.text or "").strip()
+    if not text:
+        raise HTTPException(400, "Entry text can't be empty.")
+    if len(text) > 2000:
+        raise HTTPException(400, "Entry too long (max 2000 chars).")
+    trt = await db.treatments.find_one({"treatment_id": treatment_id, "team_id": team_id}, {"_id": 0})
+    if not trt:
+        raise HTTPException(404, "Treatment not found.")
+    if trt.get("status") != "active":
+        raise HTTPException(400, "Treatment is closed — reopen or start a new one to log entries.")
+    now = datetime.now(timezone.utc)
+    doc = {
+        "entry_id": f"trn_{uuid.uuid4().hex[:12]}",
+        "treatment_id": treatment_id,
+        "team_id": team_id,
+        "rig_id": trt["rig_id"],
+        "author": user["email"],
+        "author_name": user.get("name") or user["email"].split("@")[0],
+        "text": text,
+        "created_at": now,
+    }
+    await db.treatment_entries.insert_one(doc)
+    # Roll-up counters on the treatment doc
+    await db.treatments.update_one(
+        {"treatment_id": treatment_id, "team_id": team_id},
+        {"$inc": {"entry_count": 1}, "$set": {"last_entry_at": now, "updated_at": now}},
+    )
+    doc.pop("_id", None)
+    return _serialize(doc)
+
+
 # ============ FILE / MEDIA STORAGE (Emergent Object Storage) ============
 STORAGE_BASE = (os.environ.get("INTEGRATION_PROXY_URL") or "").strip() or "https://integrations.emergentagent.com"
 STORAGE_URL = STORAGE_BASE.rstrip("/") + "/objstore/api/v1/storage"
