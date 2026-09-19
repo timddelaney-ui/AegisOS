@@ -12,7 +12,7 @@ import ExcelHeader from "../components/ExcelHeader";
 import RigSelector from "../components/RigSelector";
 import AIPanel from "../components/AIPanel";
 
-const greetings = ["Kettle's on", "Ready for tour", "How's the shift", "Morning, hand", "Evening, tool push", "Coffee's brewing"];
+const greetings = ["Kettle's on", "Ready for shift", "How's the shift", "Morning, hand", "Evening, tool push", "Coffee's brewing"];
 const proTips = [
   "Tap any sheet tab at the bottom of the workbook to jump between operations.",
   "The AI 'Training' mode explains what's happening downhole in plain English — good for a new hand.",
@@ -274,7 +274,7 @@ const Hub = () => {
             <HubCard
               Icon={Calendar}
               title="Crew Schedule"
-              subtitle="Assign day/night tours with 14/14, 20/10 rotations. Print or save as PDF."
+              subtitle="Assign day/night shifts with 14/14, 20/10 rotations. Print or save as PDF."
               accent="bg-[#DBEAFE] text-[#0056B3]"
               onClick={() => navigate("/schedule")}
               badge="NEW"

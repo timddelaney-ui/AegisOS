@@ -1818,6 +1818,38 @@ class ScheduleShiftUpdate(BaseModel):
     note: Optional[str] = None
 
 
+class CrewMemberInput(BaseModel):
+    name: str
+    role: str = "Operator"
+
+
+class CrewCreate(BaseModel):
+    rig_id: str
+    name: str                              # e.g. "Crew A"
+    tour: str = "day"                      # day | night
+    pattern: str = "14/14"                 # 14/14 | 20/10 | 7/7 | custom
+    rotation_days_on: Optional[int] = None
+    rotation_days_off: Optional[int] = None
+    start_date: str                        # crew-change / first-on-shift date
+    repeat_cycles: int = 6                 # how many on/off cycles to project
+    members: List[CrewMemberInput] = Field(default_factory=list)
+    auto_create_opposite: bool = False     # also create an opposing crew that flips days
+    opposite_name: Optional[str] = None    # optional custom name for the opposite crew
+    note: Optional[str] = None
+
+
+class CrewUpdate(BaseModel):
+    name: Optional[str] = None
+    tour: Optional[str] = None
+    pattern: Optional[str] = None
+    rotation_days_on: Optional[int] = None
+    rotation_days_off: Optional[int] = None
+    start_date: Optional[str] = None
+    repeat_cycles: Optional[int] = None
+    members: Optional[List[CrewMemberInput]] = None
+    note: Optional[str] = None
+
+
 def _parse_ymd(v: str) -> datetime:
     try:
         return datetime.fromisoformat(v + "T00:00:00+00:00")
@@ -1949,6 +1981,226 @@ async def delete_shift(shift_id: str, user: dict = Depends(require_user)):
     r = await db.crew_shifts.delete_one({"shift_id": shift_id, "team_id": team_id})
     if r.deleted_count == 0:
         raise HTTPException(404, "Not found.")
+    return {"success": True}
+
+
+# ============ CREWS (personnel + rotation, auto-generates shifts) ============
+def _generate_shifts_for_crew(crew: dict, opposite: bool = False) -> List[dict]:
+    """Given a crew doc, return a list of shift docs (one per rotation cycle per member)."""
+    pattern = crew["pattern"]
+    on_d, off_d = _pattern_to_on_off(pattern, crew.get("rotation_days_on"), crew.get("rotation_days_off"))
+    cycles = max(1, min(int(crew.get("repeat_cycles") or 1), 24))
+    start = _parse_ymd(crew["start_date"])
+    if opposite:
+        start = start + timedelta(days=on_d)  # opposite crew starts the day after this one ends
+    tour = crew["tour"]
+    if opposite:
+        tour = "night" if tour == "day" else "day"
+    now = datetime.now(timezone.utc)
+    shifts: List[dict] = []
+    for member in crew.get("members", []):
+        member_name = (member.get("name") or "").strip()[:120]
+        if not member_name:
+            continue
+        role = member.get("role") or "Operator"
+        if role not in SHIFT_ROLES:
+            role = "Other"
+        cursor = start
+        for _ in range(cycles):
+            on_end = cursor + timedelta(days=on_d - 1)
+            shifts.append({
+                "shift_id": f"shf_{uuid.uuid4().hex[:12]}",
+                "team_id": crew["team_id"],
+                "rig_id": crew["rig_id"],
+                "crew_id": crew["crew_id"],
+                "crew_name": crew["name"],
+                "crew_member_name": member_name,
+                "role": role,
+                "tour": tour,
+                "pattern": pattern,
+                "rotation_days_on": on_d,
+                "rotation_days_off": off_d,
+                "note": crew.get("note"),
+                "created_by": crew["created_by"],
+                "created_by_name": crew.get("created_by_name") or crew["created_by"].split("@")[0],
+                "created_at": now,
+                "updated_at": now,
+                "start_date": cursor.date().isoformat(),
+                "end_date": on_end.date().isoformat(),
+            })
+            cursor = on_end + timedelta(days=off_d + 1)
+    return shifts
+
+
+@api_router.get("/crews")
+async def list_crews(rig_id: Optional[str] = None, user: dict = Depends(require_user)):
+    team_id = user.get("team_id")
+    if not team_id:
+        return {"crews": [], "team_id": None}
+    q: Dict[str, Any] = {"team_id": team_id}
+    if rig_id:
+        q["rig_id"] = rig_id
+    docs = await db.crews.find(q, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return {"crews": [_serialize(d) for d in docs], "team_id": team_id, "rig_id": rig_id}
+
+
+@api_router.post("/crews")
+async def create_crew(body: CrewCreate, user: dict = Depends(require_user)):
+    team_id = user.get("team_id")
+    if not team_id:
+        raise HTTPException(400, "Join or create a team first.")
+    if body.tour not in SHIFT_TOURS:
+        raise HTTPException(400, "tour must be day|night")
+    if body.pattern not in SHIFT_PATTERNS or body.pattern == "one_off":
+        raise HTTPException(400, "pattern must be one of 14/14, 20/10, 7/7, custom")
+    _parse_ymd(body.start_date)  # validates date
+    # Validate rotation for custom
+    if body.pattern == "custom" and (not body.rotation_days_on or not body.rotation_days_off):
+        raise HTTPException(400, "Custom pattern requires rotation_days_on and rotation_days_off.")
+    # Validate members
+    clean_members = []
+    for m in body.members or []:
+        n = (m.name or "").strip()[:120]
+        if not n:
+            continue
+        r = m.role if m.role in SHIFT_ROLES else "Other"
+        clean_members.append({"name": n, "role": r})
+    if not clean_members:
+        raise HTTPException(400, "Add at least one crew member.")
+    now = datetime.now(timezone.utc)
+
+    crew_a = {
+        "crew_id": f"crw_{uuid.uuid4().hex[:12]}",
+        "team_id": team_id,
+        "rig_id": body.rig_id,
+        "name": (body.name or "").strip()[:120] or "Crew",
+        "tour": body.tour,
+        "pattern": body.pattern,
+        "rotation_days_on": body.rotation_days_on if body.pattern == "custom" else _pattern_to_on_off(body.pattern, None, None)[0],
+        "rotation_days_off": body.rotation_days_off if body.pattern == "custom" else _pattern_to_on_off(body.pattern, None, None)[1],
+        "start_date": body.start_date,
+        "repeat_cycles": max(1, min(int(body.repeat_cycles or 1), 24)),
+        "members": clean_members,
+        "note": (body.note or None),
+        "paired_crew_id": None,
+        "created_by": user["email"],
+        "created_by_name": user.get("name") or user["email"].split("@")[0],
+        "created_at": now,
+        "updated_at": now,
+    }
+
+    created_crews = [crew_a]
+
+    if body.auto_create_opposite:
+        opp_tour = "night" if crew_a["tour"] == "day" else "day"
+        opp_name = (body.opposite_name or "").strip()[:120] or _mirror_crew_name(crew_a["name"])
+        crew_b = {
+            **crew_a,
+            "crew_id": f"crw_{uuid.uuid4().hex[:12]}",
+            "name": opp_name,
+            "tour": opp_tour,
+            "members": [],  # user fills opposite crew later
+            "paired_crew_id": crew_a["crew_id"],
+            "created_at": now,
+            "updated_at": now,
+        }
+        crew_a["paired_crew_id"] = crew_b["crew_id"]
+        created_crews.append(crew_b)
+
+    # Persist crews
+    for c in created_crews:
+        await db.crews.insert_one(dict(c))
+        c.pop("_id", None)
+
+    # Generate shifts
+    total_shifts = 0
+    for c in created_crews:
+        if not c.get("members"):
+            continue  # opposite crew with no members yet — user can add later
+        shifts = _generate_shifts_for_crew(c, opposite=False)
+        if shifts:
+            await db.crew_shifts.insert_many([dict(s) for s in shifts])
+            total_shifts += len(shifts)
+
+    return {"crews": [_serialize(c) for c in created_crews], "shifts_generated": total_shifts}
+
+
+def _mirror_crew_name(name: str) -> str:
+    n = (name or "").strip()
+    if not n:
+        return "Opposite crew"
+    # If crew name ends with a single letter, flip A<->B, C<->D etc.
+    if len(n) >= 2 and n[-2] in " -" and n[-1].isalpha():
+        letter = n[-1].upper()
+        flipped = "B" if letter == "A" else ("A" if letter == "B" else chr(((ord(letter) - 64) % 26) + 65))
+        return n[:-1] + flipped
+    return n + " (opposite)"
+
+
+@api_router.patch("/crews/{crew_id}")
+async def update_crew(crew_id: str, body: CrewUpdate, user: dict = Depends(require_user)):
+    team_id = user.get("team_id")
+    if not team_id:
+        raise HTTPException(400, "No team.")
+    crew = await db.crews.find_one({"crew_id": crew_id, "team_id": team_id}, {"_id": 0})
+    if not crew:
+        raise HTTPException(404, "Crew not found.")
+
+    updates = {k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None}
+    if not updates:
+        raise HTTPException(400, "No fields to update.")
+    if "tour" in updates and updates["tour"] not in SHIFT_TOURS:
+        raise HTTPException(400, "tour must be day|night")
+    if "pattern" in updates:
+        if updates["pattern"] not in SHIFT_PATTERNS or updates["pattern"] == "one_off":
+            raise HTTPException(400, "pattern must be one of 14/14, 20/10, 7/7, custom")
+    if "members" in updates:
+        clean = []
+        for m in updates["members"]:
+            n = (m.get("name") or "").strip()[:120]
+            if not n:
+                continue
+            r = m.get("role") if m.get("role") in SHIFT_ROLES else "Other"
+            clean.append({"name": n, "role": r})
+        updates["members"] = clean
+    if "start_date" in updates:
+        _parse_ymd(updates["start_date"])
+    if "repeat_cycles" in updates:
+        updates["repeat_cycles"] = max(1, min(int(updates["repeat_cycles"] or 1), 24))
+    if "name" in updates:
+        updates["name"] = (updates["name"] or "").strip()[:120] or crew["name"]
+    if updates.get("pattern") == "custom":
+        # Ensure rotation days present after update
+        merged = {**crew, **updates}
+        if not merged.get("rotation_days_on") or not merged.get("rotation_days_off"):
+            raise HTTPException(400, "Custom pattern requires rotation_days_on and rotation_days_off.")
+    updates["updated_at"] = datetime.now(timezone.utc)
+
+    await db.crews.update_one({"crew_id": crew_id, "team_id": team_id}, {"$set": updates})
+
+    # Regenerate shifts: drop any crew_id-scoped shifts, then rebuild from merged doc
+    await db.crew_shifts.delete_many({"crew_id": crew_id, "team_id": team_id})
+    merged = {**crew, **updates}
+    if merged.get("members"):
+        shifts = _generate_shifts_for_crew(merged, opposite=False)
+        if shifts:
+            await db.crew_shifts.insert_many([dict(s) for s in shifts])
+    doc = await db.crews.find_one({"crew_id": crew_id}, {"_id": 0})
+    return _serialize(doc)
+
+
+@api_router.delete("/crews/{crew_id}")
+async def delete_crew(crew_id: str, user: dict = Depends(require_user)):
+    team_id = user.get("team_id")
+    if not team_id:
+        raise HTTPException(400, "No team.")
+    r = await db.crews.delete_one({"crew_id": crew_id, "team_id": team_id})
+    if r.deleted_count == 0:
+        raise HTTPException(404, "Crew not found.")
+    # Drop generated shifts too
+    await db.crew_shifts.delete_many({"crew_id": crew_id, "team_id": team_id})
+    # Un-pair partner
+    await db.crews.update_many({"team_id": team_id, "paired_crew_id": crew_id}, {"$set": {"paired_crew_id": None}})
     return {"success": True}
 
 

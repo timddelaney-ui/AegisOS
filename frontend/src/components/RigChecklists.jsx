@@ -21,7 +21,7 @@ const DEFAULT_LIB = {
     { id: "wellhead_p",    label: "Wellhead pressure logged (surface & annulus)",            cadence: "daily" },
     { id: "coil_fatigue",  label: "CT fatigue log updated (cycles counted)",                 cadence: "daily" },
     { id: "reel_inspect",  label: "Reel + injector inspected for leaks",                     cadence: "daily" },
-    { id: "jha_reviewed",  label: "JHA reviewed with day tour crew",                         cadence: "daily" },
+    { id: "jha_reviewed",  label: "JHA reviewed with day shift crew",                         cadence: "daily" },
     { id: "circulate_bu",  label: "Circulate bottoms-up before pulling into surface",        cadence: "daily" },
   ],
   pm: [

@@ -126,7 +126,7 @@ const Login = () => {
               <li><strong>Mobile-first.</strong> Runs on any phone, any browser, any hitch. Metric or Imperial toggle on every sheet.</li>
               <li><strong>Cited, not guessed.</strong> Every result carries the API, AER, CSA, or IWCF reference in brackets.</li>
               <li><strong>Advisory-only by design.</strong> A safety notice stays on every screen — this app supports safe work practices, it does not replace the licensee program, JHA, or site ERP.</li>
-              <li><strong>Team-aware.</strong> Invite your tool push and day tour to the same workspace. Shared jobs, shared feedback loop.</li>
+              <li><strong>Team-aware.</strong> Invite your tool push and day shift crew to the same workspace. Shared jobs, shared feedback loop.</li>
               <li><strong>30-day free trial.</strong> Six core sheets unlocked, no credit card. Upgrade to Pro ($2.99/mo or $24.99/yr) for all 17 sheets, Emergency SOPs, and AI.</li>
             </ul>
           </div>
