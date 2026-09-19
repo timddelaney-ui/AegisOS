@@ -25,10 +25,15 @@ const RedeemDialog = () => {
 
   const redeem = async () => {
     setBusy(true); setError(null); setResult(null);
-    // Normalize aggressively — real invite codes only use A-Z, 0-9, and dashes.
-    // Strip zero-width chars, non-breaking spaces, and any surrounding whitespace
-    // so that a code pasted from an email/SMS still redeems.
-    const cleaned = code.replace(/[\u200B-\u200D\uFEFF\s]/g, "").toUpperCase();
+    // Aggressive normalization — strip EVERYTHING that isn't A-Z or 0-9 (handles
+    // em-dashes, en-dashes, non-breaking spaces, zero-width chars, spaces, the works)
+    // then re-insert the canonical CT-XXXX-XXXX / OM-XXXX-XXXX shape.
+    const alnum = code.toUpperCase().replace(/[^A-Z0-9]/g, "");
+    // Pattern: 2 prefix letters + 8 code chars = 10 alnum total.
+    let cleaned = alnum;
+    if (alnum.length === 10 && /^[A-Z]{2}[A-Z0-9]{8}$/.test(alnum)) {
+      cleaned = `${alnum.slice(0, 2)}-${alnum.slice(2, 6)}-${alnum.slice(6, 10)}`;
+    }
     if (!cleaned) { setError("Please enter a code."); setBusy(false); return; }
     try {
       const { data } = await axios.post(`${API}/invites/redeem`, { code: cleaned }, { withCredentials: true });
@@ -38,7 +43,7 @@ const RedeemDialog = () => {
       const detail = e.response?.data?.detail;
       const status = e.response?.status;
       if (status === 401) setError("You need to sign in first — refresh the page and log in.");
-      else if (status === 404 || detail === "Invalid code") setError(`Invalid code: "${cleaned}". Double-check with your admin.`);
+      else if (status === 404 || detail === "Invalid code") setError(`Invalid code: "${cleaned}". Watch for lookalikes: 0/O · 1/I · 8/B · 5/S · 2/Z. Ask your admin if it still won't take.`);
       else if (detail?.toLowerCase().includes("already")) setError("That code was already redeemed. Ask your admin for a fresh one.");
       else setError(detail || `Redemption failed (HTTP ${status || "?"}). Try again or contact support.`);
     }
