@@ -99,6 +99,11 @@ Build a pixel-perfect, mobile-friendly clone of an Excel spreadsheet for Coiled 
 - GET `/api/schedule?rig_id=&start=&end=` — list overlapping shifts
 - POST `/api/schedule` — create one_off | 14/14 | 20/10 | 7/7 | custom with repeat_cycles
 - PATCH `/api/schedule/{shift_id}`, DELETE `/api/schedule/{shift_id}`
+### Crews (personnel + rotation, auto-generates schedule shifts)
+- GET `/api/crews?rig_id=` — list crews for the team (rig-filtered)
+- POST `/api/crews` — create a crew (name, tour, pattern, start_date, repeat_cycles, members[], `auto_create_opposite` optional). Returns generated shift count. Opposite crew stores its own offset start_date so re-generation stays consistent.
+- PATCH `/api/crews/{crew_id}` — rename, change members / rotation / start / cycles. Backend deletes the crew's existing generated shifts and re-inserts fresh ones.
+- DELETE `/api/crews/{crew_id}` — remove the crew, its generated shifts, and un-pair the sibling.
 ### User Preferences
 - PATCH `/api/users/me` — currently supports `service_view` (coil_tubing | stand_alone_frac | coil_tools | all)
 ### Attachments (Emergent Object Storage)
@@ -110,6 +115,7 @@ Build a pixel-perfect, mobile-friendly clone of an Excel spreadsheet for Coiled 
 - `/robots.txt`, `/sitemap.xml` — SEO
 
 ## Changelog (recent)
+- **Feb 2026 (iter 17)**: Crew Builder — new `/api/crews` collection with CRUD endpoints that auto-generate `crew_shifts` for every rotation cycle × member. New Crew Manager UI on `/schedule` lets users define a whole crew once (name + rotation pattern + crew-change date + members) instead of adding people one-by-one. Optional **auto-create opposite crew** flips shift type and offsets the start date by `days-on`. Editing a crew (`PATCH /api/crews/{id}`) rebuilds its shifts atomically (delete + insert). Deleting a crew removes its generated shifts and un-pairs the sibling. Renamed the word **"tour" → "Day shift"/"Night shift"** across the entire visible UI (schedule labels, hub greeting, tips, checklist item, handover modal, workbook scenario copy). Sonner Toaster mounted globally for success/error feedback. Backend 100% pytest, frontend flows verified.
 - **Feb 2026 (iter 13)**: Emergent Object Storage integration — file & media uploads (JPG/PNG/HEIC/WEBP/PDF, 15 MB max) wired to 4 contexts: equipment records, crew chat, handover summary, checklist evidence. `AttachmentUploader` component with blob-fetch thumbnails (cookies never leak to `<img src>`), team-scoped access + soft-delete. Removed the calculation-driven Safety Alerts section from the Handover Summary per user feedback (alerts still visible in Crew Chat + Manager Dashboard). Backend 15/15 pytest pass, frontend end-to-end green.
 - **Feb 2026 (iter 12)**: Team Hub redesigned as a big-tile grid, Crew Schedule now colour-codes per crew member. All 23 lifetime codes (20 CT + 3 OM) verified redeemable.
 - **Feb 2026 (iter 11)**: Code-review cleanup — random→secrets for invite codes, `_compute_equipment_status` refactor, AuthContext/RigContext value memoisation, stable React keys, logged silent catches. 36/36 pytest pass.

@@ -233,7 +233,7 @@ const Hub = () => {
                 </>
               ) : (
                 <>
-                  <p className="text-[12px] text-[#595959] mb-2">You're rolling solo. Create a crew to share jobs with your tour.</p>
+                  <p className="text-[12px] text-[#595959] mb-2">You're rolling solo. Create a crew to share jobs with your shift.</p>
                   <button onClick={() => navigate("/team")} className="text-[11px] font-bold text-[#107C41] hover:underline">Create a crew →</button>
                 </>
               )}
@@ -318,7 +318,7 @@ const Hub = () => {
               <Sparkles className="w-4 h-4 text-[#856404]" strokeWidth={2.5} />
             </div>
             <div className="flex-1">
-              <p className="text-[10px] font-bold text-[#856404] uppercase tracking-wide">Tip of the tour</p>
+              <p className="text-[10px] font-bold text-[#856404] uppercase tracking-wide">Tip of the shift</p>
               <p className="text-[12px] text-[#333] leading-snug">{proTip}</p>
             </div>
           </div>

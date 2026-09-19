@@ -120,7 +120,7 @@ export const emergencyProtocols = [
     operator: [
       "Supervisor calls a full stop-work and headcounts crew (OH&S Reg. §37 duty to warn).",
       "Inspect coil for ovality, bird-caging, or twist damage before further movement.",
-      "Log the incident in the tour report; a JHA re-assessment is required before resuming.",
+      "Log the incident in the shift report; a JHA re-assessment is required before resuming.",
       "Notify the well licensee and, if injury or release occurred, AER within 24 h (Directive 019).",
     ],
   },

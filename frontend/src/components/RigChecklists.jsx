@@ -9,7 +9,7 @@ const KEY = (rigId, kind) => `ctp_checklist_v1::${rigId}::${kind}`;
 
 const DEFAULT_LIB = {
   safety: [
-    { id: "flha_am",       label: "Pre-tour FLHA / Toolbox Talk signed by all crew",         cadence: "shift" },
+    { id: "flha_am",       label: "Pre-shift FLHA / Toolbox Talk signed by all crew",         cadence: "shift" },
     { id: "safety_meeting",label: "Weekly Safety Meeting held (topic logged)",               cadence: "week" },
     { id: "h2s_check",     "label": "H₂S monitor bump-tested",                               cadence: "shift" },
     { id: "hazop_review",  label: "HAZOP / MOC reviewed for today's operation",              cadence: "shift" },

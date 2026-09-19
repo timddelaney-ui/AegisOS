@@ -113,7 +113,7 @@ const HandoverModal = ({ open, onClose }) => {
           <FileText className="w-5 h-5" strokeWidth={2.5} />
           <div className="flex-1">
             <div className="text-sm font-bold">Handover Summary — {rigLabel(rigId)}</div>
-            <div className="text-[10px] text-white/80">Shift-change report. Copy to clipboard for the incoming tour push.</div>
+            <div className="text-[10px] text-white/80">Shift-change report. Copy to clipboard for the incoming tool push.</div>
           </div>
           <button data-testid="handover-close" onClick={onClose} className="text-white/80 hover:text-white p-1"><X className="w-5 h-5" /></button>
         </div>

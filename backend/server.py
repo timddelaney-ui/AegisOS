@@ -2094,11 +2094,15 @@ async def create_crew(body: CrewCreate, user: dict = Depends(require_user)):
     if body.auto_create_opposite:
         opp_tour = "night" if crew_a["tour"] == "day" else "day"
         opp_name = (body.opposite_name or "").strip()[:120] or _mirror_crew_name(crew_a["name"])
+        # Opposite crew's first-on-shift date is the day after crew A's first cycle ends
+        opp_on_d = crew_a["rotation_days_on"] or _pattern_to_on_off(crew_a["pattern"], None, None)[0] or 14
+        opp_start = (_parse_ymd(crew_a["start_date"]) + timedelta(days=opp_on_d)).date().isoformat()
         crew_b = {
             **crew_a,
             "crew_id": f"crw_{uuid.uuid4().hex[:12]}",
             "name": opp_name,
             "tour": opp_tour,
+            "start_date": opp_start,
             "members": [],  # user fills opposite crew later
             "paired_crew_id": crew_a["crew_id"],
             "created_at": now,

@@ -1,0 +1,41 @@
+{
+  "summary": "Iter 17 — Tested Crew Builder + schedule flows (backend + frontend) against demo Pro user. Backend: 14/14 pytest tests pass (crew create with opposite, list, patch rebuilds shifts, patch rejects one_off, empty-members guard, delete un-pairs partner + drops shifts, legacy /api/schedule regression for one_off/14-14/20-10/7-7/custom). Frontend: /schedule loads clean, 'New crew' opens builder modal, 'Shift type' dropdown offers Day shift/Night shift, creating a crew with auto-opposite yields both cards + populates 14-day grid with D cells, edit adds a member row (M3 appears in grid), one-off shift flow saves and renders D cell, delete removes cards. NO 'tour' word on /schedule or /login. BUT the word 'tour' still appears in visible UI text on /hub and in RigChecklists / HandoverModal — those renames were missed.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "PATCH /api/crews/{id}", "issue": "Switching pattern→'custom' without new rotation_days keeps prior values (merged from existing crew). Not a bug per se, but backend does not force user to re-supply rotation for custom. Documented in test."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Hub.jsx", "issue": "Visible text still contains 'tour' at line 236 ('share jobs with your tour') and line 321 ('Tip of the tour'). User explicitly asked for 'tour' → 'shift' rename throughout UI.", "selector": "/hub page body text", "priority": "MEDIUM"},
+      {"component": "RigChecklists.jsx", "issue": "Line 12 checklist item label 'Pre-tour FLHA / Toolbox Talk signed by all crew' still shows 'tour' (visible on checklist screen).", "selector": "checklist item id=flha_am", "priority": "MEDIUM"},
+      {"component": "HandoverModal.jsx", "issue": "Line 116 text 'Copy to clipboard for the incoming tour push.' still contains 'tour'.", "selector": "handover modal subtitle", "priority": "MEDIUM"},
+      {"component": "mock/workbookData.js", "issue": "Line 123 training-scenario copy 'Log the incident in the tour report' still contains 'tour'.", "selector": "workbook scenario text", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter18_crew_builder.py",
+    "/app/test_reports/pytest/iter18_crew.xml"
+  ],
+  "action_items": [
+    "Rename remaining 'tour' occurrences in visible copy: Hub.jsx lines 236 & 321, RigChecklists.jsx line 12, HandoverModal.jsx line 116, mock/workbookData.js line 123. (Internal Python 'tour' field / JS variable names can stay for back-compat.)"
+  ],
+  "critical_code_review_comments": [
+    "CrewSchedulePage.jsx is 658 lines — approaching the 700-line split threshold. Consider extracting SingleShiftForm + CrewBuilderModal into their own files.",
+    "PATCH /crews merges prior rotation_days_on/off values, so pattern='custom' can silently inherit values that were auto-set by a previous rotation preset. Consider forcing an explicit rotation_days payload when pattern flips to custom.",
+    "Auto-opposite crew start-date offset: opposite crew starts on start_date + on_d — this assumes both crews share the same 'start_date' string in DB but generate shifts with a runtime offset. The DB doc for the opposite crew stores the SAME start_date as crew A, so re-editing the opposite crew and re-generating won't reproduce the offset. This is a latent bug for the edit flow of the opposite crew."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter18_crew_builder.py"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "90%"},
+  "test_credentials": "session_token=demo_session_dade4ac57f0c496094fde437e8e91f00 (demo.pro@example.com, team_9af2d0d38747, RIG1)",
+  "seed_data_creation": "Ephemeral TEST_-prefixed crews and shifts created and cleaned up in both backend pytest teardown and frontend Playwright cleanup step. Nothing left over.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend crew + schedule endpoints are green. Main remaining issue is finishing the 'tour'→'shift' rename in Hub.jsx (2 spots), RigChecklists.jsx, HandoverModal.jsx, mock/workbookData.js. After those are patched, re-run: grep -rniE '\\btour\\b' /app/frontend/src --include='*.jsx' --include='*.js' | grep -vE 'tour: \"|const shiftLabel|s.tour|f.tour|crew.tour|editing.tour|draft.tour|sched-tour|crew-tour' — should return zero visible-text hits.",
+  "rca of the issue": "N/A — flows work. Only outstanding item is copy renames that were missed in the batch edit."
+}
