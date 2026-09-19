@@ -1,0 +1,23 @@
+{
+  "summary": "Iter18 dedup verification: RedeemDialog + FeedbackDialog duplicate-mount fix in ExcelHeader.jsx confirmed. Backend suite 9/9 green. UI: on both /hub (tile) and /app (burger menu) exactly ONE instance of each dialog exists in the DOM after trigger (redeem-dialog count=1, redeem-code-input count=1, feedback-dialog count=1). Redeem happy path succeeds end-to-end from BOTH entry points against freshly-minted CT- codes; success-message renders and /api/auth/me flips to subscription_status=active. Error paths verified: invalid → 'Invalid code:' error, already-used → 'already' error, whitespace-padded code still redeems. Feedback submit lands in admin GET /api/feedback for both entry points. Dialect purge holds across /login /hub /app. Prod codes (20 CT- + 3 OM-) untouched (use_count 0/1, is_active). All disposable data cleaned.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter17_redeem_bug_and_dialect.py",
+    "/app/test_reports/pytest/iter18_backend.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Dedup fix in ExcelHeader.jsx is clean: menu buttons now dispatch CustomEvent('open-redeem') / CustomEvent('open-feedback') matching Hub's pattern; global mounts remain only in App.js. No dead imports/state left in ExcelHeader.",
+    "FeedbackDialog still accepts legacy open/onClose/page props for backward compat — harmless but consider removing after grep confirms no callers besides App.js.",
+    "AdvisoryModal intercepts pointer events on first visit; playwright had to pre-seed localStorage. Not a bug but noted for future test agents."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (9/9)", "frontend": "100% (T1 hub-redeem, T2 app-menu-redeem, T3 invalid/already/whitespace, T4a hub-feedback, T4b app-menu-feedback, T5 dialect all PASS)"},
+  "test_credentials": "Demo admin cookie session_token=demo_session_dade4ac57f0c496094fde437e8e91f00 used; throwaway iter18 users minted+cleaned.",
+  "seed_data_creation": "3 throwaway users + 4 disposable CT- codes (grant_days=7, note=iter18_*) minted via /api/admin/invites and db inserts. All removed at end of run.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter18 dedup verified end-to-end. The customer's 'codes not working' bug (dual-mount phantom instance) is resolved. When testing Hub/App UI, pre-seed localStorage['ctp_disclaimer_ack_v1'] = timestamp to avoid AdvisoryModal blocking clicks (or click the 'I understand' button first). Use POST /api/admin/invites with demo cookie to mint disposable codes; never redeem the 20 CT- lifetime + 3 OM- prod codes. Clean iter-prefixed users/sessions/invites/feedback after run.",
+  "rca of the issue": "Iter17 RCA: RedeemDialog and FeedbackDialog were mounted twice (once in App.js globally, once in ExcelHeader.jsx locally). Both instances listened to the same global CustomEvent, so triggering 'open-redeem' opened both, and Playwright's .fill() targeted the wrong instance, leaving the visible dialog's Redeem button disabled. Iter18 fix removed the duplicate mounts + state from ExcelHeader and switched its menu buttons to dispatch CustomEvent, keeping the singleton in App.js. Verified: querySelectorAll('[data-testid=redeem-dialog]').length === 1 after triggering from both /hub tile and /app burger menu."
+}
