@@ -3,14 +3,10 @@ import { useNavigate } from "react-router-dom";
 import { FileSpreadsheet, Menu, LogOut, Users, FolderOpen, Sparkles, X, Crown, MessageSquarePlus, ShieldAlert, Gift, Ticket, Home } from "lucide-react";
 import axios from "axios";
 import { useAuth, API, isProUser } from "../context/AuthContext";
-import FeedbackDialog from "./FeedbackDialog";
-import RedeemDialog from "./RedeemDialog";
 
 const ExcelHeader = () => {
   const { user, logout } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
-  const [feedbackOpen, setFeedbackOpen] = useState(false);
-  const [redeemOpen, setRedeemOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const navigate = useNavigate();
   const isPro = isProUser(user);
@@ -63,10 +59,10 @@ const ExcelHeader = () => {
               <button onClick={() => { setMenuOpen(false); navigate("/team"); }} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-[#F0F9F3] rounded text-sm font-medium text-[#262626]">
                 <Users className="w-4 h-4 text-[#107C41]" /> Crew / Team
               </button>
-              <button onClick={() => { setMenuOpen(false); setRedeemOpen(true); }} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-[#F0F9F3] rounded text-sm font-medium text-[#262626]">
+              <button onClick={() => { setMenuOpen(false); document.dispatchEvent(new CustomEvent("open-redeem")); }} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-[#F0F9F3] rounded text-sm font-medium text-[#262626]">
                 <Ticket className="w-4 h-4 text-[#107C41]" /> Redeem Invite Code
               </button>
-              <button onClick={() => { setMenuOpen(false); setFeedbackOpen(true); }} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-[#F0F9F3] rounded text-sm font-medium text-[#262626]">
+              <button onClick={() => { setMenuOpen(false); document.dispatchEvent(new CustomEvent("open-feedback")); }} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-[#F0F9F3] rounded text-sm font-medium text-[#262626]">
                 <MessageSquarePlus className="w-4 h-4 text-[#107C41]" /> Send Feedback
               </button>
               {isAdmin && (
@@ -92,9 +88,6 @@ const ExcelHeader = () => {
           </div>
         </div>
       )}
-
-      <FeedbackDialog open={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
-      <RedeemDialog open={redeemOpen} onClose={() => setRedeemOpen(false)} />
     </>
   );
 };

@@ -1,0 +1,29 @@
+{
+  "summary": "Iter17 verification — redeem-bug fixes and Cape Breton dialect purge. Backend pytest suite (9/9 PASS) covering fresh-code redeem, invalid-code specific error, already-used error, whitespace-tolerance, OM role grant, AI dialect check, source-file dialect check, and prod-code intact regression. Frontend Playwright (5/5 PASS): happy-path redeem, invalid-code shows 'Invalid code: \"…\"', whitespace-padded redeem works, OM code grants ops_manager + Skipper 'entered the chat' ManagerGreeting with humour, dialect-free /login /hub /app.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "RedeemDialog", "issue": "RedeemDialog is mounted TWICE — once in App.js line 224 (event-driven) and once in ExcelHeader.jsx line 97 (prop-driven, but the component ignores props and only listens to 'open-redeem' custom event). Both instances open simultaneously when the Hub tile fires the event → two overlapping modals in the DOM. Locators like `[data-testid=\"redeem-code-input\"]` resolve to 2 elements; strict-mode Playwright and possibly real users interacting via keyboard-shortcuts / paste-to-first-focused could target the phantom (offscreen) instance instead of the visible one. HIGHLY likely the RCA of the customer tester's 'codes not working' report — depending on which instance receives the paste event, the state on the visible dialog stays empty and the Redeem button stays disabled. Fix: remove the mount in ExcelHeader.jsx (or convert RedeemDialog to accept controlled `open`/`onClose` props instead of the global event, then remove the App.js mount).", "selector": "[data-testid=\"redeem-dialog\"]", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_iter17_redeem_bug_and_dialect.py", "/app/test_reports/pytest/iter17_results.xml"],
+  "action_items": [
+    "CRITICAL: RedeemDialog is duplicate-mounted (App.js + ExcelHeader.jsx). Remove one mount — recommend deleting the <RedeemDialog open=... /> in ExcelHeader.jsx since the component ignores its props and only reacts to the global 'open-redeem' event. This is almost certainly what the customer tester was hitting. When I ran Playwright with a normal `.fill` on `[data-testid=redeem-code-input]`, only the phantom (bottom-z) instance received the value; the visible dialog stayed empty with a disabled Redeem button — exactly matching the user's complaint. My tests only passed after I set the value on ALL matching inputs via evaluate().",
+    "Also flag to user: if fix is deployed only in preview, ask their tester to hard-refresh / redeploy — but the duplicate-mount above is the real bug and needs to ship."
+  ],
+  "critical_code_review_comments": [
+    "server.py is 2198 lines — split into routers (auth, invites, ai, teams, jobs, feedback) for maintainability.",
+    "RedeemDialog component takes props (open, onClose) in ExcelHeader usage but the component itself ignores them and uses internal state + global event — dead code + duplicate mount bug. Choose one pattern.",
+    "CAPE_BRETON_SAFETY_QUIPS variable name is intentionally preserved per request note — noted, not flagged."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter17_redeem_bug_and_dialect.py"],
+  "success_rate": {"backend": "100% (9/9)", "frontend": "100% (5/5) — but only after workaround for duplicate-mount bug"},
+  "test_credentials": "Demo admin session_token=demo_session_dade4ac57f0c496094fde437e8e91f00; throwaway users seeded fresh each run and cleaned up.",
+  "seed_data_creation": "3 disposable CT-/OM- codes minted + 3 throwaway users + sessions created; all cleaned up post-run. 20 prod CT- codes + 3 prod OM- codes untouched (verified in test_prod_codes_intact).",
+  "retest_needed": true,
+  "main_agent_can_self_test": false,
+  "context_for_next_testing_agent": "The redeem end-to-end works when the correct DOM instance is targeted, but RedeemDialog is currently mounted in TWO places (App.js:224 and ExcelHeader.jsx:97) — pick one. This test file covers backend fully; for regression re-run: pytest /app/backend/tests/test_iter17_redeem_bug_and_dialect.py -o 'addopts=' -v. Dialect purge is confirmed clean in server.py + all frontend .js/.jsx + /login /hub /app rendered HTML + AI chat responses.",
+  "rca of the issue": "Customer tester's 'codes not working' report likely caused by duplicate mount of <RedeemDialog /> — App.js mounts one globally that listens to the 'open-redeem' custom event, AND ExcelHeader.jsx mounts a second one that ALSO listens to the same event. When the Hub 'Have an Invite Code?' tile dispatches open-redeem, BOTH dialogs open. Depending on paint order and event target, the tester's keystrokes/paste may land on the phantom dialog instead of the visible one. Backend + input normalization fixes are correct — the frontend duplicate-mount is the last mile. Reproduction: /hub as any user → click hub-redeem-tile → inspect DOM → `document.querySelectorAll('[data-testid=redeem-dialog]').length === 2`. Mitigation: delete the <RedeemDialog open={redeemOpen} onClose={...} /> line in /app/frontend/src/components/ExcelHeader.jsx (line 97) and its import (line 7). The App.js global instance is sufficient since Hub uses event dispatch."
+}
