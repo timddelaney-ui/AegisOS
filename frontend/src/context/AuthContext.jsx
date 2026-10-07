@@ -55,11 +55,14 @@ export const AuthProvider = ({ children }) => {
 
 export { API, BACKEND_URL };
 
-// Shared helper: user is Pro only if status is "active" AND expiry (if set) is in the future.
-export const isProUser = (user) => {
-  if (!user || user.subscription_status !== "active") return false;
-  const exp = user.subscription_expires_at;
-  if (!exp) return true; // legacy/active with no expiry recorded
-  const t = new Date(exp).getTime();
-  return Number.isFinite(t) && t > Date.now();
-};
+// Free-for-all mode: user flipped this ON in iter 21 — every logged-in user
+// gets full Pro access. To re-enable paid gating, swap this helper back to
+// the subscription-aware version below.
+export const isProUser = (_user) => true;
+
+// Keep the original logic available so it's a one-line restore later:
+//   if (!user || user.subscription_status !== "active") return false;
+//   const exp = user.subscription_expires_at;
+//   if (!exp) return true;
+//   const t = new Date(exp).getTime();
+//   return Number.isFinite(t) && t > Date.now();

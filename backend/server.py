@@ -541,8 +541,14 @@ def _parse_utc(value) -> Optional[datetime]:
     return None
 
 
+# Iter 21 — Free-for-all mode. Flip this env var to "false" to re-enable paid gating.
+FREE_FOR_ALL = os.environ.get("CT_FREE_FOR_ALL", "true").strip().lower() in ("1", "true", "yes", "on")
+
+
 def _user_is_pro(user: dict) -> bool:
     """Pro when status is active AND (no expiry set OR expiry is still in the future)."""
+    if FREE_FOR_ALL:
+        return True
     if user.get("subscription_status") != "active":
         return False
     exp = _parse_utc(user.get("subscription_expires_at"))
@@ -554,6 +560,8 @@ def _user_is_pro(user: dict) -> bool:
 
 def _user_has_ai_access(user: dict) -> bool:
     """AI features available during 30-day trial OR for active (non-expired) Pro subscribers."""
+    if FREE_FOR_ALL:
+        return True
     if _user_is_pro(user):
         return True
     exp = _parse_utc(user.get("trial_expires_at"))
