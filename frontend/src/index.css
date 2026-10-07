@@ -11,6 +11,70 @@ body {
         sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    /* Mobile: prevent horizontal scroll from accidental overflow */
+    overflow-x: hidden;
+}
+
+/* ───────── Mobile-first global polish ───────── */
+/* Kill 300ms tap delay + double-tap zoom on buttons */
+button, a, [role="button"] {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* iOS auto-zooms on inputs with font-size < 16px — force 16px on mobile only */
+@media (max-width: 640px) {
+    input:not([type="checkbox"]):not([type="radio"]),
+    textarea,
+    select {
+        font-size: 16px !important;
+    }
+}
+
+/* Smoother momentum scroll on iOS */
+.scroll-smooth-mobile {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+}
+
+/* Snap scroll utility for tab rows */
+.snap-tabs {
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+}
+.snap-tabs::-webkit-scrollbar { display: none; }
+.snap-tabs > * { scroll-snap-align: start; }
+
+/* Fade-edge indicator for horizontally scrollable rows */
+.scroll-fade-right {
+    mask-image: linear-gradient(to right, black calc(100% - 24px), transparent);
+    -webkit-mask-image: linear-gradient(to right, black calc(100% - 24px), transparent);
+}
+
+/* Safe-area helpers for notched phones */
+.safe-top    { padding-top: env(safe-area-inset-top); }
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+.safe-x      { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
+
+/* Ensure primary tap targets hit the 44px Apple HIG minimum on mobile */
+@media (max-width: 640px) {
+    .tap-44 { min-height: 44px; min-width: 44px; }
+}
+
+/* Dialog bottom-sheet style on mobile — flush with bottom, rounded top only */
+@media (max-width: 640px) {
+    .dialog-sheet {
+        align-items: flex-end !important;
+        padding: 0 !important;
+    }
+    .dialog-sheet > .dialog-sheet-panel {
+        max-width: 100% !important;
+        width: 100% !important;
+        border-radius: 16px 16px 0 0 !important;
+        max-height: 92vh !important;
+        padding-bottom: env(safe-area-inset-bottom);
+    }
 }
 
 /* On the workbook page the AdvisoryStrip lives inline; the fixed footer is hidden.

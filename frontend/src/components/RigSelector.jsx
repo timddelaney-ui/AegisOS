@@ -47,13 +47,14 @@ const RigSelector = () => {
     >
       <div className="flex items-center gap-1 text-[10px] uppercase font-bold tracking-wider text-[#9CA3AF]">
         <Radio className="w-3 h-3" strokeWidth={2.5} />
-        <span>Active Rig</span>
+        <span className="hidden xs:inline sm:inline">Active Rig</span>
+        <span className="xs:hidden sm:hidden">Rig</span>
       </div>
 
       <button
         data-testid="rig-selector-toggle"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 px-2.5 py-1 rounded font-bold text-[11px] whitespace-nowrap transition-colors"
+        className="flex items-center gap-2 px-3 py-1.5 rounded font-bold text-[12px] whitespace-nowrap transition-colors tap-44"
         style={{ background: activeAccent, color: "white" }}
       >
         <span>{rigLabel(rigId)}</span>

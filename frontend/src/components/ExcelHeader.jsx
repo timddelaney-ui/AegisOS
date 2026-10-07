@@ -18,17 +18,20 @@ const ExcelHeader = () => {
 
   return (
     <>
-      <header className="bg-[#107C41] text-white h-12 flex items-center justify-between px-3 shadow-md flex-shrink-0">
+      <header className="bg-[#107C41] text-white h-12 flex items-center justify-between px-3 shadow-md flex-shrink-0 safe-x">
         <div className="flex items-center gap-2 min-w-0">
           <FileSpreadsheet className="w-4 h-4 flex-shrink-0" strokeWidth={2.5} />
-          <h1 className="text-sm font-semibold tracking-wide truncate">CT_Field_Operations.xlsx</h1>
+          <h1 className="text-sm font-semibold tracking-wide truncate">
+            <span className="sm:hidden">CT Workbook</span>
+            <span className="hidden sm:inline">CT_Field_Operations.xlsx</span>
+          </h1>
           {isPro && (
             <span className="text-[9px] bg-[#FFD700]/90 text-[#856404] px-1.5 py-[2px] rounded font-bold flex items-center gap-0.5 flex-shrink-0">
               <Crown className="w-2.5 h-2.5" strokeWidth={3} /> PRO
             </span>
           )}
         </div>
-        <button onClick={() => setMenuOpen(true)} className="p-1 hover:bg-white/10 rounded">
+        <button onClick={() => setMenuOpen(true)} data-testid="menu-open" className="p-2 -mr-1 hover:bg-white/10 rounded tap-44" aria-label="Open menu">
           <Menu className="w-5 h-5" />
         </button>
       </header>

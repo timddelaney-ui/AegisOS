@@ -107,8 +107,8 @@ const HandoverModal = ({ open, onClose }) => {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[80] bg-black/60 flex items-center justify-center p-2 sm:p-6" data-testid="handover-modal">
-      <div className="bg-[#F7F7F7] w-full max-w-3xl max-h-[92dvh] rounded-lg shadow-2xl flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-[80] bg-black/60 flex items-end sm:items-center justify-center sm:p-6 dialog-sheet" data-testid="handover-modal">
+      <div className="bg-[#F7F7F7] w-full max-w-3xl max-h-[92dvh] rounded-t-2xl sm:rounded-lg shadow-2xl flex flex-col overflow-hidden dialog-sheet-panel">
         <div className="bg-[#107C41] text-white px-4 py-3 flex items-center gap-2 flex-shrink-0">
           <FileText className="w-5 h-5" strokeWidth={2.5} />
           <div className="flex-1">

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth, API, isProUser } from "../context/AuthContext";
@@ -11,6 +11,7 @@ import { workbookData } from "../mock/workbookData";
 import ExcelHeader from "../components/ExcelHeader";
 import RigSelector from "../components/RigSelector";
 import AIPanel from "../components/AIPanel";
+import { usePullToRefresh, PullIndicator } from "../hooks/usePullToRefresh";
 
 const greetings = ["Kettle's on", "Ready for shift", "How's the shift", "Morning, hand", "Evening, tool push", "Coffee's brewing"];
 const proTips = [
@@ -64,19 +65,22 @@ const Hub = () => {
   const [aiOpen, setAiOpen] = useState(false);
   const [aiMode, setAiMode] = useState("assistant");
 
-  useEffect(() => {
+  const loadAll = useCallback(async () => {
     const rigId = (() => { try { return localStorage.getItem("ctp_active_rig_v2") || "RIG1"; } catch { return "RIG1"; } })();
-    Promise.all([
+    const [j, t, trt] = await Promise.all([
       axios.get(`${API}/jobs`, { withCredentials: true }).then((r) => r.data).catch(() => []),
       axios.get(`${API}/teams/me`, { withCredentials: true }).then((r) => r.data).catch(() => null),
       axios.get(`${API}/treatments/active`, { params: { rig_id: rigId }, withCredentials: true }).then((r) => r.data?.treatment).catch(() => null),
-    ]).then(([j, t, trt]) => {
-      setJobs(j || []);
-      setTeam(t);
-      setActiveTreatment(trt || null);
-      setLoading(false);
-    });
+    ]);
+    setJobs(j || []);
+    setTeam(t);
+    setActiveTreatment(trt || null);
+    setLoading(false);
   }, []);
+
+  useEffect(() => { loadAll(); }, [loadAll]);
+
+  const { ref: pullRef, progress, refreshing: pulling } = usePullToRefresh(loadAll);
 
   const isPro = isProUser(user);
   const trial = useMemo(() => {
@@ -103,7 +107,8 @@ const Hub = () => {
       <ExcelHeader />
       <RigSelector />
 
-      <div className="flex-1 overflow-y-auto pb-8">
+      <div className="flex-1 overflow-y-auto pb-8 scroll-smooth-mobile" ref={pullRef}>
+        <PullIndicator progress={progress} refreshing={pulling} />
         <div className="max-w-3xl mx-auto p-4 space-y-4">
           {/* Greeting */}
           <div className="pt-2">
@@ -119,7 +124,7 @@ const Hub = () => {
           </div>
 
           {/* Status stat row */}
-          <div className="grid grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <StatChip
               Icon={isPro ? Crown : Calendar}
               value={isPro ? "Pro" : trial.active ? trial.daysLeft : 0}

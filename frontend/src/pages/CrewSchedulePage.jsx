@@ -232,8 +232,8 @@ const CrewBuilderModal = ({ open, rigId, editing, onClose, onSaved }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-[95] flex items-end sm:items-center justify-center p-2 print:hidden" data-testid="crew-builder-modal">
-      <div className="bg-white w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-lg shadow-2xl border-t-4 border-[#0D6535]">
+    <div className="fixed inset-0 bg-black/60 z-[95] flex items-end sm:items-center justify-center sm:p-2 print:hidden dialog-sheet" data-testid="crew-builder-modal">
+      <div className="bg-white w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-t-2xl sm:rounded-lg shadow-2xl border-t-4 border-[#0D6535] dialog-sheet-panel">
         <div className="sticky top-0 bg-[#F0F9F3] px-3 py-2 flex items-center gap-2 border-b border-[#D1E7DD] z-10">
           <Users className="w-4 h-4 text-[#0D6535]" />
           <h2 className="text-sm font-bold text-[#0D6535] flex-1">{editing ? `Edit ${editing.name}` : "New crew"}</h2>
@@ -383,6 +383,18 @@ const CrewSchedulePage = () => {
   const [builderOpen, setBuilderOpen] = useState(false);
   const [editingCrew, setEditingCrew] = useState(null);
   const [error, setError] = useState(null);
+  const [viewMode, setViewMode] = useState(() => {
+    if (typeof window === "undefined") return "grid";
+    try {
+      const saved = localStorage.getItem("ctp_schedule_view_v1");
+      if (saved) return saved;
+    } catch {}
+    return window.innerWidth < 640 ? "list" : "grid";
+  });
+
+  useEffect(() => {
+    try { localStorage.setItem("ctp_schedule_view_v1", viewMode); } catch {}
+  }, [viewMode]);
 
   const days = useMemo(() => buildWeeks(anchor, 2), [anchor]);
   const rangeStart = isoDate(days[0]);
@@ -517,15 +529,21 @@ const CrewSchedulePage = () => {
             </div>
           </div>
 
-          {/* ── Schedule grid ───────────────────────────────── */}
+          {/* ── Schedule nav bar ───────────────────────────────── */}
           <div className="bg-white border border-[#D4D4D4] rounded-lg p-3 flex items-center gap-2 flex-wrap print:hidden">
-            <button data-testid="schedule-prev" onClick={() => setAnchor(isoDate(addDays(anchor, -14)))} className="p-1 rounded hover:bg-[#F0F9F3]"><ChevronLeft className="w-4 h-4" /></button>
-            <div className="text-[13px] font-bold">{new Date(days[0]).toLocaleDateString(undefined, { month: "short", day: "numeric" })} – {new Date(days[days.length-1]).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</div>
-            <button data-testid="schedule-next" onClick={() => setAnchor(isoDate(addDays(anchor, 14)))} className="p-1 rounded hover:bg-[#F0F9F3]"><ChevronRight className="w-4 h-4" /></button>
-            <button data-testid="schedule-today" onClick={() => setAnchor(isoDate(new Date()))} className="text-[11px] font-semibold text-[#0D6535] hover:underline">Today</button>
-            <div className="ml-auto flex gap-2">
-              <button data-testid="schedule-print" onClick={printSchedule} className="text-[11px] font-bold text-[#0D6535] border border-[#0D6535] px-2 py-1 rounded flex items-center gap-1"><Printer className="w-3.5 h-3.5" /> Print / PDF</button>
-              <button data-testid="schedule-add-open" onClick={() => setShowAdd((v) => !v)} className="text-[11px] font-bold text-[#0D6535] border border-[#0D6535] px-2 py-1 rounded flex items-center gap-1"><Plus className="w-3.5 h-3.5" /> One-off shift</button>
+            <button data-testid="schedule-prev" onClick={() => setAnchor(isoDate(addDays(anchor, -14)))} className="p-2 rounded hover:bg-[#F0F9F3] tap-44" aria-label="Previous"><ChevronLeft className="w-4 h-4" /></button>
+            <div className="text-[12px] sm:text-[13px] font-bold">{new Date(days[0]).toLocaleDateString(undefined, { month: "short", day: "numeric" })} – {new Date(days[days.length-1]).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</div>
+            <button data-testid="schedule-next" onClick={() => setAnchor(isoDate(addDays(anchor, 14)))} className="p-2 rounded hover:bg-[#F0F9F3] tap-44" aria-label="Next"><ChevronRight className="w-4 h-4" /></button>
+            <button data-testid="schedule-today" onClick={() => setAnchor(isoDate(new Date()))} className="text-[11px] font-semibold text-[#0D6535] hover:underline px-2 py-2 tap-44">Today</button>
+            <div className="ml-auto flex gap-1.5 flex-wrap">
+              <div className="inline-flex rounded border border-[#0D6535] overflow-hidden" data-testid="schedule-view-toggle">
+                <button onClick={() => setViewMode("list")} data-testid="schedule-view-list"
+                  className={`text-[11px] font-bold px-2 py-1.5 ${viewMode === "list" ? "bg-[#0D6535] text-white" : "text-[#0D6535] hover:bg-[#F0F9F3]"}`}>List</button>
+                <button onClick={() => setViewMode("grid")} data-testid="schedule-view-grid"
+                  className={`text-[11px] font-bold px-2 py-1.5 ${viewMode === "grid" ? "bg-[#0D6535] text-white" : "text-[#0D6535] hover:bg-[#F0F9F3]"}`}>Grid</button>
+              </div>
+              <button data-testid="schedule-print" onClick={printSchedule} className="text-[11px] font-bold text-[#0D6535] border border-[#0D6535] px-2 py-1.5 rounded flex items-center gap-1 tap-44"><Printer className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Print / PDF</span><span className="sm:hidden">PDF</span></button>
+              <button data-testid="schedule-add-open" onClick={() => setShowAdd((v) => !v)} className="text-[11px] font-bold text-[#0D6535] border border-[#0D6535] px-2 py-1.5 rounded flex items-center gap-1 tap-44"><Plus className="w-3.5 h-3.5" /> <span className="hidden sm:inline">One-off shift</span><span className="sm:hidden">Shift</span></button>
             </div>
           </div>
 
@@ -533,7 +551,65 @@ const CrewSchedulePage = () => {
             <SingleShiftForm rigId={rigId} onSaved={onShiftSaved} onCancel={() => setShowAdd(false)} />
           )}
 
-          {/* Printable schedule sheet */}
+          {/* ── Mobile list view (one card per person) ──────── */}
+          {viewMode === "list" && (
+            <div className="space-y-2 print:hidden" data-testid="schedule-list-view">
+              {loading && <div className="p-6 text-center text-[12px] text-[#595959]"><Loader2 className="w-4 h-4 animate-spin inline mr-1" /> Loading…</div>}
+              {!loading && rows.length === 0 && (
+                <div className="bg-white border border-[#D4D4D4] rounded-lg p-6 text-center text-[12px] text-[#595959]">
+                  No shifts for {rigLabel(rigId)} in this 14-day window.<br />
+                  <span className="text-[11px] italic">Try <strong>Today</strong>, or the arrows — rotation shifts may sit outside the current view.</span>
+                </div>
+              )}
+              {rows.map((r) => (
+                <div key={r.name} className="bg-white border border-[#D4D4D4] rounded-lg p-3" data-testid={`sched-list-row-${r.name}`}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="w-9 h-9 rounded-full text-white flex items-center justify-center text-xs font-bold flex-shrink-0" style={{ background: crewColor(r.name) }}>
+                      {crewInitials(r.name)}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-bold text-[#262626] truncate">{r.name}</div>
+                      <div className="text-[10px] font-semibold uppercase text-[#595959] tracking-wide truncate">
+                        {r.role}{r.crew_name ? ` · ${r.crew_name}` : ""}
+                      </div>
+                    </div>
+                    <div className="text-[10px] text-[#595959] text-right flex-shrink-0">
+                      {r.shifts.length} shift{r.shifts.length !== 1 ? "s" : ""}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-7 gap-1">
+                    {days.map((d) => {
+                      const covering = r.shifts.filter((s) => shiftCoversDay(s, d));
+                      const isWknd = [0, 6].includes(d.getDay());
+                      const s = covering[0];
+                      return (
+                        <button
+                          key={isoDate(d)}
+                          onClick={() => s && removeShift(s)}
+                          disabled={!s}
+                          className={`flex flex-col items-center rounded py-1 border ${s ? "border-transparent cursor-pointer" : "border-dashed border-[#E5E7EB] cursor-default"}`}
+                          style={s ? { background: crewColor(s.crew_member_name), opacity: s.tour === "night" ? 0.78 : 1 } : {}}
+                          data-testid={s ? `sched-list-cell-${s.shift_id}` : undefined}
+                          title={s ? `${shiftLabel(s.tour)} · ${s.start_date}${s.end_date && s.end_date !== s.start_date ? " → " + s.end_date : ""}${s.note ? " · " + s.note : ""}\n(Tap to delete)` : "Off"}
+                        >
+                          <span className={`text-[8px] font-bold uppercase ${s ? "text-white/90" : (isWknd ? "text-[#C00000]" : "text-[#8A8A8A]")}`}>
+                            {d.toLocaleDateString(undefined, { weekday: "short" }).slice(0, 2)}
+                          </span>
+                          <span className={`text-[12px] font-bold ${s ? "text-white" : (isWknd ? "text-[#C00000]" : "text-[#262626]")}`}>
+                            {d.getDate()}
+                          </span>
+                          {s && <span className="text-[8px] font-bold text-white/90 leading-none">{s.tour === "night" ? "N" : "D"}</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* ── Desktop grid view (14-day table) ────────────── */}
+          {viewMode === "grid" && (
           <div className="bg-white border border-[#D4D4D4] rounded-lg overflow-hidden print:border-0" id="schedule-print-area">
             <div className="px-3 py-2 border-b border-[#E5E7EB] flex items-center justify-between print:border-0">
               <div className="text-[13px] font-bold text-[#0D6535]">{rigLabel(rigId)} · 14-day crew schedule</div>
@@ -625,6 +701,7 @@ const CrewSchedulePage = () => {
               {rows.length === 0 && <span className="italic text-[#595959]">Colour blocks are assigned per crew member so managers see who's on which rig at a glance.</span>}
             </div>
           </div>
+          )}
 
           {error && <div className="text-[11px] text-[#721C24] bg-[#F8D7DA] border border-[#F5C6CB] rounded px-2 py-1" data-testid="schedule-page-error">{error}</div>}
         </div>

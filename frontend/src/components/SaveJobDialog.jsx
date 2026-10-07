@@ -27,8 +27,8 @@ const SaveJobDialog = ({ sheetKey, sheetTitle, unitSystem, values, hasTeam, onCl
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center sm:p-4 dialog-sheet" onClick={onClose}>
+      <div className="bg-white rounded-t-2xl sm:rounded-lg shadow-xl max-w-md w-full dialog-sheet-panel" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-[#D4D4D4]">
           <h3 className="text-base font-bold text-[#262626] flex items-center gap-2">
             <Save className="w-4 h-4 text-[#107C41]" /> Save Field Job

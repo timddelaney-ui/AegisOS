@@ -342,7 +342,7 @@ const EquipmentPage = () => {
             <div className="bg-white border border-[#D4D4D4] rounded p-2 text-center"><div className="text-[10px] text-[#595959] uppercase font-bold">Expired</div><div className="text-lg font-bold text-[#721C24]">{summary.expired}</div></div>
           </div>
 
-          <div data-testid="equipment-kind-tabs" className="flex gap-1 bg-white border border-[#D4D4D4] rounded-t-lg overflow-x-auto p-1">
+          <div data-testid="equipment-kind-tabs" className="flex gap-1 bg-white border border-[#D4D4D4] rounded-t-lg overflow-x-auto p-1 snap-tabs">
             {KIND_TABS.map((t) => {
               const active = tab === t.id;
               const Icon = t.Icon;
@@ -351,7 +351,7 @@ const EquipmentPage = () => {
                   key={t.id}
                   data-testid={`equipment-tab-${t.id}`}
                   onClick={() => setTab(t.id)}
-                  className={`flex-1 min-w-0 flex items-center justify-center gap-1 px-2 py-1.5 rounded text-[11px] font-bold uppercase whitespace-nowrap ${active ? "text-white" : "text-[#595959] hover:bg-[#F0F9F3]"}`}
+                  className={`flex-shrink-0 sm:flex-1 min-w-[88px] sm:min-w-0 flex items-center justify-center gap-1 px-2 py-2 rounded text-[11px] font-bold uppercase whitespace-nowrap tap-44 ${active ? "text-white" : "text-[#595959] hover:bg-[#F0F9F3]"}`}
                   style={active ? { background: t.accent } : {}}
                 >
                   <Icon className="w-3.5 h-3.5" strokeWidth={2.5} />

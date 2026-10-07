@@ -9,6 +9,7 @@ import {
 import { API, useAuth } from "../context/AuthContext";
 import { useRig, rigLabel } from "../context/RigContext";
 import RigSelector from "../components/RigSelector";
+import { usePullToRefresh, PullIndicator } from "../hooks/usePullToRefresh";
 
 const POLL_MS = 3000;
 
@@ -91,7 +92,7 @@ const EntryComposer = ({ treatmentId, onAdded }) => {
   };
 
   return (
-    <form className="bg-white border-t border-[#D4D4D4] p-2 flex gap-2 sticky bottom-0" onSubmit={(e) => { e.preventDefault(); send(); }} data-testid="treatment-composer">
+    <form className="bg-white border-t border-[#D4D4D4] p-2 flex gap-2 sticky bottom-0 safe-bottom" onSubmit={(e) => { e.preventDefault(); send(); }} data-testid="treatment-composer">
       <textarea
         ref={inputRef}
         data-testid="treatment-entry-input"
@@ -107,8 +108,8 @@ const EntryComposer = ({ treatmentId, onAdded }) => {
         className="flex-1 px-2.5 py-2 border border-[#CCC] rounded text-sm resize-none"
       />
       <button type="submit" disabled={busy || !text.trim()} data-testid="treatment-entry-send"
-        className="self-stretch text-sm font-bold text-white bg-[#0D6535] hover:bg-[#0A4F28] px-3 rounded disabled:opacity-50 inline-flex items-center gap-1">
-        {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Send className="w-4 h-4" /></>}
+        className="self-stretch text-sm font-bold text-white bg-[#0D6535] hover:bg-[#0A4F28] px-4 rounded disabled:opacity-50 inline-flex items-center gap-1 tap-44 min-w-[52px] justify-center">
+        {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
       </button>
     </form>
   );
@@ -181,6 +182,11 @@ const TreatmentPage = () => {
     sinceRef.current = entry.created_at;
   };
 
+  const refreshAll = async () => {
+    await loadActive();
+  };
+  const { ref: pullRef, progress, refreshing: pulling } = usePullToRefresh(refreshAll);
+
   const closeTreatment = async () => {
     if (!active) return;
     if (!window.confirm(`Close "${active.name}"? You can still read the log later, but no new entries can be added.`)) return;
@@ -218,14 +224,15 @@ const TreatmentPage = () => {
 
   return (
     <div className="min-h-screen bg-[#F3F3F3] flex flex-col print:bg-white">
-      <header className="bg-[#0D6535] text-white h-12 flex items-center px-3 shadow-md flex-shrink-0 print:hidden">
-        <button onClick={() => navigate("/hub")} data-testid="treatment-back" className="flex items-center gap-1.5 text-sm font-semibold"><ArrowLeft className="w-4 h-4" /> Back</button>
-        <h1 className="text-sm font-semibold ml-4 flex items-center gap-2"><ClipboardList className="w-4 h-4" /> Treatment Log · {rigLabel(rigId)}</h1>
-        {refreshing && <RefreshCw className="w-3 h-3 animate-spin ml-2 opacity-70" />}
+      <header className="bg-[#0D6535] text-white h-12 flex items-center px-3 shadow-md flex-shrink-0 safe-x print:hidden">
+        <button onClick={() => navigate("/hub")} data-testid="treatment-back" className="flex items-center gap-1.5 text-sm font-semibold tap-44 -ml-2 pl-2 pr-2"><ArrowLeft className="w-4 h-4" /> Back</button>
+        <h1 className="text-sm font-semibold ml-2 flex items-center gap-2 min-w-0"><ClipboardList className="w-4 h-4 flex-shrink-0" /> <span className="truncate">Treatment · {rigLabel(rigId)}</span></h1>
+        {refreshing && <RefreshCw className="w-3 h-3 animate-spin ml-2 opacity-70 flex-shrink-0" />}
       </header>
       <div className="print:hidden"><RigSelector /></div>
 
-      <div className="flex-1 p-3 pb-4 overflow-hidden flex flex-col">
+      <div className="flex-1 p-3 pb-4 overflow-hidden flex flex-col scroll-smooth-mobile" ref={pullRef}>
+        <PullIndicator progress={progress} refreshing={pulling} />
         <div className="max-w-3xl mx-auto w-full flex-1 flex flex-col space-y-3">
           {loading ? (
             <div className="text-center text-[13px] text-[#595959] py-8"><Loader2 className="w-4 h-4 animate-spin inline mr-1" /> Loading…</div>
@@ -249,15 +256,15 @@ const TreatmentPage = () => {
                     </div>
                     {active.note && <div className="text-[11px] text-[#595959] italic mt-0.5">{active.note}</div>}
                   </div>
-                  <div className="flex gap-1 print:hidden">
-                    <button onClick={copyLog} data-testid="treatment-copy" className="text-[11px] font-bold text-[#0D6535] border border-[#0D6535] px-2 py-1 rounded inline-flex items-center gap-1 hover:bg-[#F0F9F3]">
-                      <Copy className="w-3 h-3" /> Copy
+                  <div className="flex gap-1 print:hidden flex-shrink-0">
+                    <button onClick={copyLog} data-testid="treatment-copy" className="text-[11px] font-bold text-[#0D6535] border border-[#0D6535] px-2 py-1.5 rounded inline-flex items-center gap-1 hover:bg-[#F0F9F3] tap-44">
+                      <Copy className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Copy</span>
                     </button>
-                    <button onClick={printLog} data-testid="treatment-print" className="text-[11px] font-bold text-[#0D6535] border border-[#0D6535] px-2 py-1 rounded inline-flex items-center gap-1 hover:bg-[#F0F9F3]">
-                      <Printer className="w-3 h-3" /> PDF
+                    <button onClick={printLog} data-testid="treatment-print" className="text-[11px] font-bold text-[#0D6535] border border-[#0D6535] px-2 py-1.5 rounded inline-flex items-center gap-1 hover:bg-[#F0F9F3] tap-44">
+                      <Printer className="w-3.5 h-3.5" /> <span className="hidden sm:inline">PDF</span>
                     </button>
-                    <button onClick={closeTreatment} disabled={closing} data-testid="treatment-close" className="text-[11px] font-bold text-[#B91C1C] border border-[#B91C1C] px-2 py-1 rounded inline-flex items-center gap-1 hover:bg-[#FEF2F2] disabled:opacity-50">
-                      {closing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Square className="w-3 h-3" />} Close
+                    <button onClick={closeTreatment} disabled={closing} data-testid="treatment-close" className="text-[11px] font-bold text-[#B91C1C] border border-[#B91C1C] px-2 py-1.5 rounded inline-flex items-center gap-1 hover:bg-[#FEF2F2] disabled:opacity-50 tap-44">
+                      {closing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Square className="w-3.5 h-3.5" />} <span className="hidden sm:inline">Close</span>
                     </button>
                   </div>
                 </div>
@@ -281,7 +288,7 @@ const TreatmentPage = () => {
                             const mine = e.author === user?.email;
                             return (
                               <div key={e.entry_id} className="flex gap-2 items-start" data-testid={`treatment-entry-${e.entry_id}`}>
-                                <div className="text-[10px] font-mono font-bold text-[#0D6535] mt-0.5 w-16 flex-shrink-0 text-right">{stampBar(e.created_at)}</div>
+                                <div className="text-[10px] font-mono font-bold text-[#0D6535] mt-0.5 w-12 sm:w-16 flex-shrink-0 text-right leading-tight">{stampBar(e.created_at)}</div>
                                 <div className={`flex-1 min-w-0 border-l-2 pl-2 ${mine ? "border-[#0D6535]" : "border-[#D4D4D4]"}`}>
                                   <div className="text-[10px] font-bold text-[#595959] flex items-center gap-1">
                                     <User className="w-3 h-3" /> {e.author_name}

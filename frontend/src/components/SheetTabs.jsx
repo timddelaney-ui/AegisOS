@@ -35,8 +35,7 @@ const SheetTabs = ({ currentSheet, onSelectSheet, freeSheets = [], isPro = false
   return (
     <nav
       ref={containerRef}
-      className="bg-[#E1E1E1] h-[42px] flex items-center border-t border-[#BCBCBC] flex-shrink-0 overflow-x-auto whitespace-nowrap px-1 gap-[2px]"
-      style={{ scrollbarWidth: "thin" }}
+      className="bg-[#E1E1E1] h-[46px] flex items-center border-t border-[#BCBCBC] flex-shrink-0 overflow-x-auto whitespace-nowrap px-1 gap-[2px] snap-tabs scroll-fade-right"
     >
       {Object.keys(workbookData).filter((key) => sheetInService(key, service)).map((key) => {
         const isActive = key === currentSheet;
@@ -46,7 +45,7 @@ const SheetTabs = ({ currentSheet, onSelectSheet, freeSheets = [], isPro = false
             key={key}
             ref={isActive ? activeTabRef : null}
             onClick={() => onSelectSheet(key)}
-            className={`px-3 py-1.5 text-xs font-medium cursor-pointer select-none rounded-t border border-b-0 border-[#CCC] inline-block flex-shrink-0 flex items-center gap-1 ${
+            className={`px-3 py-2 text-xs font-medium cursor-pointer select-none rounded-t border border-b-0 border-[#CCC] inline-flex items-center gap-1 flex-shrink-0 min-h-[36px] ${
               isActive
                 ? "bg-white text-[#107C41] font-bold border-t-2 border-t-[#107C41] -mb-px"
                 : locked
@@ -62,7 +61,7 @@ const SheetTabs = ({ currentSheet, onSelectSheet, freeSheets = [], isPro = false
       <div
         ref={currentSheet === "EMERGENCY" ? activeTabRef : null}
         onClick={() => onSelectSheet("EMERGENCY")}
-        className={`px-3 py-1.5 text-xs font-bold cursor-pointer select-none rounded-t border border-b-0 border-[#CCC] flex-shrink-0 flex items-center gap-1 ${
+        className={`px-3 py-2 text-xs font-bold cursor-pointer select-none rounded-t border border-b-0 border-[#CCC] flex-shrink-0 inline-flex items-center gap-1 min-h-[36px] ${
           currentSheet === "EMERGENCY"
             ? "bg-white text-[#C00000] border-t-2 border-t-[#C00000] -mb-px"
             : "bg-[#FFC7CE] text-[#9C0006]"

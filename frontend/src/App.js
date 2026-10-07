@@ -226,8 +226,28 @@ const AppRouter = () => {
       <ManagerGreeting />
       <RedeemDialog />
       <FeedbackDialog />
-      <Toaster position="top-center" richColors closeButton />
+      <ResponsiveToaster />
     </>
+  );
+};
+
+// Toast position adapts to viewport: top-center on desktop (easy to see), top-right on mobile
+// (keeps the back button in the header unobscured). Also respects safe-area insets.
+const ResponsiveToaster = () => {
+  const [pos, setPos] = useState(() => (typeof window !== "undefined" && window.innerWidth < 640 ? "top-right" : "top-center"));
+  useEffect(() => {
+    const onResize = () => setPos(window.innerWidth < 640 ? "top-right" : "top-center");
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  return (
+    <Toaster
+      position={pos}
+      richColors
+      closeButton
+      offset="calc(env(safe-area-inset-top, 0px) + 8px)"
+      toastOptions={{ style: { fontSize: 13 } }}
+    />
   );
 };
 
