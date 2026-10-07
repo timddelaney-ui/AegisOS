@@ -24,6 +24,7 @@ import RedeemDialog from "./components/RedeemDialog";
 import FeedbackDialog from "./components/FeedbackDialog";
 import { AdvisoryFooter, AdvisoryModal, AdvisoryStrip } from "./components/AdvisoryDisclaimer";
 import { Toaster } from "./components/ui/sonner";
+import InstallAppPrompt, { registerServiceWorker } from "./components/InstallAppPrompt";
 import RigSelector from "./components/RigSelector";
 import ServiceToggle, { useServiceView } from "./components/ServiceToggle";
 import { useAuth, API, isProUser } from "./context/AuthContext";
@@ -226,6 +227,7 @@ const AppRouter = () => {
       <ManagerGreeting />
       <RedeemDialog />
       <FeedbackDialog />
+      <InstallAppPrompt />
       <ResponsiveToaster />
     </>
   );
@@ -264,6 +266,7 @@ const LandingRedirect = () => {
 };
 
 function App() {
+  useEffect(() => { registerServiceWorker(); }, []);
   return <AppRouter />;
 }
 

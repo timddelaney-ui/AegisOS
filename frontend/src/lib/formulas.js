@@ -134,6 +134,127 @@ const capacity_bbl_per_ft = (id_in) => (id_in * id_in) / 1029.4;
 const annCap_bbl_per_ft = (dCase, dCT) => (dCase * dCase - dCT * dCT) / 1029.4;
 const ct_weight_per_ft = (od, id) => wallArea(od, id) * 3.4;
 
+// ===== Lock-up / Friction-out Depth projector =====
+// Practical crew-usable formula: use the OBSERVED weight-loss trend to project
+// the depth at which weight-on-gauge will reach zero (coil cannot push itself further).
+//
+//   friction_loss_rate = (RIH_free_hanging_weight - current_WOG) / current_depth
+//   lockup_depth_additional_ft = current_WOG / friction_loss_rate
+//   lockup_depth_total_ft      = current_depth + lockup_depth_additional_ft
+//
+// Also computes a THEORETICAL buoyed weight sanity check so crews can see if their
+// gauge reading is consistent with the fluid in hole. If no fluid density is given,
+// we assume brine (8.5 ppg).
+function calc_LockUp_Projection(vals, params, u) {
+  const depth = grab(vals, params, u, ["depth"]);
+  const ct_od = grab(vals, params, u, ["ct od"]);
+  const ct_id = deriveCT_ID(vals, params, u);
+  const rih_weight = grab(vals, params, u, ["run-in-hole weight"]);
+  const wog = grab(vals, params, u, ["weight on gauge"]);
+  const density_ppg = grab(vals, params, u, ["density"]) || 8.5;
+
+  if (!depth || !ct_od || !ct_id || depth <= 0) return null;
+
+  const wpf_air = ct_weight_per_ft(ct_od, ct_id);                 // lbs/ft in air
+  const buoyancy = 1 - (density_ppg / 65.4);                      // steel density ≈ 65.4 ppg
+  const wpf_fluid = wpf_air * buoyancy;                           // buoyed lb/ft
+  const theoretical_free_weight = wpf_fluid * depth;              // lbs
+
+  // Without any WOG data, just report theoretical for reference.
+  if (rih_weight == null || wog == null || rih_weight <= 0) {
+    return {
+      wpf_air, wpf_fluid, theoretical_free_weight,
+      friction_loss_lb: null, friction_rate_lb_per_ft: null,
+      lockup_additional_ft: null, lockup_total_ft: null, margin_pct: null,
+    };
+  }
+
+  const friction_loss = Math.max(0, rih_weight - wog);            // lbs lost to friction
+  const friction_rate = friction_loss / depth;                    // lb per ft
+  if (friction_rate <= 0.001 || wog <= 0) {
+    // Essentially frictionless — no projection
+    return {
+      wpf_air, wpf_fluid, theoretical_free_weight,
+      friction_loss_lb: friction_loss, friction_rate_lb_per_ft: friction_rate,
+      lockup_additional_ft: Infinity, lockup_total_ft: Infinity, margin_pct: 100,
+    };
+  }
+  const lockup_additional = wog / friction_rate;                  // ft before WOG hits 0
+  const lockup_total = depth + lockup_additional;
+  const margin_pct = (lockup_additional / depth) * 100;
+
+  return {
+    wpf_air, wpf_fluid, theoretical_free_weight,
+    friction_loss_lb: friction_loss, friction_rate_lb_per_ft: friction_rate,
+    lockup_additional_ft: lockup_additional, lockup_total_ft: lockup_total, margin_pct,
+  };
+}
+
+function lockUpResults(block, u) {
+  if (!block) return { results: [], warnings: [] };
+  const results = [];
+  const warnings = [];
+
+  // Weight per foot — manual format since "weight_per_length" isn't a fmt kind.
+  const wpf_val = u === "imp" ? block.wpf_fluid : block.wpf_fluid * 1.48816;  // lb/ft → daN/m
+  const wpf_unit = u === "imp" ? "lb/ft" : "daN/m";
+  const wpf_air_val = u === "imp" ? block.wpf_air : block.wpf_air * 1.48816;
+
+  results.push({
+    label: "CT buoyed weight (per unit)",
+    value: wpf_val.toFixed(2),
+    unit: wpf_unit,
+    note: `In fluid of assumed density — air: ${wpf_air_val.toFixed(2)} ${wpf_unit}`,
+  });
+  results.push({
+    label: "Theoretical free-hanging weight",
+    ...fmt(block.theoretical_free_weight, u, "force", 0),
+    formula: "W_th = wpf_fluid · depth",
+    note: "What the gauge should read with ZERO downhole friction",
+  });
+  if (block.friction_loss_lb === null) {
+    results.push({
+      label: "🔮 Lock-up depth projection",
+      value: "—",
+      unit: "",
+      note: "Need both RIH weight and current Weight-on-gauge to project.",
+    });
+    return { results, warnings };
+  }
+  results.push({
+    label: "Observed friction loss",
+    ...fmt(block.friction_loss_lb, u, "force", 0),
+    note: `${block.friction_rate_lb_per_ft.toFixed(2)} lb per foot of current MD`,
+  });
+  if (block.lockup_additional_ft === Infinity) {
+    results.push({
+      label: "🔮 Lock-up depth projection",
+      value: "no lock-up predicted",
+      unit: "",
+      note: "Friction trend is near-zero — coil is running freely so far.",
+    });
+    return { results, warnings };
+  }
+  results.push({
+    label: "🔮 Additional run before lock-up",
+    ...fmt(block.lockup_additional_ft, u, "depth", 0),
+    formula: "ΔL = WOG / friction_rate",
+    note: "At current friction trend",
+  });
+  results.push({
+    label: "🎯 Projected friction-out depth",
+    ...fmt(block.lockup_total_ft, u, "depth", 0),
+    note: `Margin: ${block.margin_pct.toFixed(0)}% of current depth`,
+  });
+
+  if (block.margin_pct < 10) {
+    warnings.push({ level: "danger", msg: `Lock-up projected within ${block.margin_pct.toFixed(0)}% of current depth — slow RIH, consider FR/lubricant bump, verify no mechanical fill.` });
+  } else if (block.margin_pct < 25) {
+    warnings.push({ level: "warn", msg: `Friction trend is heavy — lock-up projected within ${block.margin_pct.toFixed(0)}% of current depth. Monitor WOG every 50 ft.` });
+  }
+  return { results, warnings };
+}
+
 // Derive CT ID from OD & wall thickness (both inches, Imperial-normalized after grab()).
 // If the sheet supplies both wall & id, wall wins (industry-standard spec).
 function deriveCT_ID(vals, params, u) {
@@ -345,6 +466,12 @@ function calc_Sand_Cleanout(vals, params, u) {
     });
   }
 
+  // Lock-up / friction-out projection (append to results, merge warnings)
+  const lockUpBlock = calc_LockUp_Projection(vals, params, u);
+  const { results: lockUpRows, warnings: lockUpWarns } = lockUpResults(lockUpBlock, u);
+  results.push(...lockUpRows);
+  warnings.push(...lockUpWarns);
+
   return {
     results,
     warnings,
@@ -416,6 +543,11 @@ function calc_CT_Milling(vals, params, u) {
   if (fr_savings_pct !== null) {
     results.push({ label: "FR friction reduction", value: fr_savings_pct.toFixed(0), unit: "%", note: "Effective drag reduction from FR loading" });
   }
+
+  const lockUpBlock_m = calc_LockUp_Projection(vals, params, u);
+  const { results: lockUpRows_m, warnings: lockUpWarns_m } = lockUpResults(lockUpBlock_m, u);
+  results.push(...lockUpRows_m);
+  warnings.push(...lockUpWarns_m);
 
   return {
     results,

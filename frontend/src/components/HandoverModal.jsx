@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
-import { X, Copy, Check, Loader2, FileText, ClipboardCheck, Package, Wrench, ListChecks, MessageSquare, Paperclip } from "lucide-react";
+import { toast } from "sonner";
+import { X, Copy, Check, Loader2, FileText, ClipboardCheck, Package, Wrench, ListChecks, MessageSquare, Paperclip, Mail, Send } from "lucide-react";
 import { API } from "../context/AuthContext";
 import { useRig, rigLabel } from "../context/RigContext";
 import AttachmentUploader from "./AttachmentUploader";
@@ -73,6 +74,10 @@ const HandoverModal = ({ open, onClose }) => {
   const [error, setError] = useState(null);
   const [copied, setCopied] = useState(false);
   const [hours, setHours] = useState(12);
+  const [emailOpen, setEmailOpen] = useState(false);
+  const [recipients, setRecipients] = useState("");
+  const [emailNote, setEmailNote] = useState("");
+  const [sending, setSending] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true); setError(null); setSummary(null); setCopied(false);
@@ -102,6 +107,34 @@ const HandoverModal = ({ open, onClose }) => {
       try { document.execCommand("copy"); setCopied(true); setTimeout(() => setCopied(false), 2500); } catch {}
       document.body.removeChild(ta);
     }
+  };
+
+  const sendEmail = async () => {
+    const list = recipients
+      .split(/[,;\s\n]+/)
+      .map((r) => r.trim())
+      .filter(Boolean);
+    if (!list.length) { toast.error("Enter at least one recipient email."); return; }
+    if (list.length > 5) { toast.error("Max 5 recipients per send."); return; }
+    setSending(true);
+    try {
+      const { data } = await axios.post(`${API}/crew/handover-email`, {
+        rig_id: rigId,
+        hours,
+        recipients: list,
+        body_text: text,
+        note: emailNote || null,
+      }, { withCredentials: true });
+      toast.success(`Handover emailed to ${data.recipients.length} recipient${data.recipients.length === 1 ? "" : "s"}.`);
+      setEmailOpen(false);
+      setRecipients("");
+      setEmailNote("");
+    } catch (e) {
+      const detail = e.response?.data?.detail;
+      const status = e.response?.status;
+      if (status === 503) toast.error("Email isn't configured yet — ask your admin to add a Resend API key.");
+      else toast.error(detail || `Email send failed (HTTP ${status || "?"}).`);
+    } finally { setSending(false); }
   };
 
   if (!open) return null;
@@ -142,15 +175,61 @@ const HandoverModal = ({ open, onClose }) => {
           </button>
           <div className="ml-auto flex items-center gap-2">
             <button
+              data-testid="handover-email-open"
+              onClick={() => setEmailOpen((v) => !v)}
+              disabled={!summary || loading}
+              className={`text-[12px] font-bold px-3 py-1.5 rounded flex items-center gap-1.5 disabled:opacity-50 ${emailOpen ? "bg-[#0D6535] text-white" : "border border-[#0D6535] text-[#0D6535] hover:bg-[#F0F9F3]"}`}
+            >
+              <Mail className="w-3.5 h-3.5" /> <span className="hidden xs:inline sm:inline">Email</span>
+            </button>
+            <button
               data-testid="handover-copy"
               onClick={copy}
               disabled={!summary || loading}
               className="text-[12px] font-bold text-white bg-[#107C41] hover:bg-[#0D6535] px-3 py-1.5 rounded flex items-center gap-1.5 disabled:opacity-50"
             >
-              {copied ? <><Check className="w-3.5 h-3.5" /> Copied</> : <><Copy className="w-3.5 h-3.5" /> Copy to Clipboard</>}
+              {copied ? <><Check className="w-3.5 h-3.5" /> Copied</> : <><Copy className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Copy to Clipboard</span><span className="sm:hidden">Copy</span></>}
             </button>
           </div>
         </div>
+
+        {emailOpen && (
+          <div className="px-3 py-2.5 bg-[#F0F9F3] border-b border-[#D1E7DD] space-y-2" data-testid="handover-email-panel">
+            <div className="flex items-center gap-1.5">
+              <Mail className="w-3.5 h-3.5 text-[#0D6535]" />
+              <span className="text-[11px] font-bold text-[#0D6535] uppercase tracking-wide">Send handover by email</span>
+            </div>
+            <textarea
+              data-testid="handover-recipients"
+              value={recipients}
+              onChange={(e) => setRecipients(e.target.value)}
+              rows={2}
+              placeholder="Recipient emails — comma, space, or newline separated (max 5)"
+              className="w-full px-2 py-1.5 border border-[#CCC] rounded text-[13px] font-mono"
+            />
+            <input
+              data-testid="handover-email-note"
+              value={emailNote}
+              onChange={(e) => setEmailNote(e.target.value)}
+              placeholder="Cover note (optional)"
+              className="w-full px-2 py-1.5 border border-[#CCC] rounded text-sm"
+              maxLength={400}
+            />
+            <div className="flex items-center gap-2">
+              <button
+                data-testid="handover-email-send"
+                onClick={sendEmail}
+                disabled={sending || !recipients.trim() || !summary}
+                className="text-[12px] font-bold text-white bg-[#0D6535] hover:bg-[#0A4F28] px-3 py-1.5 rounded flex items-center gap-1.5 disabled:opacity-50 tap-44"
+              >
+                {sending ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Sending…</> : <><Send className="w-3.5 h-3.5" /> Send email</>}
+              </button>
+              <span className="text-[10px] text-[#595959] italic">
+                Reply-to is set to your account. Content matches the Copy output.
+              </span>
+            </div>
+          </div>
+        )}
 
         <div className="flex-1 overflow-y-auto p-3 space-y-3">
           {loading && (

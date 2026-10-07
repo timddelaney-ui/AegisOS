@@ -1,0 +1,55 @@
+{
+  "name": "CT Field Workbook",
+  "short_name": "CT Workbook",
+  "description": "Mobile-first coiled-tubing field operations workbook — safety SOPs, live rig chat, treatment reporting, crew scheduling, and real-time engineering calculations.",
+  "start_url": "/hub",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#107C41",
+  "theme_color": "#0D6535",
+  "categories": ["business", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Treatment log",
+      "short_name": "Treatment",
+      "description": "Open the live treatment log for your active rig",
+      "url": "/treatment",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Crew Schedule",
+      "short_name": "Schedule",
+      "description": "View today's crew schedule",
+      "url": "/schedule",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Open Workbook",
+      "short_name": "Workbook",
+      "description": "Open the Excel-style calculation workbook",
+      "url": "/app",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}
