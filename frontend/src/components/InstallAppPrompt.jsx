@@ -6,12 +6,38 @@ export function registerServiceWorker() {
   if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
   // Only register in production builds — the dev-server strips SW too aggressively
   // to be useful, and it can confuse hot reload.
-  if (process.env.NODE_ENV !== "production") return;
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/service-worker.js").catch((err) => {
+  if (process.env.NODE_ENV !== "production") {
+    // Dev-mode: if a previous production SW is still registered on this origin
+    // (e.g. the user installed the PWA, now hit the dev build), unregister it
+    // so stale JS/CSS doesn't block tap/scroll.
+    navigator.serviceWorker.getRegistrations().then((regs) => {
+      regs.forEach((r) => r.unregister().catch(() => {}));
+    }).catch(() => {});
+    return;
+  }
+  window.addEventListener("load", async () => {
+    try {
+      const reg = await navigator.serviceWorker.register("/service-worker.js");
+      // If a new SW took over while the user had the app open, reload once so
+      // they get the fresh JS (keeps the "my buttons don't work" class of bug
+      // from re-appearing after a fix is deployed).
+      reg.addEventListener("updatefound", () => {
+        const nw = reg.installing;
+        if (!nw) return;
+        nw.addEventListener("statechange", () => {
+          if (nw.state === "activated" && navigator.serviceWorker.controller) {
+            // Only reload if we're not already in the middle of one.
+            if (!window.__ct_sw_reloaded) {
+              window.__ct_sw_reloaded = true;
+              setTimeout(() => window.location.reload(), 500);
+            }
+          }
+        });
+      });
+    } catch (err) {
       // Non-fatal — the app works fine without SW
       console.debug("SW register failed:", err?.message || err);
-    });
+    }
   });
 }
 

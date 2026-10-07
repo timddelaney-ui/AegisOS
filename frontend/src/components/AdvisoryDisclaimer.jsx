@@ -16,7 +16,7 @@ export const AdvisoryFooter = () => {
   return (
     <div
       data-testid="advisory-footer"
-      className="fixed bottom-0 left-0 right-0 z-40 bg-[#FFF3CD] border-t border-[#FFE69C] text-[#856404] text-[10px] leading-tight px-3 py-1 flex items-center justify-center gap-1.5"
+      className="fixed bottom-0 left-0 right-0 z-40 bg-[#FFF3CD] border-t border-[#FFE69C] text-[#856404] text-[10px] leading-tight px-3 py-1 flex items-center justify-center gap-1.5 safe-bottom"
     >
       <AlertTriangle className="w-3 h-3 flex-shrink-0" strokeWidth={2.5} />
       <span className="text-center">

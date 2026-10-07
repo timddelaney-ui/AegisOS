@@ -11,8 +11,6 @@ body {
         sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    /* Mobile: prevent horizontal scroll from accidental overflow */
-    overflow-x: hidden;
 }
 
 /* ───────── Mobile-first global polish ───────── */
@@ -31,10 +29,11 @@ button, a, [role="button"] {
     }
 }
 
-/* Smoother momentum scroll on iOS */
+/* Smoother momentum scroll on iOS. Do NOT set overscroll-behavior here —
+   on iOS it can stop the scroll gesture from propagating out of nested
+   scroll containers and strangles the whole page. */
 .scroll-smooth-mobile {
     -webkit-overflow-scrolling: touch;
-    overscroll-behavior: contain;
 }
 
 /* Snap scroll utility for tab rows */
