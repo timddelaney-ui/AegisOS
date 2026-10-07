@@ -224,7 +224,9 @@ function lockUpResults(block, u) {
   results.push({
     label: "Observed friction loss",
     ...fmt(block.friction_loss_lb, u, "force", 0),
-    note: `${block.friction_rate_lb_per_ft.toFixed(2)} lb per foot of current MD`,
+    note: u === "imp"
+      ? `${block.friction_rate_lb_per_ft.toFixed(2)} lb per foot of current MD`
+      : `${(block.friction_rate_lb_per_ft * 0.457).toFixed(2)} daN per metre of current MD`,
   });
   if (block.lockup_additional_ft === Infinity) {
     results.push({
