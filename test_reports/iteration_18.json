@@ -1,0 +1,38 @@
+{
+  "summary": "Iter 18 — Mobile polish audit at 390x844 (iPhone 12 Pro) with desktop smoke at 1280x900. Attached demo_pro cookie (extended expiry; session_token was expired at 2026-09-23 vs current date 2026-10-07 — refreshed via mongo). Verified all P0+P1+P2 mobile items: hub 2x2 stat chips + 4x1 on desktop, hub PTR banner responds to synthetic touchmove, schedule view toggle (default list on mobile, grid on desktop, persisted in ctp_schedule_view_v1), bottom-sheet modals (Crew Builder, Redeem, Feedback) via .dialog-sheet-panel on mobile and centered on desktop, Equipment snap-tabs with min-w-[88px] + tap-44, Workbook SheetTabs + scroll-fade-right, ExcelHeader short label 'CT Workbook' on mobile, RigSelector short 'Rig' label, global touch-action:manipulation on buttons, 16px font on inputs/textarea/select (iOS auto-zoom guard), safe-area utility classes present. Desktop smoke: /hub /schedule /treatment /app /team /equipment all render without pageerrors. One minor UX gap: pasting em-dashes in redeem field does NOT normalize to hyphens visually (backend-side strip works but display stays em-dashed).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "auth/session", "issue": "Demo session_token in /app/memory/test_credentials.md was EXPIRED (expires_at 2026-09-23, container date 2026-10-07). Had to extend in Mongo to proceed. Future testers will hit the same wall — recommend regenerating with a longer expiry or storing a renewal step in test_credentials.md."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "RedeemDialog.jsx (line 76)", "issue": "Input onChange only calls .toUpperCase() on raw value. Pasting 'ct—qxvg—tllk' (em-dashes) renders as 'CT—QXVG—TLLK' in the field — em-dashes are NOT visually normalized to ASCII hyphens as the spec expects. The redeem() handler at line 31 strips to alnum before POST, so submission still succeeds; this is strictly a display/UX bug.", "selector": "[data-testid='redeem-code-input']", "priority": "LOW"},
+      {"component": "Hub.jsx / ExcelHeader.jsx (hamburger button)", "issue": "Mobile viewport (390px) has 4px horizontal overflow — document.scrollWidth=394. Only offender is the hamburger menu button (class 'p-2 -mr-1 hover:bg-white/10 rounded tap-44', width 44px, right-edge at 394). Likely because tap-44 min-width:44px + -mr-1 negative margin + padding pushes beyond the safe-x inset. Not user-visible scrolling but fails strict 'no horizontal scroll' assertion.", "selector": "header button.tap-44", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Toaster verification", "issues": ["Could not directly read [data-sonner-toaster] attribute because Sonner only mounts the wrapper when the first toast fires. ResponsiveToaster component code at App.js:236 is correct (window.innerWidth<640 → top-right, else top-center, with resize listener). Needs a reliable toast trigger during test to assert data-y-position via DOM."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "RedeemDialog: strengthen onChange normalization to strip non-[A-Z0-9] chars and auto-insert hyphens so the field displays 'CT-QXVG-TLLK' as the user types. Current behavior only uppercases.",
+    "Investigate 4px mobile horizontal overflow caused by the ExcelHeader hamburger button — likely tap-44 min-width conflicting with the -mr-1 negative margin + safe-x padding at 390px.",
+    "Regenerate the demo session_token with a long expiry (e.g. +365 days) and update /app/memory/test_credentials.md, OR document a one-liner to refresh it before each testing pass."
+  ],
+  "critical_code_review_comments": [
+    "RedeemDialog.jsx line 76 — onChange logic (`e.target.value.toUpperCase()`) is inconsistent with the aggressive normalization that happens later at line 31. User sees em-dashes in the field even though server-side gets stripped. Move normalization into onChange so display matches what gets sent.",
+    "Hub.jsx scroll container (line 110) is `<div className=\"flex-1 overflow-y-auto ...\" ref={pullRef}>` — the spec's test matrix refers to a data-testid='hub-scroll'. Adding that testid would make the PTR assertion trivially robust in future tests.",
+    "ResponsiveToaster at App.js:236 reads window.innerWidth only on mount + resize, which is fine, but the Sonner <Toaster/> only renders the data-sonner-toaster DOM element lazily on first toast. Any UI test that asserts data-y-position must fire a real toast first (not just inspect DOM at idle)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only pass)", "frontend": "95%"},
+  "test_credentials": "session_token=demo_session_dade4ac57f0c496094fde437e8e91f00 (demo.pro@example.com, team_9af2d0d38747). NOTE: this session was expired; I extended it in Mongo to expires_at = now+30d so the tests could run.",
+  "seed_data_creation": "No persistent test data created. Submitted one TEST_-prefixed feedback entry via FeedbackDialog during toaster probe (safe to leave; carries TEST_ prefix).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Mobile polish is largely in place. Two tiny UX gaps remain: (1) RedeemDialog display normalization doesn't collapse em-dashes to hyphens, and (2) a 4px horizontal overflow on mobile hub from the hamburger button. ResponsiveToaster correctness could not be fully asserted via DOM because [data-sonner-toaster] is mounted lazily — if the main agent wants a hard assertion, write a test that triggers a toast and polls for the wrapper. Also remember: the demo session_token expires — refresh it before running the next pass (one mongo update_one on user_sessions).",
+  "rca of the issue": "Redeem em-dash: the input's onChange only applies .toUpperCase() to the raw string; the hyphen/em-dash normalization logic (strip + reformat) lives inside the redeem() submit handler and never runs during typing. Fix: factor out `normalizeInvite(raw)` and call it from both onChange and redeem(). Mobile 4px overflow: the hamburger .tap-44 button (min-width:44px forced by the tap-44 utility) plus the -mr-1 negative margin on the ExcelHeader button container exceeds the safe-x padded width at 390px."
+}
