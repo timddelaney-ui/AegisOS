@@ -1111,6 +1111,103 @@ async def crew_list(since: Optional[str] = None, rig_id: Optional[str] = None, u
 ITEM_KINDS = {"inventory", "consumables", "parts_order", "todo"}
 
 
+# ============ NOTIFICATIONS DIGEST (background badge + toast feed) ============
+@api_router.get("/notifications/digest")
+async def notifications_digest(
+    rig_id: str,
+    since: Optional[str] = None,
+    limit: int = 5,
+    user: dict = Depends(require_user),
+):
+    """Return a compact digest of what's new on the user's active rig since `since`.
+
+    Caller passes an ISO timestamp (usually the time they were last on the Team Hub).
+    If `since` is missing or invalid we fall back to the last 10 minutes so a fresh
+    client doesn't see every historical row as 'unread'.
+    """
+    team_id = user.get("team_id")
+    empty = {
+        "chat": {"count": 0, "has_alert": False, "latest": []},
+        "tasks": {"count": 0, "latest": []},
+        "treatment": {"count": 0, "latest": [], "treatment_id": None, "treatment_name": None},
+        "server_time": datetime.now(timezone.utc).isoformat(),
+    }
+    if not team_id:
+        return empty
+    limit = max(1, min(int(limit or 5), 20))
+
+    now = datetime.now(timezone.utc)
+    since_dt: Optional[datetime] = None
+    if since:
+        try:
+            since_dt = datetime.fromisoformat(since.replace("Z", "+00:00"))
+            if since_dt.tzinfo is None:
+                since_dt = since_dt.replace(tzinfo=timezone.utc)
+        except ValueError:
+            since_dt = None
+    if since_dt is None:
+        since_dt = now - timedelta(minutes=10)
+
+    author_filter = {"$ne": user.get("email")}  # don't notify a user about their own actions
+
+    # ── Chat
+    chat_q: Dict[str, Any] = {
+        "team_id": team_id,
+        "created_at": {"$gt": since_dt},
+        "sender": author_filter,
+        "$or": [{"rig_id": rig_id}, {"rig_id": None}, {"rig_id": {"$exists": False}}],
+    }
+    chat_docs = await db.crew_messages.find(chat_q, {"_id": 0}).sort("created_at", -1).to_list(limit)
+    chat_count = await db.crew_messages.count_documents(chat_q)
+    has_alert = any(d.get("is_alert") for d in chat_docs)
+
+    # ── Tasks (any kind) — all four lists appear here
+    tasks_q: Dict[str, Any] = {
+        "team_id": team_id,
+        "created_at": {"$gt": since_dt},
+        "created_by": author_filter,
+        "$or": [{"rig_id": rig_id}, {"rig_id": None}, {"rig_id": {"$exists": False}}],
+    }
+    task_docs = await db.team_items.find(tasks_q, {"_id": 0}).sort("created_at", -1).to_list(limit)
+    task_count = await db.team_items.count_documents(tasks_q)
+
+    # ── Treatment entries on the active treatment of this rig
+    trt = await db.treatments.find_one(
+        {"team_id": team_id, "rig_id": rig_id, "status": "active"},
+        {"_id": 0}, sort=[("created_at", -1)],
+    )
+    trt_entries: List[dict] = []
+    trt_count = 0
+    if trt:
+        trt_q = {
+            "team_id": team_id,
+            "treatment_id": trt["treatment_id"],
+            "created_at": {"$gt": since_dt},
+            "author": author_filter,
+        }
+        trt_entries = await db.treatment_entries.find(trt_q, {"_id": 0}).sort("created_at", -1).to_list(limit)
+        trt_count = await db.treatment_entries.count_documents(trt_q)
+
+    return {
+        "chat": {
+            "count": chat_count,
+            "has_alert": has_alert,
+            "latest": [_serialize(d) for d in chat_docs],
+        },
+        "tasks": {
+            "count": task_count,
+            "latest": [_serialize(d) for d in task_docs],
+        },
+        "treatment": {
+            "count": trt_count,
+            "latest": [_serialize(d) for d in trt_entries],
+            "treatment_id": trt["treatment_id"] if trt else None,
+            "treatment_name": trt["name"] if trt else None,
+        },
+        "server_time": now.isoformat(),
+    }
+
+
 class TeamItemCreate(BaseModel):
     kind: str
     name: str

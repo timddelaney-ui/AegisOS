@@ -25,6 +25,7 @@ import FeedbackDialog from "./components/FeedbackDialog";
 import { AdvisoryFooter, AdvisoryModal, AdvisoryStrip } from "./components/AdvisoryDisclaimer";
 import { Toaster } from "./components/ui/sonner";
 import InstallAppPrompt, { registerServiceWorker } from "./components/InstallAppPrompt";
+import NotificationCenter from "./components/NotificationCenter";
 import RigSelector from "./components/RigSelector";
 import ServiceToggle, { useServiceView } from "./components/ServiceToggle";
 import { useAuth, API, isProUser } from "./context/AuthContext";
@@ -228,6 +229,7 @@ const AppRouter = () => {
       <RedeemDialog />
       <FeedbackDialog />
       <InstallAppPrompt />
+      <NotificationCenter />
       <ResponsiveToaster />
     </>
   );
