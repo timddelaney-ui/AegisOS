@@ -1,0 +1,24 @@
+{
+  "summary": "Verified TeamItemsList live-sync fix via two Playwright browser contexts sharing demo cookie on /team → To-Do List. All critical scenarios passed: cross-context add, status update, and delete all propagated within one 4s poll cycle (verified with 6s waits). LIVE indicator renders in card header. Add-form input value is preserved during background polls (pendingWriteRef guard works). ~9 GET /api/team/items/todo requests observed on context B over the ~40s test, matching the 4s cadence.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "TeamItemsList.jsx is well-structured; pendingWriteRef guard + silent-poll pattern is clean.",
+    "Rig-scope test and visibility-pause simulation were not executed (non-critical per request); the rig_id query param is passed to each GET so scope is enforced server-side.",
+    "Consider debouncing simultaneous polls across all 4 TeamItemsList instances (chat/inventory/consumables/parts_order/todo) — currently each mounts its own 4s interval, which could generate 4 parallel GETs every 4s per crew device."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped per request)", "frontend": "100%"},
+  "test_credentials": "session_token=demo_session_dade4ac57f0c496094fde437e8e91f00 (demo.pro@example.com)",
+  "seed_data_creation": "Created and cleaned up a 'Live sync test row QA' todo item during the run.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Multi-context Playwright pattern: browser.new_context() x2, add cookie, seed localStorage with ctp_disclaimer_ack_v1=1 to skip advisory modal, click [data-testid='team-hub-tile-todo'] to reach the TeamItemsList view. Poll cadence is 4s so always wait >=5s after a context-A mutation before asserting in context B. If advisory still shows, click [data-testid='advisory-ack-btn'].",
+  "rca of the issue": "Original bug: TeamItemsList fetched only on mount, so crew members never saw peers' adds/edits. Fix added a setInterval(POLL_MS=4000) silent re-fetch gated on document.visibilityState==='visible', with a pendingWriteRef counter that skips overwrites while optimistic mutations are in flight (prevents flicker and form-input clearing). Verified end-to-end live sync across two independent browser contexts."
+}
