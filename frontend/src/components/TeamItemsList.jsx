@@ -1,13 +1,17 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
-import { Plus, Trash2, MapPin, Loader2, Package, Beaker, Wrench, ListChecks } from "lucide-react";
+import { Plus, Trash2, MapPin, Loader2, Package, Beaker, Wrench, ListChecks, RefreshCw } from "lucide-react";
 import { API } from "../context/AuthContext";
 import { useRig, rigLabel } from "../context/RigContext";
 
 /**
  * TeamItemsList — generic CRUD list used for inventory, consumables, parts orders, to-dos.
  * All items share a base shape; specific columns / statuses vary by `kind`.
+ *
+ * Live-sync: polls the backend every POLL_MS so all crew members on the same
+ * rig see additions / status flips / deletions without a manual refresh.
  */
+const POLL_MS = 4000;
 const KIND_CONFIG = {
   inventory:   { label: "Inventory",       Icon: Package,     statuses: ["OK", "LOW", "OOS"],                accent: "#107C41", quantityLabel: "Qty" },
   consumables: { label: "Consumables",     Icon: Beaker,      statuses: ["OK", "LOW", "OOS"],                accent: "#856404", quantityLabel: "Qty" },
@@ -32,22 +36,54 @@ const TeamItemsList = ({ kind }) => {
   const { rigId } = useRig();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ name: "", quantity: "", unit: "", location: "", note: "", status: cfg.statuses[0], priority: "MED" });
+  // Guard poll re-fetches while an optimistic mutation is in-flight so the
+  // user's just-made change doesn't briefly flicker back to the old value.
+  const pendingWriteRef = useRef(0);
 
-  const load = async () => {
-    setLoading(true);
+  const load = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
+    else setSyncing(true);
     try {
       const { data } = await axios.get(`${API}/team/items/${kind}`, { params: { rig_id: rigId }, withCredentials: true });
-      setItems(data.items || []);
-    } finally { setLoading(false); }
-  };
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [kind, rigId]);
+      // If an optimistic mutation is still in flight, skip the overwrite.
+      if (pendingWriteRef.current === 0) {
+        setItems(data.items || []);
+      }
+    } catch { /* transient — next poll will retry */ }
+    finally {
+      if (!silent) setLoading(false);
+      else setSyncing(false);
+    }
+  }, [kind, rigId]);
+
+  // Initial load + rig change
+  useEffect(() => { load(); }, [load]);
+
+  // Live-sync: poll every POLL_MS while the tab is visible. Pause while a
+  // modal/alert is open to keep the UI calm (document.hidden handles that too).
+  useEffect(() => {
+    let timer = null;
+    const tick = () => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      load({ silent: true });
+    };
+    timer = setInterval(tick, POLL_MS);
+    const onVis = () => { if (document.visibilityState === "visible") tick(); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      if (timer) clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [load]);
 
   const create = async () => {
     if (!form.name.trim()) return;
     setSaving(true);
+    pendingWriteRef.current += 1;
     try {
       const payload = { kind, rig_id: rigId, ...form };
       if (payload.quantity === "") delete payload.quantity;
@@ -55,19 +91,40 @@ const TeamItemsList = ({ kind }) => {
       await axios.post(`${API}/team/items`, payload, { withCredentials: true });
       setForm({ name: "", quantity: "", unit: "", location: "", note: "", status: cfg.statuses[0], priority: "MED" });
       setShowAdd(false);
-      await load();
-    } finally { setSaving(false); }
+    } finally {
+      pendingWriteRef.current = Math.max(0, pendingWriteRef.current - 1);
+      setSaving(false);
+      // Fetch after releasing the write-guard so the new item shows immediately.
+      await load({ silent: true });
+    }
   };
 
   const updateStatus = async (item, newStatus) => {
-    await axios.patch(`${API}/team/items/${item.item_id}`, { status: newStatus }, { withCredentials: true });
+    // Optimistic update
     setItems((prev) => prev.map((i) => i.item_id === item.item_id ? { ...i, status: newStatus } : i));
+    pendingWriteRef.current += 1;
+    try {
+      await axios.patch(`${API}/team/items/${item.item_id}`, { status: newStatus }, { withCredentials: true });
+    } catch {
+      // Roll back on error
+      setItems((prev) => prev.map((i) => i.item_id === item.item_id ? { ...i, status: item.status } : i));
+    } finally {
+      pendingWriteRef.current = Math.max(0, pendingWriteRef.current - 1);
+    }
   };
 
   const remove = async (item) => {
     if (!window.confirm(`Delete "${item.name}"?`)) return;
-    await axios.delete(`${API}/team/items/${item.item_id}`, { withCredentials: true });
-    setItems((prev) => prev.filter((i) => i.item_id !== item.item_id));
+    const prev = items;
+    setItems((p) => p.filter((i) => i.item_id !== item.item_id));
+    pendingWriteRef.current += 1;
+    try {
+      await axios.delete(`${API}/team/items/${item.item_id}`, { withCredentials: true });
+    } catch {
+      setItems(prev); // roll back
+    } finally {
+      pendingWriteRef.current = Math.max(0, pendingWriteRef.current - 1);
+    }
   };
 
   const Icon = cfg.Icon;
@@ -79,6 +136,8 @@ const TeamItemsList = ({ kind }) => {
           <Icon className="w-4 h-4" style={{ color: cfg.accent }} strokeWidth={2.5} />
           <span className="text-sm font-bold" style={{ color: cfg.accent }}>{cfg.label}</span>
           <span className="text-[10px] text-[#595959]">{items.length} items · {rigLabel(rigId)}</span>
+          {syncing && <RefreshCw className="w-3 h-3 animate-spin text-[#8A8A8A]" strokeWidth={2.5} />}
+          {!syncing && !loading && <span className="text-[9px] text-[#8A8A8A] font-semibold tracking-wide">LIVE</span>}
         </div>
         <button
           data-testid={`team-list-add-${kind}`}
