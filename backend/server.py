@@ -512,6 +512,107 @@ async def delete_job(job_id: str, user: dict = Depends(require_user)):
     return {"success": True}
 
 
+# ============ CT Drilling Calculator Scenarios ============
+class CTDScenarioCreate(BaseModel):
+    well_name: str
+    mode: str = "balanced"           # balanced | underbalanced
+    unit_system: str = "imp"         # imp | met
+    values: Dict[str, Any] = {}
+    note: Optional[str] = None
+    visibility: str = "private"      # private | team
+
+
+class CTDScenarioUpdate(BaseModel):
+    well_name: Optional[str] = None
+    mode: Optional[str] = None
+    unit_system: Optional[str] = None
+    values: Optional[Dict[str, Any]] = None
+    note: Optional[str] = None
+    visibility: Optional[str] = None
+
+
+@api_router.post("/ctd-scenarios")
+async def create_ctd_scenario(body: CTDScenarioCreate, user: dict = Depends(require_user)):
+    if not body.well_name.strip():
+        raise HTTPException(400, "Well name required")
+    if body.visibility == "team" and not user.get("team_id"):
+        raise HTTPException(400, "Must be in a team to save team-visible scenarios")
+    sid = f"ctd_{uuid.uuid4().hex[:12]}"
+    doc = {
+        "scenario_id": sid,
+        "user_id": user["user_id"],
+        "user_name": user["name"],
+        "team_id": user.get("team_id") if body.visibility == "team" else None,
+        "well_name": body.well_name.strip(),
+        "mode": body.mode,
+        "unit_system": body.unit_system,
+        "values": body.values,
+        "note": body.note,
+        "visibility": body.visibility,
+        "created_at": datetime.now(timezone.utc),
+        "updated_at": datetime.now(timezone.utc),
+    }
+    await db.ctd_scenarios.insert_one(doc)
+    return _serialize({k: v for k, v in doc.items() if k != "_id"})
+
+
+@api_router.get("/ctd-scenarios")
+async def list_ctd_scenarios(user: dict = Depends(require_user)):
+    query = {"$or": [{"user_id": user["user_id"]}]}
+    if user.get("team_id"):
+        query["$or"].append({"team_id": user["team_id"], "visibility": "team"})
+    docs = await db.ctd_scenarios.find(query, {"_id": 0}).sort("updated_at", -1).to_list(200)
+    return [_serialize(d) for d in docs]
+
+
+@api_router.get("/ctd-scenarios/{scenario_id}")
+async def get_ctd_scenario(scenario_id: str, user: dict = Depends(require_user)):
+    doc = await db.ctd_scenarios.find_one({"scenario_id": scenario_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Scenario not found")
+    is_owner = doc["user_id"] == user["user_id"]
+    is_teammate = (
+        doc.get("visibility") == "team"
+        and doc.get("team_id")
+        and doc.get("team_id") == user.get("team_id")
+    )
+    if not (is_owner or is_teammate):
+        raise HTTPException(403, "Access denied")
+    return _serialize(doc)
+
+
+@api_router.patch("/ctd-scenarios/{scenario_id}")
+async def update_ctd_scenario(scenario_id: str, body: CTDScenarioUpdate, user: dict = Depends(require_user)):
+    doc = await db.ctd_scenarios.find_one({"scenario_id": scenario_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Scenario not found")
+    if doc["user_id"] != user["user_id"]:
+        raise HTTPException(403, "Only owner can update")
+    update = {k: v for k, v in body.dict().items() if v is not None}
+    if "visibility" in update:
+        if update["visibility"] == "team":
+            if not user.get("team_id"):
+                raise HTTPException(400, "Must be in a team")
+            update["team_id"] = user["team_id"]
+        else:
+            update["team_id"] = None
+    update["updated_at"] = datetime.now(timezone.utc)
+    await db.ctd_scenarios.update_one({"scenario_id": scenario_id}, {"$set": update})
+    doc = await db.ctd_scenarios.find_one({"scenario_id": scenario_id}, {"_id": 0})
+    return _serialize(doc)
+
+
+@api_router.delete("/ctd-scenarios/{scenario_id}")
+async def delete_ctd_scenario(scenario_id: str, user: dict = Depends(require_user)):
+    doc = await db.ctd_scenarios.find_one({"scenario_id": scenario_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Scenario not found")
+    if doc["user_id"] != user["user_id"]:
+        raise HTTPException(403, "Only owner can delete")
+    await db.ctd_scenarios.delete_one({"scenario_id": scenario_id})
+    return {"success": True}
+
+
 # ============ AI / GEMINI ROUTES ============
 EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
 GEMINI_MODEL = "gemini-2.5-flash"

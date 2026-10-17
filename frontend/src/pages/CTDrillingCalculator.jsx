@@ -8,6 +8,9 @@ import { toast } from "sonner";
 import { computeCTDrilling, fmtResult } from "../lib/ctdCalculator";
 import ExcelHeader from "../components/ExcelHeader";
 import { AdvisoryStrip } from "../components/AdvisoryDisclaimer";
+import ScenarioManager from "../components/ctd/ScenarioManager";
+import NitrogenPlanner from "../components/ctd/NitrogenPlanner";
+import PressureDepthPlot from "../components/ctd/PressureDepthPlot";
 
 // Conversions used only to translate user inputs into internal Imperial.
 const conv = {
@@ -165,7 +168,22 @@ const CTDrillingCalculator = () => {
     setVals((prev) => ({ ...(next === "imp" ? DEFAULT_IMP : DEFAULT_MET), mode: prev.mode }));
   };
 
-  const result = useMemo(() => computeCTDrilling(toInternal(vals, unitSystem)), [vals, unitSystem]);
+  const internal = useMemo(() => toInternal(vals, unitSystem), [vals, unitSystem]);
+  const result = useMemo(() => computeCTDrilling(internal), [internal]);
+
+  const bhpVal = useMemo(() => {
+    const row = result.summary?.find((r) => r.key === "bhp");
+    return row ? row.val : null;
+  }, [result]);
+
+  const onLoadScenario = ({ values, mode, unit_system }) => {
+    // Restore unit system first so default keys line up, then overlay stored values
+    const safeUnit = unit_system === "met" ? "met" : "imp";
+    const baseline = safeUnit === "imp" ? DEFAULT_IMP : DEFAULT_MET;
+    const next = { ...baseline, ...(values || {}), mode: mode || "balanced" };
+    setUnitSystem(safeUnit);
+    setVals(next);
+  };
 
   const reset = () => setVals(unitSystem === "imp" ? DEFAULT_IMP : DEFAULT_MET);
 
@@ -360,6 +378,7 @@ const CTDrillingCalculator = () => {
 
           {/* Actions */}
           <div className="flex items-center gap-2 flex-wrap">
+            <ScenarioManager currentVals={vals} unitSystem={unitSystem} onLoad={onLoadScenario} />
             <button
               data-testid="ctd-reset-btn"
               onClick={reset}
@@ -448,6 +467,25 @@ const CTDrillingCalculator = () => {
               ))}
             </div>
           )}
+
+          {/* Pressure vs Depth plot */}
+          <PressureDepthPlot
+            tvd_ft={internal.tvd}
+            pore_grad_psi_ft={internal.pore_grad}
+            frac_grad_psi_ft={internal.frac_grad}
+            bhp_psi={bhpVal}
+            surf_choke_psi={isUBD ? (internal.choke_psi || 0) : 0}
+            unitSystem={unitSystem}
+            isUBD={isUBD}
+          />
+
+          {/* Nitrogen & liquid volume planner */}
+          <NitrogenPlanner
+            q_N2_scfm_imp={isUBD ? internal.q_N2_scfm : 0}
+            q_liq_bpm_imp={internal.q_bpm}
+            unitSystem={unitSystem}
+            isUBD={isUBD}
+          />
 
           {/* Formulas footer */}
           <div className="bg-white border border-[#D4D4D4] rounded-xl p-3 shadow-sm">
