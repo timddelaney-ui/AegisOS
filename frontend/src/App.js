@@ -19,6 +19,7 @@ import ManagerDashboard from "./pages/ManagerDashboard";
 import EquipmentPage from "./pages/EquipmentPage";
 import CrewSchedulePage from "./pages/CrewSchedulePage";
 import TreatmentPage from "./pages/TreatmentPage";
+import CTDrillingCalculator from "./pages/CTDrillingCalculator";
 import ManagerGreeting from "./components/ManagerGreeting";
 import RedeemDialog from "./components/RedeemDialog";
 import FeedbackDialog from "./components/FeedbackDialog";
@@ -221,6 +222,7 @@ const AppRouter = () => {
         <Route path="/equipment" element={<ProtectedRoute><EquipmentPage /></ProtectedRoute>} />
         <Route path="/schedule" element={<ProtectedRoute><CrewSchedulePage /></ProtectedRoute>} />
         <Route path="/treatment" element={<ProtectedRoute><TreatmentPage /></ProtectedRoute>} />
+        <Route path="/ctd-calculator" element={<ProtectedRoute><CTDrillingCalculator /></ProtectedRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <AdvisoryFooter />

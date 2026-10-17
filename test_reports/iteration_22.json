@@ -1,0 +1,37 @@
+{
+  "summary": "Iter 22 testing: backend edit endpoints (team items PATCH, equipment PATCH, treatment entry PATCH/DELETE) + bug fix for self-filter in /api/notifications/digest (sender_email). All 18 backend tests pass (8 digest + 10 edit). Frontend verified: inventory +/- stepper + edit form end-to-end persistence; treatment entry edit shows 'edited' marker, delete removes entry; chat-alert data-testid is absent from DOM; notif-badge uses green bg #0D6535; all 6 pages (/hub /team /treatment /schedule /equipment /app) load with ZERO JS errors.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "RigSelector (header strip, visible on every page)", "issues": ["Cross-rig 'N new' pill (data-testid=rig-total-unread-badge in /app/frontend/src/components/RigSelector.jsx:68) is still bg-[#DC2626] red. The problem statement's intent to remove 'safety-alert' coloring from notifications was limited to the bell badge + chat bubbles + drawer, but this red cross-rig counter in the active-rig selector still reads as an alert color. Consider recoloring to the green/#0D6535 scheme used by notif-badge for visual parity, OR document the intentional distinction."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter21_notifications_digest.py",
+    "/app/backend/tests/test_iter22_edit_endpoints.py",
+    "/app/test_reports/pytest/iter22_notifications.xml",
+    "/app/test_reports/pytest/iter22_edit.xml"
+  ],
+  "action_items": [
+    "Optional: recolor RigSelector 'N new' cross-rig pill from bg-[#DC2626] to green (same #0D6535 as notif-badge) to complete the 'always green' intent OR confirm intentional distinction."
+  ],
+  "critical_code_review_comments": [
+    "Backend TreatmentEntryUpdate PATCH/DELETE correctly enforces author-OR-admin check (403 verified for a second user on same team).",
+    "entry_count rollup on treatments is properly $inc'd on POST and $inc -1 on DELETE — verified in test.",
+    "PATCH /api/team/items/{id} accepts quantity updates and persists; the frontend +/- stepper correctly round-trips through this endpoint.",
+    "server.py is now 2894 lines — approaching the 'split into modules' threshold; consider carving treatments/entries, team_items, equipment into routers.",
+    "`sender`→`sender_email` self-filter fix in /api/notifications/digest confirmed working (test_self_messages_do_NOT_appear_in_own_digest passes consistently)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter22_edit_endpoints.py (new)"
+  ],
+  "success_rate": {"backend": "100% (18/18)", "frontend": "100% on tested flows"},
+  "test_credentials": "session_token=demo_session_dade4ac57f0c496094fde437e8e91f00 (demo.pro@example.com, team_9af2d0d38747)",
+  "seed_data_creation": "Created & cleaned up: inventory item itm_8533c27694de, treatment trt_d1f7d3b80b5a, plus parametrized TEST_iter22_* items in each kind (all deleted by their test teardown). Second user iter22_u_* created in Mongo + cleaned up by module fixture teardown.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "To run backend tests: `cd /app && export REACT_APP_BACKEND_URL=https://ct-workbook-sim.preview.emergentagent.com && python -m pytest backend/tests/test_iter22_edit_endpoints.py backend/tests/test_iter21_notifications_digest.py -v`. For UI tests, always pre-seed localStorage with ctp_disclaimer_ack_v1=1 + the 3 other ack keys before each page nav. Treatment entry edit/delete buttons have opacity-0 group-hover:opacity-100 — Playwright `click(force=True)` on the data-testid works directly without needing hover. Treatment entry submit button has no explicit data-testid; it's the icon button next to the textarea (first form button).",
+  "rca of the issue": "Prior iter 21 bug: /api/notifications/digest filtered chat messages using {'sender': {'$ne': user.email}} but the crew_messages collection stores the author's email on field 'sender_email' (not 'sender'), so the user's own messages leaked into their own digest/badge. Fix: changed field reference to 'sender_email'. Verified via test_self_messages_do_NOT_appear_in_own_digest + test_chat_from_second_user_appears_in_demo_digest both passing in the same run."
+}

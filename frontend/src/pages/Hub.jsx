@@ -5,7 +5,7 @@ import { useAuth, API, isProUser } from "../context/AuthContext";
 import {
   FileSpreadsheet, FolderOpen, Users, Sparkles, ChevronRight, Crown, AlertTriangle,
   MessageSquare, Wrench, GraduationCap, AlertOctagon, FileText, Calendar, Gauge,
-  Ticket, MessageSquarePlus, Zap, Menu, ShieldCheck, HardHat, ClipboardList,
+  Ticket, MessageSquarePlus, Zap, Menu, ShieldCheck, HardHat, ClipboardList, Flame,
 } from "lucide-react";
 import { workbookData } from "../mock/workbookData";
 import ExcelHeader from "../components/ExcelHeader";
@@ -272,6 +272,15 @@ const Hub = () => {
 
           {/* Cards row */}
           <div className="grid gap-2 sm:grid-cols-2">
+            <HubCard
+              data-testid="hub-ctd-tile"
+              Icon={Flame}
+              title="CT Drilling Calculator"
+              subtitle="Stand-alone balanced & underbalanced drilling solver. ECD, BHP, N₂ GLR, choke & UB-margin."
+              accent="bg-[#FDE8E8] text-[#C00000]"
+              onClick={() => navigate("/ctd-calculator")}
+              badge="NEW"
+            />
             <HubCard
               Icon={Wrench}
               title="Equipment & Assets"
