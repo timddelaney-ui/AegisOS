@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
-import { Plus, Trash2, MapPin, Loader2, Package, Beaker, Wrench, ListChecks, RefreshCw } from "lucide-react";
+import { Plus, Minus, Trash2, MapPin, Loader2, Package, Beaker, Wrench, ListChecks, RefreshCw, Pencil, Check, X } from "lucide-react";
 import { API } from "../context/AuthContext";
 import { useRig, rigLabel } from "../context/RigContext";
 
@@ -127,6 +127,56 @@ const TeamItemsList = ({ kind }) => {
     }
   };
 
+  // ─── Edit flow ───────────────────────────────────────
+  const [editingId, setEditingId] = useState(null);
+  const [editDraft, setEditDraft] = useState({});
+
+  const startEdit = (item) => {
+    setEditingId(item.item_id);
+    setEditDraft({
+      name: item.name || "",
+      quantity: item.quantity ?? "",
+      unit: item.unit || "",
+      location: item.location || "",
+      note: item.note || "",
+    });
+  };
+  const cancelEdit = () => { setEditingId(null); setEditDraft({}); };
+
+  const saveEdit = async (item) => {
+    const payload = { ...editDraft };
+    if (payload.quantity === "" || payload.quantity === null) payload.quantity = null;
+    else payload.quantity = parseFloat(payload.quantity);
+    // Optimistic
+    setItems((prev) => prev.map((i) => i.item_id === item.item_id ? { ...i, ...payload } : i));
+    const prev = items;
+    pendingWriteRef.current += 1;
+    try {
+      await axios.patch(`${API}/team/items/${item.item_id}`, payload, { withCredentials: true });
+      cancelEdit();
+    } catch (e) {
+      setItems(prev);
+      alert(e.response?.data?.detail || "Save failed.");
+    } finally {
+      pendingWriteRef.current = Math.max(0, pendingWriteRef.current - 1);
+    }
+  };
+
+  const bumpQuantity = async (item, delta) => {
+    if (item.quantity === null || item.quantity === undefined) return;
+    const next = Math.max(0, (parseFloat(item.quantity) || 0) + delta);
+    setItems((prev) => prev.map((i) => i.item_id === item.item_id ? { ...i, quantity: next } : i));
+    pendingWriteRef.current += 1;
+    try {
+      await axios.patch(`${API}/team/items/${item.item_id}`, { quantity: next }, { withCredentials: true });
+    } catch {
+      // revert on failure
+      setItems((prev) => prev.map((i) => i.item_id === item.item_id ? { ...i, quantity: item.quantity } : i));
+    } finally {
+      pendingWriteRef.current = Math.max(0, pendingWriteRef.current - 1);
+    }
+  };
+
   const Icon = cfg.Icon;
 
   return (
@@ -184,13 +234,38 @@ const TeamItemsList = ({ kind }) => {
         {!loading && items.length === 0 && (
           <div className="p-6 text-center text-[12px] text-[#595959]">No {cfg.label.toLowerCase()} yet. Tap Add to log the first one.</div>
         )}
-        {items.map((it) => (
+        {items.map((it) => {
+          const isEditing = editingId === it.item_id;
+          if (isEditing) {
+            return (
+              <div key={it.item_id} data-testid={`team-list-item-${kind}`} className="p-2.5 bg-[#FFF8E1] border-l-4 border-[#F59E0B] space-y-1.5">
+                <input data-testid={`itm-edit-name-${it.item_id}`} value={editDraft.name} onChange={(e) => setEditDraft({ ...editDraft, name: e.target.value })} className="w-full px-2 py-1.5 border border-[#CCC] rounded text-sm" placeholder="Name" />
+                {cfg.quantityLabel && (
+                  <div className="flex gap-1.5">
+                    <input data-testid={`itm-edit-qty-${it.item_id}`} type="text" inputMode="decimal" value={editDraft.quantity} onChange={(e) => setEditDraft({ ...editDraft, quantity: e.target.value })} className="flex-1 px-2 py-1.5 border border-[#CCC] rounded text-sm" placeholder="Qty" />
+                    <input data-testid={`itm-edit-unit-${it.item_id}`} value={editDraft.unit} onChange={(e) => setEditDraft({ ...editDraft, unit: e.target.value })} className="w-24 px-2 py-1.5 border border-[#CCC] rounded text-sm" placeholder="Unit" />
+                  </div>
+                )}
+                <input data-testid={`itm-edit-location-${it.item_id}`} value={editDraft.location} onChange={(e) => setEditDraft({ ...editDraft, location: e.target.value })} className="w-full px-2 py-1.5 border border-[#CCC] rounded text-sm" placeholder="Location" />
+                <input data-testid={`itm-edit-note-${it.item_id}`} value={editDraft.note} onChange={(e) => setEditDraft({ ...editDraft, note: e.target.value })} className="w-full px-2 py-1.5 border border-[#CCC] rounded text-sm" placeholder="Note" />
+                <div className="flex gap-2 justify-end">
+                  <button data-testid={`itm-edit-cancel-${it.item_id}`} onClick={cancelEdit} className="text-[11px] text-[#595959] px-2 py-1 inline-flex items-center gap-1"><X className="w-3 h-3" /> Cancel</button>
+                  <button data-testid={`itm-edit-save-${it.item_id}`} onClick={() => saveEdit(it)} disabled={!editDraft.name?.trim()} className="text-[11px] font-bold text-white px-3 py-1 rounded disabled:opacity-50 inline-flex items-center gap-1" style={{ background: cfg.accent }}><Check className="w-3 h-3" /> Save</button>
+                </div>
+              </div>
+            );
+          }
+          return (
           <div key={it.item_id} data-testid={`team-list-item-${kind}`} className="p-2.5 flex items-start gap-2 hover:bg-[#FAFAFA]">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-[13px] font-semibold text-[#262626]">{it.name}</span>
                 {it.quantity !== null && it.quantity !== undefined && (
-                  <span className="text-[11px] text-[#595959]">{it.quantity}{it.unit ? " " + it.unit : ""}</span>
+                  <div className="inline-flex items-center gap-0.5 bg-white border border-[#D4D4D4] rounded">
+                    <button data-testid={`itm-qty-down-${it.item_id}`} onClick={() => bumpQuantity(it, -1)} className="px-1 py-0.5 text-[#595959] hover:bg-[#F0F0F0] tap-44" aria-label="Decrease"><Minus className="w-3 h-3" strokeWidth={2.5} /></button>
+                    <span className="text-[11px] font-bold text-[#262626] min-w-[1.75em] text-center">{it.quantity}{it.unit ? " " + it.unit : ""}</span>
+                    <button data-testid={`itm-qty-up-${it.item_id}`} onClick={() => bumpQuantity(it, +1)} className="px-1 py-0.5 text-[#595959] hover:bg-[#F0F0F0] tap-44" aria-label="Increase"><Plus className="w-3 h-3" strokeWidth={2.5} /></button>
+                  </div>
                 )}
                 <select
                   data-testid={`itm-status-${it.item_id}`}
@@ -212,9 +287,11 @@ const TeamItemsList = ({ kind }) => {
               {it.note && <div className="text-[11px] text-[#444] mt-0.5 italic">{it.note}</div>}
               <div className="text-[9px] text-[#8A8A8A] mt-0.5">by {it.created_by} · {new Date(it.created_at).toLocaleDateString()}</div>
             </div>
-            <button data-testid={`itm-delete-${it.item_id}`} onClick={() => remove(it)} className="text-[#C00000] hover:bg-[#F8D7DA] rounded p-1"><Trash2 className="w-3.5 h-3.5" /></button>
+            <button data-testid={`itm-edit-${it.item_id}`} onClick={() => startEdit(it)} className="text-[#107C41] hover:bg-[#F0F9F3] rounded p-1 tap-44" aria-label="Edit"><Pencil className="w-3.5 h-3.5" /></button>
+            <button data-testid={`itm-delete-${it.item_id}`} onClick={() => remove(it)} className="text-[#C00000] hover:bg-[#F8D7DA] rounded p-1 tap-44" aria-label="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

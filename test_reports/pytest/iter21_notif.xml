@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="8" skipped="0" tests="8" time="0.988" timestamp="2026-10-08T00:46:23.325522+00:00" hostname="agent-env-54277c4c-1f87-44cd-b386-5fadb4bbbd5c"><testcase classname="tests.test_iter21_notifications_digest" name="test_digest_shape_default_window" time="0.001"><failure message="requests.exceptions.MissingSchema: Invalid URL '/api/notifications/digest': No scheme supplied. Perhaps you meant https:///api/notifications/digest?">backend/tests/test_iter21_notifications_digest.py:83: in test_digest_shape_default_window
+    r = _sess(DEMO_TOKEN).get(f"{BASE_URL}/api/notifications/digest", params={"rig_id": RIG1})
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:671: in get
+    return self.request("GET", url, params=params, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:635: in request
+    prep = self.prepare_request(req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:541: in prepare_request
+    p.prepare(
+/root/.venv/lib/python3.11/site-packages/requests/models.py:439: in prepare
+    self.prepare_url(url, params)
+/root/.venv/lib/python3.11/site-packages/requests/models.py:514: in prepare_url
+    raise MissingSchema(
+E   requests.exceptions.MissingSchema: Invalid URL '/api/notifications/digest': No scheme supplied. Perhaps you meant https:///api/notifications/digest?</failure></testcase><testcase classname="tests.test_iter21_notifications_digest" name="test_digest_old_since_returns_zero" time="0.001"><failure message="requests.exceptions.MissingSchema: Invalid URL '/api/notifications/digest': No scheme supplied. Perhaps you meant https:///api/notifications/digest?">backend/tests/test_iter21_notifications_digest.py:99: in test_digest_old_since_returns_zero
+    r = _sess(DEMO_TOKEN).get(
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:671: in get
+    return self.request("GET", url, params=params, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:635: in request
+    prep = self.prepare_request(req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:541: in prepare_request
+    p.prepare(
+/root/.venv/lib/python3.11/site-packages/requests/models.py:439: in prepare
+    self.prepare_url(url, params)
+/root/.venv/lib/python3.11/site-packages/requests/models.py:514: in prepare_url
+    raise MissingSchema(
+E   requests.exceptions.MissingSchema: Invalid URL '/api/notifications/digest': No scheme supplied. Perhaps you meant https:///api/notifications/digest?</failure></testcase><testcase classname="tests.test_iter21_notifications_digest" name="test_chat_from_second_user_appears_in_demo_digest" time="0.017"><failure message="requests.exceptions.MissingSchema: Invalid URL '/api/crew/chat': No scheme supplied. Perhaps you meant https:///api/crew/chat?">backend/tests/test_iter21_notifications_digest.py:115: in test_chat_from_second_user_appears_in_demo_digest
+    r = _sess(second_user["token"]).post(
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:712: in post
+    return self.request("POST", url, data=data, json=json, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:635: in request
+    prep = self.prepare_request(req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:541: in prepare_request
+    p.prepare(
+/root/.venv/lib/python3.11/site-packages/requests/models.py:439: in prepare
+    self.prepare_url(url, params)
+/root/.venv/lib/python3.11/site-packages/requests/models.py:514: in prepare_url
+    raise MissingSchema(
+E   requests.exceptions.MissingSchema: Invalid URL '/api/crew/chat': No scheme supplied. Perhaps you meant https:///api/crew/chat?</failure></testcase><testcase classname="tests.test_iter21_notifications_digest" name="test_chat_alert_sets_has_alert" time="0.001"><failure message="requests.exceptions.MissingSchema: Invalid URL '/api/notifications/digest': No scheme supplied. Perhaps you meant https:///api/notifications/digest?">backend/tests/test_iter21_notifications_digest.py:143: in test_chat_alert_sets_has_alert
+    d = _sess(DEMO_TOKEN).get(
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:671: in get
+    return self.request("GET", url, params=params, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:635: in request
+    prep = self.prepare_request(req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:541: in prepare_request
+    p.prepare(
+/root/.venv/lib/python3.11/site-packages/requests/models.py:439: in prepare
+    self.prepare_url(url, params)
+/root/.venv/lib/python3.11/site-packages/requests/models.py:514: in prepare_url
+    raise MissingSchema(
+E   requests.exceptions.MissingSchema: Invalid URL '/api/notifications/digest': No scheme supplied. Perhaps you meant https:///api/notifications/digest?</failure></testcase><testcase classname="tests.test_iter21_notifications_digest" name="test_chat_on_rig2_NOT_included_for_rig1_query" time="0.001"><failure message="requests.exceptions.MissingSchema: Invalid URL '/api/crew/chat': No scheme supplied. Perhaps you meant https:///api/crew/chat?">backend/tests/test_iter21_notifications_digest.py:153: in test_chat_on_rig2_NOT_included_for_rig1_query
+    r = _sess(second_user["token"]).post(
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:712: in post
+    return self.request("POST", url, data=data, json=json, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:635: in request
+    prep = self.prepare_request(req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:541: in prepare_request
+    p.prepare(
+/root/.venv/lib/python3.11/site-packages/requests/models.py:439: in prepare
+    self.prepare_url(url, params)
+/root/.venv/lib/python3.11/site-packages/requests/models.py:514: in prepare_url
+    raise MissingSchema(
+E   requests.exceptions.MissingSchema: Invalid URL '/api/crew/chat': No scheme supplied. Perhaps you meant https:///api/crew/chat?</failure></testcase><testcase classname="tests.test_iter21_notifications_digest" name="test_self_messages_do_NOT_appear_in_own_digest" time="0.001"><failure message="requests.exceptions.MissingSchema: Invalid URL '/api/crew/chat': No scheme supplied. Perhaps you meant https:///api/crew/chat?">backend/tests/test_iter21_notifications_digest.py:169: in test_self_messages_do_NOT_appear_in_own_digest
+    r = _sess(DEMO_TOKEN).post(
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:712: in post
+    return self.request("POST", url, data=data, json=json, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:635: in request
+    prep = self.prepare_request(req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:541: in prepare_request
+    p.prepare(
+/root/.venv/lib/python3.11/site-packages/requests/models.py:439: in prepare
+    self.prepare_url(url, params)
+/root/.venv/lib/python3.11/site-packages/requests/models.py:514: in prepare_url
+    raise MissingSchema(
+E   requests.exceptions.MissingSchema: Invalid URL '/api/crew/chat': No scheme supplied. Perhaps you meant https:///api/crew/chat?</failure></testcase><testcase classname="tests.test_iter21_notifications_digest" name="test_task_from_second_user_appears" time="0.001"><failure message="requests.exceptions.MissingSchema: Invalid URL '/api/team/items': No scheme supplied. Perhaps you meant https:///api/team/items?">backend/tests/test_iter21_notifications_digest.py:188: in test_task_from_second_user_appears
+    r = _sess(second_user["token"]).post(
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:712: in post
+    return self.request("POST", url, data=data, json=json, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:635: in request
+    prep = self.prepare_request(req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:541: in prepare_request
+    p.prepare(
+/root/.venv/lib/python3.11/site-packages/requests/models.py:439: in prepare
+    self.prepare_url(url, params)
+/root/.venv/lib/python3.11/site-packages/requests/models.py:514: in prepare_url
+    raise MissingSchema(
+E   requests.exceptions.MissingSchema: Invalid URL '/api/team/items': No scheme supplied. Perhaps you meant https:///api/team/items?</failure></testcase><testcase classname="tests.test_iter21_notifications_digest" name="test_treatment_entry_from_second_user" time="0.013"><failure message="requests.exceptions.MissingSchema: Invalid URL '/api/notifications/digest': No scheme supplied. Perhaps you meant https:///api/notifications/digest?">backend/tests/test_iter21_notifications_digest.py:232: in test_treatment_entry_from_second_user
+    d = _sess(DEMO_TOKEN).get(
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:671: in get
+    return self.request("GET", url, params=params, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:635: in request
+    prep = self.prepare_request(req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:541: in prepare_request
+    p.prepare(
+/root/.venv/lib/python3.11/site-packages/requests/models.py:439: in prepare
+    self.prepare_url(url, params)
+/root/.venv/lib/python3.11/site-packages/requests/models.py:514: in prepare_url
+    raise MissingSchema(
+E   requests.exceptions.MissingSchema: Invalid URL '/api/notifications/digest': No scheme supplied. Perhaps you meant https:///api/notifications/digest?</failure></testcase></testsuite></testsuites>

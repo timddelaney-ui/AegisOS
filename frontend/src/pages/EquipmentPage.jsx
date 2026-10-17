@@ -130,10 +130,57 @@ const KindFields = ({ kind, form, setForm }) => {
   return null;
 };
 
-const ItemRow = ({ item, kind, onLog, onDelete }) => {
+const ItemRow = ({ item, kind, onLog, onDelete, onPatch }) => {
   const [openLog, setOpenLog] = useState(false);
   const [openAtt, setOpenAtt] = useState(false);
+  const [openEdit, setOpenEdit] = useState(false);
+  const [editDraft, setEditDraft] = useState({});
+  const [savingEdit, setSavingEdit] = useState(false);
   const [logForm, setLogForm] = useState({ hours: "", meters: "", pressure_psi: "", date: "", note: "" });
+
+  const startEdit = () => {
+    // Snapshot editable fields — includes base + kind-specific numerics
+    setEditDraft({
+      name: item.name || "",
+      serial_number: item.serial_number || "",
+      note: item.note || "",
+      current_hours: item.current_hours ?? "",
+      service_interval_hours: item.service_interval_hours ?? "",
+      last_service_hours: item.last_service_hours ?? "",
+      last_service_date: item.last_service_date || "",
+      cumulative_meters: item.cumulative_meters ?? "",
+      cumulative_hours: item.cumulative_hours ?? "",
+      cycles_count: item.cycles_count ?? "",
+      description: item.description || "",
+      capacity: item.capacity || "",
+      cert_expiry_date: item.cert_expiry_date || "",
+      last_inspection_date: item.last_inspection_date || "",
+      test_type: item.test_type || "",
+      test_interval_months: item.test_interval_months ?? "",
+      last_test_date: item.last_test_date || "",
+      item_type: item.item_type || "",
+      working_pressure_psi: item.working_pressure_psi ?? "",
+      current_pressure_psi: item.current_pressure_psi ?? "",
+    });
+    setOpenEdit(true);
+  };
+  const saveEdit = async () => {
+    setSavingEdit(true);
+    try {
+      const payload = {};
+      for (const [k, v] of Object.entries(editDraft)) {
+        if (v === "" || v === undefined) continue;
+        if (["name", "serial_number", "note", "description", "capacity", "last_service_date", "cert_expiry_date", "last_inspection_date", "last_test_date", "test_type", "item_type"].includes(k)) {
+          payload[k] = v;
+        } else {
+          const n = parseFloat(v);
+          if (!isNaN(n)) payload[k] = n;
+        }
+      }
+      await onPatch(item, payload);
+      setOpenEdit(false);
+    } finally { setSavingEdit(false); }
+  };
 
   const bodyBits = (() => {
     if (kind === "engine") {
@@ -204,11 +251,27 @@ const ItemRow = ({ item, kind, onLog, onDelete }) => {
           {item.note && <div className="text-[11px] text-[#444] mt-0.5 italic">{item.note}</div>}
         </div>
         <div className="flex flex-col gap-1">
+          <button data-testid={`equip-edit-open-${item.item_id}`} onClick={startEdit} className="text-[10px] font-bold text-[#107C41] border border-[#107C41] hover:bg-[#F0F9F3] px-2 py-1 rounded flex items-center gap-1 tap-44"><Edit3 className="w-3 h-3" />Edit</button>
           <button data-testid={`equip-log-open-${item.item_id}`} onClick={() => setOpenLog((v) => !v)} className="text-[10px] font-bold text-white bg-[#0D6535] hover:bg-[#0A4F28] px-2 py-1 rounded flex items-center gap-1"><Edit3 className="w-3 h-3" />Log</button>
           <button data-testid={`equip-att-open-${item.item_id}`} onClick={() => setOpenAtt((v) => !v)} className="text-[10px] font-bold text-[#0D6535] border border-[#0D6535] hover:bg-[#F0F9F3] px-2 py-1 rounded flex items-center gap-1"><Paperclip className="w-3 h-3" />Files</button>
-          <button data-testid={`equip-delete-${item.item_id}`} onClick={() => onDelete(item)} className="text-[#C00000] hover:bg-[#F8D7DA] rounded p-1"><Trash2 className="w-3.5 h-3.5" /></button>
+          <button data-testid={`equip-delete-${item.item_id}`} onClick={() => onDelete(item)} className="text-[#C00000] hover:bg-[#F8D7DA] rounded p-1 tap-44"><Trash2 className="w-3.5 h-3.5" /></button>
         </div>
       </div>
+      {openEdit && (
+        <div className="mt-2 p-2 bg-[#FFF8E1] border-l-4 border-[#F59E0B] rounded space-y-1.5" data-testid={`equip-edit-form-${item.item_id}`}>
+          <div className="text-[10px] uppercase font-bold text-[#856404]">Edit {item.name}</div>
+          <input placeholder="Name" value={editDraft.name} onChange={(e) => setEditDraft({ ...editDraft, name: e.target.value })} className="w-full px-2 py-1.5 border border-[#CCC] rounded text-sm" data-testid={`equip-edit-name-${item.item_id}`} />
+          <input placeholder="Serial number" value={editDraft.serial_number} onChange={(e) => setEditDraft({ ...editDraft, serial_number: e.target.value })} className="w-full px-2 py-1.5 border border-[#CCC] rounded text-sm" data-testid={`equip-edit-serial-${item.item_id}`} />
+          <KindFields kind={kind} form={editDraft} setForm={setEditDraft} />
+          <input placeholder="Note" value={editDraft.note} onChange={(e) => setEditDraft({ ...editDraft, note: e.target.value })} className="w-full px-2 py-1.5 border border-[#CCC] rounded text-sm" data-testid={`equip-edit-note-${item.item_id}`} />
+          <div className="flex gap-2 justify-end">
+            <button onClick={() => setOpenEdit(false)} className="text-[11px] text-[#595959] px-2 py-1">Cancel</button>
+            <button data-testid={`equip-edit-save-${item.item_id}`} onClick={saveEdit} disabled={savingEdit || !editDraft.name?.trim()} className="text-[11px] font-bold text-white bg-[#107C41] hover:bg-[#0D6535] px-3 py-1 rounded disabled:opacity-50 inline-flex items-center gap-1">
+              {savingEdit ? "Saving…" : "Save"}
+            </button>
+          </div>
+        </div>
+      )}
       {openAtt && (
         <div className="mt-2 p-2 bg-[#F9FAFB] border border-[#E5E7EB] rounded" data-testid={`equip-att-panel-${item.item_id}`}>
           <div className="text-[10px] uppercase font-bold text-[#595959] mb-1.5">Cert docs, ticket photos, serial-plate pics</div>
@@ -319,6 +382,11 @@ const EquipmentPage = () => {
     await load();
   };
 
+  const patchItem = async (item, payload) => {
+    await axios.patch(`${API}/equipment/${item.item_id}`, payload, { withCredentials: true });
+    await load();
+  };
+
   const summary = useMemo(() => {
     const counts = { ok: 0, amber: 0, red: 0, expired: 0 };
     items.forEach((i) => { counts[i.status] = (counts[i.status] || 0) + 1; });
@@ -401,7 +469,7 @@ const EquipmentPage = () => {
               <div className="p-8 text-center text-[12px] text-[#595959]">No {cfg.label.toLowerCase()} logged on {rigLabel(rigId)}. Tap Add to log the first unit.</div>
             )}
             {items.map((item) => (
-              <ItemRow key={item.item_id} item={item} kind={tab} onLog={logEvent} onDelete={remove} />
+              <ItemRow key={item.item_id} item={item} kind={tab} onLog={logEvent} onDelete={remove} onPatch={patchItem} />
             ))}
           </div>
         </div>

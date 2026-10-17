@@ -4,7 +4,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, Loader2, ClipboardList, Play, Square, Send, Trash2,
-  Copy, Printer, RefreshCw, User,
+  Copy, Printer, RefreshCw, User, Pencil, Check, X,
 } from "lucide-react";
 import { API, useAuth } from "../context/AuthContext";
 import { useRig, rigLabel } from "../context/RigContext";
@@ -112,6 +112,77 @@ const EntryComposer = ({ treatmentId, onAdded }) => {
         {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
       </button>
     </form>
+  );
+};
+
+const TreatmentEntryRow = ({ entry, mine, treatmentId, onPatched, onDeleted }) => {
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(entry.text);
+  const [busy, setBusy] = useState(false);
+
+  const save = async () => {
+    const t = text.trim();
+    if (!t) return;
+    setBusy(true);
+    try {
+      const { data } = await axios.patch(`${API}/treatments/${treatmentId}/entries/${entry.entry_id}`, { text: t }, { withCredentials: true });
+      onPatched(data);
+      toast.success("Entry updated.");
+      setEditing(false);
+    } catch (e) { toast.error(e.response?.data?.detail || "Edit failed."); }
+    finally { setBusy(false); }
+  };
+
+  const remove = async () => {
+    if (!window.confirm("Delete this entry? This cannot be undone.")) return;
+    setBusy(true);
+    try {
+      await axios.delete(`${API}/treatments/${treatmentId}/entries/${entry.entry_id}`, { withCredentials: true });
+      onDeleted();
+      toast.success("Entry deleted.");
+    } catch (e) { toast.error(e.response?.data?.detail || "Delete failed."); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div className="flex gap-2 items-start group" data-testid={`treatment-entry-${entry.entry_id}`}>
+      <div className="text-[10px] font-mono font-bold text-[#0D6535] mt-0.5 w-12 sm:w-16 flex-shrink-0 text-right leading-tight">{stampBar(entry.created_at)}</div>
+      <div className={`flex-1 min-w-0 border-l-2 pl-2 ${mine ? "border-[#0D6535]" : "border-[#D4D4D4]"}`}>
+        <div className="text-[10px] font-bold text-[#595959] flex items-center gap-1">
+          <User className="w-3 h-3" /> {entry.author_name}
+          {entry.edited_at && <span className="text-[9px] font-normal italic text-[#8A8A8A]">· edited {stampBar(entry.edited_at)}</span>}
+        </div>
+        {editing ? (
+          <div className="space-y-1 mt-0.5">
+            <textarea
+              data-testid={`treatment-entry-edit-${entry.entry_id}`}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              rows={3}
+              maxLength={2000}
+              className="w-full px-2 py-1.5 border border-[#CCC] rounded text-sm"
+              autoFocus
+            />
+            <div className="flex gap-1 justify-end">
+              <button data-testid={`treatment-entry-cancel-${entry.entry_id}`} onClick={() => { setEditing(false); setText(entry.text); }} className="text-[10px] text-[#595959] px-2 py-1 inline-flex items-center gap-1"><X className="w-3 h-3" /> Cancel</button>
+              <button data-testid={`treatment-entry-save-${entry.entry_id}`} onClick={save} disabled={busy || !text.trim()} className="text-[10px] font-bold text-white bg-[#0D6535] hover:bg-[#0A4F28] px-2 py-1 rounded disabled:opacity-50 inline-flex items-center gap-1">
+                {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />} Save
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-start gap-1">
+            <div className="text-[13px] text-[#262626] whitespace-pre-wrap break-words flex-1">{entry.text}</div>
+            {mine && (
+              <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button data-testid={`treatment-entry-edit-btn-${entry.entry_id}`} onClick={() => setEditing(true)} className="p-0.5 text-[#107C41] hover:bg-[#F0F9F3] rounded tap-44" aria-label="Edit"><Pencil className="w-3 h-3" /></button>
+                <button data-testid={`treatment-entry-delete-btn-${entry.entry_id}`} onClick={remove} className="p-0.5 text-[#C00000] hover:bg-[#F8D7DA] rounded tap-44" aria-label="Delete"><Trash2 className="w-3 h-3" /></button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
   );
 };
 
@@ -284,20 +355,16 @@ const TreatmentPage = () => {
                           {day}
                         </div>
                         <div className="space-y-1.5 mt-1">
-                          {list.map((e) => {
-                            const mine = e.author === user?.email;
-                            return (
-                              <div key={e.entry_id} className="flex gap-2 items-start" data-testid={`treatment-entry-${e.entry_id}`}>
-                                <div className="text-[10px] font-mono font-bold text-[#0D6535] mt-0.5 w-12 sm:w-16 flex-shrink-0 text-right leading-tight">{stampBar(e.created_at)}</div>
-                                <div className={`flex-1 min-w-0 border-l-2 pl-2 ${mine ? "border-[#0D6535]" : "border-[#D4D4D4]"}`}>
-                                  <div className="text-[10px] font-bold text-[#595959] flex items-center gap-1">
-                                    <User className="w-3 h-3" /> {e.author_name}
-                                  </div>
-                                  <div className="text-[13px] text-[#262626] whitespace-pre-wrap break-words">{e.text}</div>
-                                </div>
-                              </div>
-                            );
-                          })}
+                          {list.map((e) => (
+                            <TreatmentEntryRow
+                              key={e.entry_id}
+                              entry={e}
+                              mine={e.author === user?.email}
+                              treatmentId={active.treatment_id}
+                              onPatched={(updated) => setEntries((prev) => prev.map((x) => x.entry_id === updated.entry_id ? updated : x))}
+                              onDeleted={() => setEntries((prev) => prev.filter((x) => x.entry_id !== e.entry_id))}
+                            />
+                          ))}
                         </div>
                       </div>
                     ))}

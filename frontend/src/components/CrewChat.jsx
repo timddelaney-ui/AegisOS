@@ -101,18 +101,8 @@ const CrewChat = ({ currentUserId }) => {
         )}
         {messages.map((m) => {
           const mine = m.sender_user_id === currentUserId;
-          if (m.is_alert) {
-            return (
-              <div key={m.message_id} data-testid="chat-alert" className="bg-[#F8D7DA] border border-[#F5C6CB] rounded px-2.5 py-2 text-[12px] text-[#721C24] flex gap-2">
-                <AlertOctagon className="w-4 h-4 mt-0.5 flex-shrink-0 text-[#C00000]" strokeWidth={2.5} />
-                <div className="flex-1">
-                  <div className="text-[10px] font-bold uppercase mb-1">{m.sender_name}</div>
-                  <div className="whitespace-pre-wrap leading-relaxed">{m.text}</div>
-                  <div className="text-[9px] text-[#856404] mt-1">{new Date(m.created_at).toLocaleString()}</div>
-                </div>
-              </div>
-            );
-          }
+          // (Iter 23) Safety-alert messages are no longer visually highlighted —
+          // they now render exactly like any other crew message to keep the chat clean.
           if (m.is_skipper) {
             return (
               <div key={m.message_id} className="bg-white border border-[#107C41]/40 rounded px-2.5 py-2 text-[12px] mr-6 shadow-sm">

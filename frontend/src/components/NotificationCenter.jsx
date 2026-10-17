@@ -90,21 +90,14 @@ export default function NotificationCenter() {
         if (onTeamPage) continue;  // already looking at the chat
         const sender = m.sender_name || m.sender || "crew";
         const txt = (m.text || "").slice(0, 140);
-        if (m.is_alert) {
-          toast.error(`⚠ Safety alert on ${rigLabel(rigId)} — ${sender}`, {
-            description: txt,
-            action: { label: "Open", onClick: () => navigate("/team") },
-            duration: 10000,
-          });
-          notifyUser(`Safety alert · ${rigLabel(rigId)}`, `${sender}: ${txt}`, () => navigate("/team"));
-        } else {
-          toast(`${sender} — ${rigLabel(rigId)}`, {
-            description: txt,
-            action: { label: "Reply", onClick: () => navigate("/team") },
-            duration: 6000,
-          });
-          notifyUser(`${sender} · ${rigLabel(rigId)}`, txt, () => navigate("/team"));
-        }
+        // (Iter 23) Safety alerts no longer get the red toast treatment —
+        // they ping identically to any other message.
+        toast(`${sender} — ${rigLabel(rigId)}`, {
+          description: txt,
+          action: { label: "Reply", onClick: () => navigate("/team") },
+          duration: 6000,
+        });
+        notifyUser(`${sender} · ${rigLabel(rigId)}`, txt, () => navigate("/team"));
       }
 
       // Tasks (any kind) — a single rolled-up toast per poll so we don't spam
@@ -180,7 +173,7 @@ export default function NotificationCenter() {
   if (!user) return null;
 
   const total = (digest.chat?.count || 0) + (digest.tasks?.count || 0) + (digest.treatment?.count || 0);
-  const hasAlert = !!digest.chat?.has_alert;
+  // (Iter 23) Alert distinction removed from chat ping — badge stays green regardless.
 
   // Avoid colliding with the Workbook's hamburger menu button (also top-right in /app).
   const onWorkbookRoute = path.startsWith("/app");
@@ -207,7 +200,7 @@ export default function NotificationCenter() {
         {total > 0 && (
           <span
             data-testid="notif-badge"
-            className={`absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full text-[9px] font-bold text-white flex items-center justify-center ${hasAlert ? "bg-[#C00000] animate-pulse" : "bg-[#0D6535]"}`}
+            className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full text-[9px] font-bold text-white flex items-center justify-center bg-[#0D6535]"
           >
             {total > 99 ? "99+" : total}
           </span>
@@ -243,7 +236,6 @@ export default function NotificationCenter() {
                     <div className="flex-1 min-w-0">
                       <div className="text-[12px] font-bold text-[#0D6535]">
                         {digest.chat.count} new chat {digest.chat.count === 1 ? "message" : "messages"}
-                        {digest.chat.has_alert && <span className="ml-1 inline-flex items-center gap-0.5 bg-[#F8D7DA] text-[#721C24] text-[9px] font-bold px-1 py-0.5 rounded"><AlertOctagon className="w-2.5 h-2.5" strokeWidth={3} /> ALERT</span>}
                       </div>
                       {digest.chat.latest.slice(0, 3).map((m) => (
                         <div key={m.id || m.message_id || m.created_at} className="text-[11px] text-[#595959] truncate">

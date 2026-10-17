@@ -1154,7 +1154,7 @@ async def notifications_digest(
     chat_q: Dict[str, Any] = {
         "team_id": team_id,
         "created_at": {"$gt": since_dt},
-        "sender": author_filter,
+        "sender_email": author_filter,
         "$or": [{"rig_id": rig_id}, {"rig_id": None}, {"rig_id": {"$exists": False}}],
     }
     chat_docs = await db.crew_messages.find(chat_q, {"_id": 0}).sort("created_at", -1).to_list(limit)
@@ -2455,6 +2455,10 @@ class TreatmentEntryCreate(BaseModel):
     text: str
 
 
+class TreatmentEntryUpdate(BaseModel):
+    text: str
+
+
 @api_router.get("/treatments")
 async def list_treatments(rig_id: Optional[str] = None, status: Optional[str] = None, user: dict = Depends(require_user)):
     team_id = user.get("team_id")
@@ -2599,6 +2603,49 @@ async def add_treatment_entry(treatment_id: str, body: TreatmentEntryCreate, use
     )
     doc.pop("_id", None)
     return _serialize(doc)
+
+
+@api_router.patch("/treatments/{treatment_id}/entries/{entry_id}")
+async def edit_treatment_entry(treatment_id: str, entry_id: str, body: TreatmentEntryUpdate, user: dict = Depends(require_user)):
+    team_id = user.get("team_id")
+    if not team_id:
+        raise HTTPException(400, "No team.")
+    text = (body.text or "").strip()
+    if not text:
+        raise HTTPException(400, "Entry text can't be empty.")
+    if len(text) > 2000:
+        raise HTTPException(400, "Entry too long (max 2000 chars).")
+    entry = await db.treatment_entries.find_one({"entry_id": entry_id, "treatment_id": treatment_id, "team_id": team_id}, {"_id": 0})
+    if not entry:
+        raise HTTPException(404, "Entry not found.")
+    if entry.get("author") != user["email"] and not _is_admin(user):
+        raise HTTPException(403, "Only the author or an admin can edit this entry.")
+    now = datetime.now(timezone.utc)
+    await db.treatment_entries.update_one(
+        {"entry_id": entry_id, "treatment_id": treatment_id, "team_id": team_id},
+        {"$set": {"text": text, "edited_at": now, "edited_by": user["email"]}},
+    )
+    updated = await db.treatment_entries.find_one({"entry_id": entry_id}, {"_id": 0})
+    return _serialize(updated)
+
+
+@api_router.delete("/treatments/{treatment_id}/entries/{entry_id}")
+async def delete_treatment_entry(treatment_id: str, entry_id: str, user: dict = Depends(require_user)):
+    team_id = user.get("team_id")
+    if not team_id:
+        raise HTTPException(400, "No team.")
+    entry = await db.treatment_entries.find_one({"entry_id": entry_id, "treatment_id": treatment_id, "team_id": team_id}, {"_id": 0})
+    if not entry:
+        raise HTTPException(404, "Entry not found.")
+    if entry.get("author") != user["email"] and not _is_admin(user):
+        raise HTTPException(403, "Only the author or an admin can delete this entry.")
+    await db.treatment_entries.delete_one({"entry_id": entry_id, "treatment_id": treatment_id, "team_id": team_id})
+    # Decrement rollup
+    await db.treatments.update_one(
+        {"treatment_id": treatment_id, "team_id": team_id},
+        {"$inc": {"entry_count": -1}, "$set": {"updated_at": datetime.now(timezone.utc)}},
+    )
+    return {"success": True}
 
 
 # ============ FILE / MEDIA STORAGE (Emergent Object Storage) ============
