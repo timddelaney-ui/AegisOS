@@ -18,13 +18,36 @@ export const GRADE_SMYS = {
 
 export const defaultSmys = (grade) => GRADE_SMYS[(grade || "").toUpperCase()] || 90000;
 
-// Thick-wall cylinder (Lamé) with axial.
-// Returns stresses at inner wall (worst for CT per API RP 5C7).
-// Inputs:
-//   p_i, p_o: inner/outer pressure, psi
-//   OD, WT: in
-//   F_axial: axial force (lbf), tension positive
-// Returns {sigma_r, sigma_h, sigma_a, von_mises, dp, safe_limit, utilization}
+// Thin-wall Von Mises for the CT "egg" envelope. Industry-standard formulation:
+//   σ_h = Δp · r_m / WT   (mean-radius hoop)
+//   σ_a = F / A
+//   σ_r ≈ 0  (thin-wall; also conventional for the egg plot)
+// Then  VM² = σ_h² − σ_h·σ_a + σ_a².
+// This yields a clean 45°-rotated ellipse (the classic CT egg) and is
+// consistent with API RP 5C7 Figure 2 / open-standard CT fatigue teaching.
+export function thinWallVonMises({ OD, WT, dp, F_axial = 0, smys }) {
+  const od = Number(OD) || 0;
+  const wt = Number(WT) || 0;
+  const id = Math.max(0.01, od - 2 * wt);
+  const r_m = (od - wt) / 2;
+  const area = Math.PI * ((od / 2) ** 2 - (id / 2) ** 2);
+  const sigma_h = (Number(dp) || 0) * r_m / Math.max(wt, 1e-6);
+  const sigma_a = (Number(F_axial) || 0) / Math.max(area, 1e-6);
+  const vm = Math.sqrt(sigma_h * sigma_h - sigma_h * sigma_a + sigma_a * sigma_a);
+  const smys_val = Number(smys) || 90000;
+  const safe = 0.8 * smys_val;
+  return {
+    sigma_h, sigma_a, sigma_r: 0,
+    von_mises: vm, dp: Number(dp) || 0,
+    smys: smys_val, safe_limit: safe,
+    utilization: vm / safe,
+    utilization_smys: vm / smys_val,
+    area,
+    K_h: r_m / Math.max(wt, 1e-6),
+  };
+}
+
+// Thick-wall Lamé (optional, more accurate at high p — kept for cross-check).
 export function triaxialVonMises({ OD, WT, p_i, p_o = 0, F_axial = 0, smys }) {
   const od = Number(OD) || 0;
   const wt = Number(WT) || 0;
@@ -35,7 +58,7 @@ export function triaxialVonMises({ OD, WT, p_i, p_o = 0, F_axial = 0, smys }) {
 
   const dp = p_i - p_o;
   // Hoop at inner wall (Lamé)
-  const sigma_h = ((p_i * r_i * r_i - p_o * r_o * r_o) + (r_i * r_i * r_o * r_o * (p_i - p_o)) / (r_i * r_i)) / (r_o * r_o - r_i * r_i);
+  const sigma_h = (p_i * (r_i * r_i + r_o * r_o) - 2 * p_o * r_o * r_o) / (r_o * r_o - r_i * r_i);
   // Radial at inner wall = -p_i
   const sigma_r = -p_i;
   // Axial: average over wall area
@@ -51,59 +74,42 @@ export function triaxialVonMises({ OD, WT, p_i, p_o = 0, F_axial = 0, smys }) {
     )
   );
   const smys_val = Number(smys) || 90000;
-  const safe = 0.8 * smys_val; // 80% SMYS working limit (API RP 5C7)
+  const safe = 0.8 * smys_val;
   return {
     sigma_r, sigma_h, sigma_a,
     von_mises: vm, dp,
     smys: smys_val,
     safe_limit: safe,
-    utilization: vm / safe, // 1.0 = at 80% SMYS boundary
-    utilization_smys: vm / smys_val, // 1.0 = at 100% SMYS
+    utilization: vm / safe,
+    utilization_smys: vm / smys_val,
   };
 }
 
-// Build Von Mises operating-envelope points for an SVG "egg".
-// Parametric sweep over effective axial force; solves VM = target for each.
-// Returns array of {dp, F_axial} points along the envelope at a given VM level.
-export function vmEnvelope({ OD, WT, smys, utilization_target = 1.0, p_o = 0, steps = 180 }) {
-  const od = Number(OD), wt = Number(WT);
+// Classic CT "egg" envelope — closed-form parametric ellipse in (σ_h, σ_a) space
+// at a target VM level, mapped back to (Δp, F) via thin-wall relations.
+// This produces a smooth egg (rotated ellipse) that opens correctly on both
+// burst (Δp>0) and collapse (Δp<0) sides.
+export function vmEnvelope({ OD, WT, smys, utilization_target = 1.0, steps = 180 }) {
+  const od = Number(OD) || 0;
+  const wt = Number(WT) || 0;
   const id = Math.max(0.01, od - 2 * wt);
-  const r_i = id / 2, r_o = od / 2;
-  const area = Math.PI * (r_o * r_o - r_i * r_i);
-  const target_vm = 0.8 * (smys || 90000) * utilization_target; // VM level
+  const r_m = (od - wt) / 2;
+  const area = Math.PI * ((od / 2) ** 2 - (id / 2) ** 2);
+  const K_h = r_m / Math.max(wt, 1e-6);
+  const vm_target = 0.8 * (smys || 90000) * utilization_target;
 
-  const pts_upper = []; // positive tension branch
-  const pts_lower = []; // compression branch
-  // Pressure sweep
-  const p_max = (smys || 90000); // bounding guess
+  const pts = [];
   for (let i = 0; i <= steps; i++) {
-    const dp = -p_max + (2 * p_max * i) / steps;
-    const p_i = Math.max(p_o + dp, 0);
-    // Hoop at inner
-    const sigma_h =
-      ((p_i * r_i ** 2 - p_o * r_o ** 2) + (r_i ** 2 * r_o ** 2 * (p_i - p_o)) / (r_i ** 2)) /
-      (r_o ** 2 - r_i ** 2);
-    const sigma_r = -p_i;
-    // Solve for sigma_a such that VM = target: quadratic in sigma_a
-    // VM^2 = 0.5*((sh-sr)^2 + (sr-sa)^2 + (sa-sh)^2)
-    //     = sa^2 - (sh+sr)*sa + (sh^2 + sr^2 - sh*sr) ... after algebra:
-    //  2*VM^2 = 2*sa^2 - 2(sh+sr)*sa + (sh^2 + sr^2 - 2*sh*sr) + 2*(sh^2 - sh*sr + sr^2 - sh*sr)
-    // Simpler: expand directly
-    // 2*VM^2 = (sh-sr)^2 + 2*sa^2 - 2*(sh+sr)*sa + sh^2 + sr^2
-    const A = 2;
-    const B = -2 * (sigma_h + sigma_r);
-    const C = (sigma_h - sigma_r) ** 2 + sigma_h ** 2 + sigma_r ** 2 - 2 * target_vm ** 2;
-    const disc = B * B - 4 * A * C;
-    if (disc < 0) continue;
-    const sa1 = (-B + Math.sqrt(disc)) / (2 * A);
-    const sa2 = (-B - Math.sqrt(disc)) / (2 * A);
-    const F1 = sa1 * area;
-    const F2 = sa2 * area;
-    pts_upper.push({ dp, F_axial: F1 });
-    pts_lower.push({ dp, F_axial: F2 });
+    const t = (2 * Math.PI * i) / steps;
+    const c = Math.cos(t), s = Math.sin(t);
+    // VM² = σ_h² − σ_h·σ_a + σ_a² = r² (c² − cs + s²) ⇒ r = VM / √(c²−cs+s²)
+    const denom = c * c - c * s + s * s;
+    const r = vm_target / Math.sqrt(denom);
+    const sigma_h = r * c;
+    const sigma_a = r * s;
+    pts.push({ dp: sigma_h / K_h, F_axial: sigma_a * area });
   }
-  // Return closed loop
-  return pts_upper.concat(pts_lower.reverse());
+  return pts;
 }
 
 // ---------- Fatigue (local client-side ESTIMATE) ----------
