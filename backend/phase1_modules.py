@@ -16,10 +16,11 @@ import math
 import uuid
 
 
-# ---------- RBAC: three-role mapping with legacy aliases ----------
-# Plan roles: crew | supervisor | management
-# Legacy roles (kept on DB rows):  crew | field_manager | ops_manager
+# ---------- RBAC: four-role mapping with legacy aliases ----------
+# Plan roles: guest | crew | supervisor | management
+# Legacy roles (kept on DB rows):  guest | crew | field_manager | ops_manager
 LEGACY_TO_PLAN = {
+    "guest": "guest",
     "crew": "crew",
     "field_manager": "supervisor",
     "ops_manager": "management",
@@ -28,6 +29,7 @@ LEGACY_TO_PLAN = {
     "admin": "management",
 }
 PLAN_TO_LEGACY = {
+    "guest": "guest",
     "crew": "crew",
     "supervisor": "field_manager",
     "management": "ops_manager",
@@ -39,12 +41,27 @@ def role_of(user: dict) -> str:
     return LEGACY_TO_PLAN.get(raw, "crew")
 
 
+def is_guest(user: dict) -> bool:
+    return role_of(user) == "guest"
+
+
+def is_crew_or_higher(user: dict) -> bool:
+    return role_of(user) in ("crew", "supervisor", "management")
+
+
 def is_supervisor_or_higher(user: dict) -> bool:
     return role_of(user) in ("supervisor", "management")
 
 
 def is_management(user: dict) -> bool:
     return role_of(user) == "management"
+
+
+def require_crew(user: dict) -> dict:
+    """Blocks guests from writing internal data (pay, schedule, parts, etc.)."""
+    if not is_crew_or_higher(user):
+        raise HTTPException(403, "Crew role or higher required (guest is view-only operational).")
+    return user
 
 
 def require_supervisor(user: dict) -> dict:
@@ -234,8 +251,8 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
     @api_router.post("/rbac/promote")
     async def rbac_promote(body: RolePromote, user: dict = Depends(require_user)):
         require_supervisor(user)
-        if body.role not in ("crew", "supervisor", "management"):
-            raise HTTPException(400, "role must be crew|supervisor|management")
+        if body.role not in ("guest", "crew", "supervisor", "management"):
+            raise HTTPException(400, "role must be guest|crew|supervisor|management")
         # Only management can promote TO management
         if body.role == "management" and not is_management(user):
             raise HTTPException(403, "Only Management can promote to Management.")
@@ -535,6 +552,9 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
         # Model: every bend event affects THREE nodes (reel core + gooseneck zone)
         bend_node = min(int(body.depth_ft / spacing), n_nodes - 1)
         uplift = max(0.5, min(2.5, 1 + PRESSURE_UPLIFT_K * (body.traction_pressure_psi / P_REF_PSI - 1)))
+        # Phase 2 Module 4: multiply by reel's K_t (gripper block stress concentration)
+        k_t = float(reel.get("k_t") or 1.0)
+        uplift *= k_t
         # Nodes that bend during the trip
         affected = sorted(set([
             bend_node,
@@ -1505,5 +1525,238 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
                 ln.get("rig_id") or "", ln.get("status") or "",
             ])
         return {"csv": out.getvalue(), "row_count": len(lines)}
+
+    # -----------------------------------------------------------------
+    # PHASE 2 — DAQ Configs + Listener skeletons (WITS 0 / Modbus / WITSML)
+    # -----------------------------------------------------------------
+    # Phase 2 SCAFFOLD: stores connection profiles + an in-process "listener"
+    # status flag. Real socket/serial listeners get bolted on when field
+    # testing starts. The Live Ops page "Connected to unit" button reads
+    # this collection to show real status.
+    SUPPORTED_PROTOCOLS = {"wits0_tcp", "wits0_serial", "modbus_tcp", "witsml_rest"}
+
+    class DaqConfig(BaseModel):
+        name: str
+        protocol: str
+        host: Optional[str] = None
+        port: Optional[int] = None
+        serial_port: Optional[str] = None
+        baud: Optional[int] = 9600
+        witsml_url: Optional[str] = None
+        witsml_version: Optional[str] = "1.4.1.1"
+        rig_id: Optional[str] = None
+        channel_map: Optional[Dict[str, str]] = None
+        enabled: bool = False
+        notes: Optional[str] = None
+
+    @api_router.get("/daq/configs")
+    async def list_daq_configs(user: dict = Depends(require_user)):
+        require_crew(user)  # guests cannot see DAQ internals
+        team_id = user.get("team_id")
+        if not team_id:
+            return {"configs": []}
+        docs = await db.daq_configs.find({"team_id": team_id}, {"_id": 0}).sort("created_at", -1).to_list(100)
+        return {"configs": [ser(d) for d in docs]}
+
+    @api_router.post("/daq/configs")
+    async def create_daq_config(body: DaqConfig, user: dict = Depends(require_user)):
+        require_supervisor(user)
+        team_id = user.get("team_id")
+        if not team_id:
+            raise HTTPException(400, "No team.")
+        if body.protocol not in SUPPORTED_PROTOCOLS:
+            raise HTTPException(400, f"protocol must be one of {sorted(SUPPORTED_PROTOCOLS)}")
+        config_id = f"daq_{uuid.uuid4().hex[:12]}"
+        now = now_utc()
+        doc = {
+            "config_id": config_id, "team_id": team_id,
+            **body.model_dump(),
+            "status": "idle",             # idle | connecting | connected | error
+            "last_sample_at": None,
+            "last_error": None,
+            "created_by": user["email"], "created_at": now, "updated_at": now,
+        }
+        await db.daq_configs.insert_one(doc)
+        doc.pop("_id", None)
+        return ser(doc)
+
+    class DaqConfigPatch(BaseModel):
+        name: Optional[str] = None
+        host: Optional[str] = None
+        port: Optional[int] = None
+        serial_port: Optional[str] = None
+        baud: Optional[int] = None
+        witsml_url: Optional[str] = None
+        witsml_version: Optional[str] = None
+        rig_id: Optional[str] = None
+        channel_map: Optional[Dict[str, str]] = None
+        enabled: Optional[bool] = None
+        notes: Optional[str] = None
+
+    @api_router.patch("/daq/configs/{config_id}")
+    async def patch_daq_config(config_id: str, body: DaqConfigPatch, user: dict = Depends(require_user)):
+        require_supervisor(user)
+        cfg = await db.daq_configs.find_one({"config_id": config_id, "team_id": user.get("team_id")}, {"_id": 0})
+        if not cfg:
+            raise HTTPException(404, "Config not found.")
+        update = {k: v for k, v in body.model_dump().items() if v is not None}
+        update["updated_at"] = now_utc()
+        # Toggling enabled flips status to connecting (listener engages on next tick)
+        if body.enabled is True and cfg.get("status") != "connected":
+            update["status"] = "connecting"
+        if body.enabled is False:
+            update["status"] = "idle"
+        await db.daq_configs.update_one({"config_id": config_id}, {"$set": update})
+        return ser(await db.daq_configs.find_one({"config_id": config_id}, {"_id": 0}))
+
+    @api_router.delete("/daq/configs/{config_id}")
+    async def delete_daq_config(config_id: str, user: dict = Depends(require_user)):
+        require_supervisor(user)
+        res = await db.daq_configs.delete_one({"config_id": config_id, "team_id": user.get("team_id")})
+        if res.deleted_count == 0:
+            raise HTTPException(404, "Config not found.")
+        return {"success": True}
+
+    class DaqStatusPatch(BaseModel):
+        """Called by in-process listener (Phase 2) or health check to flip status."""
+        status: str  # idle | connecting | connected | error
+        last_error: Optional[str] = None
+        last_sample_at: Optional[str] = None
+
+    @api_router.post("/daq/configs/{config_id}/status")
+    async def set_daq_status(config_id: str, body: DaqStatusPatch, user: dict = Depends(require_user)):
+        require_crew(user)
+        cfg = await db.daq_configs.find_one({"config_id": config_id, "team_id": user.get("team_id")}, {"_id": 0})
+        if not cfg:
+            raise HTTPException(404, "Not found.")
+        if body.status not in ("idle", "connecting", "connected", "error"):
+            raise HTTPException(400, "invalid status")
+        update: Dict[str, Any] = {"status": body.status, "updated_at": now_utc()}
+        if body.last_error is not None:
+            update["last_error"] = body.last_error
+        if body.last_sample_at is not None:
+            try:
+                update["last_sample_at"] = datetime.fromisoformat(body.last_sample_at.replace("Z", "+00:00"))
+            except Exception:
+                pass
+        await db.daq_configs.update_one({"config_id": config_id}, {"$set": update})
+        return {"success": True}
+
+    # -----------------------------------------------------------------
+    # PHASE 2 — Module 4 scaffold: K_t (stress concentration) per reel
+    # -----------------------------------------------------------------
+    # Updated fatigue uplift uses: uplift *= K_t (gripper block ovality factor).
+    # Default K_t = 1.0 (neutral) until test data lands.
+    class KtSet(BaseModel):
+        reel_id: str
+        k_t: float  # 1.0 .. 2.0 typical
+
+    @api_router.post("/fatigue/kt")
+    async def set_kt(body: KtSet, user: dict = Depends(require_user)):
+        require_supervisor(user)
+        team_id = user.get("team_id")
+        reel = await db.reels.find_one({"reel_id": body.reel_id, "team_id": team_id}, {"_id": 0})
+        if not reel:
+            raise HTTPException(404, "Reel not found.")
+        if not (0.5 <= body.k_t <= 3.0):
+            raise HTTPException(400, "k_t must be between 0.5 and 3.0")
+        await db.reels.update_one({"reel_id": body.reel_id}, {"$set": {"k_t": body.k_t, "kt_updated_at": now_utc()}})
+        return {"success": True, "reel_id": body.reel_id, "k_t": body.k_t}
+
+    # -----------------------------------------------------------------
+    # PHASE 2 — Engineering Audit Dossier (default outline, HTML/markdown)
+    # -----------------------------------------------------------------
+    @api_router.get("/dossier")
+    async def generate_dossier(
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+        user: dict = Depends(require_user),
+    ):
+        require_crew(user)
+        team_id = user.get("team_id")
+        if not team_id:
+            raise HTTPException(400, "No team.")
+        # Window: default = last 24 h
+        now = now_utc()
+        try:
+            start_dt = datetime.fromisoformat(start) if start else now - timedelta(hours=24)
+            end_dt = datetime.fromisoformat(end) if end else now
+        except Exception:
+            raise HTTPException(400, "Invalid start/end ISO date.")
+
+        active_reel = await db.reels.find_one({"team_id": team_id, "is_active": True}, {"_id": 0})
+        samples = await db.liveops_samples.find(
+            {"team_id": team_id, "created_at": {"$gte": start_dt, "$lte": end_dt}},
+            {"_id": 0}
+        ).sort("created_at", 1).to_list(2000)
+        treatments = await db.treatments.find({"team_id": team_id}, {"_id": 0}).sort("started_at", -1).limit(5).to_list(5)
+        tc_lines = await db.timecard_lines.find(
+            {"team_id": team_id, "work_date": {"$gte": start_dt, "$lte": end_dt}},
+            {"_id": 0, "user_name": 1, "hours": 1, "pay_code_label": 1, "job_number": 1, "description": 1}
+        ).limit(200).to_list(200)
+        fatigue = await db.reel_fatigue.find_one({"reel_id": (active_reel or {}).get("reel_id")}, {"_id": 0}) if active_reel else None
+
+        # Compute sparkline summaries
+        def sparkline(series_key: str):
+            vals = [s.get(series_key) for s in samples if isinstance(s.get(series_key), (int, float))]
+            if not vals:
+                return {"min": None, "max": None, "avg": None, "count": 0}
+            return {"min": min(vals), "max": max(vals), "avg": sum(vals) / len(vals), "count": len(vals)}
+
+        # Alerts: any sample that would push VM past 0.80 at active reel
+        alerts: List[Dict[str, Any]] = []
+        if active_reel and active_reel.get("intervals"):
+            seg = active_reel["intervals"][0]
+            smys = seg.get("smys_psi", 90000)
+            safe = 0.8 * smys
+            r_m = ((seg["od_in"] - seg["wt_in"]) / 2.0)
+            area = math.pi * ((seg["od_in"] / 2) ** 2 - ((seg["od_in"] - 2 * seg["wt_in"]) / 2) ** 2)
+            for s in samples:
+                dp = (s.get("p_internal_psi") or 0) - (s.get("p_external_psi") or 0)
+                F = s.get("axial_force_lbf") or 0
+                sh = dp * r_m / max(seg["wt_in"], 1e-6)
+                sa = F / max(area, 1e-6)
+                vm = math.sqrt(sh * sh - sh * sa + sa * sa)
+                if vm >= safe:
+                    alerts.append({"ts": s.get("created_at").isoformat() if isinstance(s.get("created_at"), datetime) else s.get("created_at"),
+                                   "vm": round(vm, 0), "pct_of_safe": round(vm / safe * 100, 1)})
+
+        dossier = {
+            "team_id": team_id,
+            "generated_at": now.isoformat(),
+            "generated_by": user["email"],
+            "window": {"start": start_dt.isoformat(), "end": end_dt.isoformat()},
+            "job_header": {
+                "crew_lead": user.get("name") or user.get("email"),
+                "active_reel": ser(active_reel) if active_reel else None,
+                "fatigue_worst": max(fatigue.get("damage") or [0]) if fatigue else 0.0,
+                "fatigue_spacing_ft": (fatigue or {}).get("spacing_ft", 100),
+            },
+            "pump_schedule": [{"treatment": t.get("name"), "started_at": t.get("started_at").isoformat() if isinstance(t.get("started_at"), datetime) else t.get("started_at"), "entries": t.get("entry_count", 0)} for t in treatments],
+            "recorded_channels": {
+                "weight_lb": sparkline("weight_lb"),
+                "p_internal_psi": sparkline("p_internal_psi"),
+                "p_external_psi": sparkline("p_external_psi"),
+                "traction_pressure_psi": sparkline("traction_pressure_psi"),
+                "axial_force_lbf": sparkline("axial_force_lbf"),
+                "depth_ft": sparkline("depth_ft"),
+            },
+            "vm_alerts": alerts[:50],
+            "vm_alert_count": len(alerts),
+            "fatigue_delta": {
+                "worst_damage_now": max((fatigue or {}).get("damage") or [0]) if fatigue else 0.0,
+                "node_count": ((fatigue or {}).get("damage") or []).__len__(),
+            },
+            "crew_hours": [{
+                "user_name": ln.get("user_name"),
+                "pay_code": ln.get("pay_code_label"),
+                "hours": ln.get("hours"),
+                "job_number": ln.get("job_number"),
+                "description": ln.get("description"),
+            } for ln in tc_lines],
+            "crew_signatures": [],  # populated client-side at print time
+            "sample_count": len(samples),
+        }
+        return dossier
 
     return api_router

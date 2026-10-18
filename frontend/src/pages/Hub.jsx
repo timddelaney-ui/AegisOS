@@ -15,6 +15,13 @@ import AIPanel from "../components/AIPanel";
 import { usePullToRefresh, PullIndicator } from "../hooks/usePullToRefresh";
 import { HubCustomizeButton } from "../components/HubCustomize";
 import { DEFAULT_TILE_ORDER } from "../lib/hubRegistry";
+import { planRole, isGuest } from "../lib/roles";
+
+// Tiles hidden from guests (client-view-only). Internal company data.
+const GUEST_HIDDEN_TILES = new Set([
+  "timecards", "parts-orders", "schedule", "crew-admin", "tasks", "certs",
+  "team-hub", "equipment",
+]);
 
 const greetings = ["Kettle's on", "Ready for shift", "How's the shift", "Morning, hand", "Evening, tool push", "Coffee's brewing"];
 const proTips = [
@@ -26,8 +33,9 @@ const proTips = [
   "Ask the AI 'Troubleshoot' about surface symptoms and it'll walk you through diagnosis.",
 ];
 
-const HubCard = ({ Icon, title, subtitle, onClick, accent, badge, gradient, tileId, tilePrefs, "data-testid": testId }) => {
+const HubCard = ({ Icon, title, subtitle, onClick, accent, badge, gradient, tileId, tilePrefs, guestBlocked, "data-testid": testId }) => {
   if (tilePrefs && tileId && tilePrefs.hidden?.has(tileId)) return null;
+  if (guestBlocked) return null;
   const order = tilePrefs?.order?.indexOf(tileId);
   const style = order >= 0 ? { order } : undefined;
   return (
@@ -314,6 +322,7 @@ const Hub = () => {
             <HubCard
               data-testid="hub-live-ops-tile"
               tileId="live-ops"
+              guestBlocked={isGuest(user) && new Set(["timecards","parts-orders","schedule","crew-admin","tasks","certs","team-hub","equipment"]).has("live-ops")}
               tilePrefs={tilePrefs}
               Icon={Zap}
               title="Live Ops"
@@ -323,8 +332,21 @@ const Hub = () => {
               badge="LIVE"
             />
             <HubCard
+              data-testid="hub-daq-tile"
+              tileId="daq"
+              guestBlocked={isGuest(user) && new Set(["timecards","parts-orders","schedule","crew-admin","tasks","certs","team-hub","equipment"]).has("daq")}
+              tilePrefs={tilePrefs}
+              Icon={Activity}
+              title="DAQ Listeners"
+              subtitle="WITS 0 / Modbus TCP / WITSML profiles. Enable when the CT unit is wired in."
+              accent="bg-[#DBEAFE] text-[#0056B3]"
+              onClick={() => navigate("/daq")}
+              badge="PHASE 2"
+            />
+            <HubCard
               data-testid="hub-ctd-tile"
               tileId="ctd-calculator"
+              guestBlocked={isGuest(user) && new Set(["timecards","parts-orders","schedule","crew-admin","tasks","certs","team-hub","equipment"]).has("ctd-calculator")}
               tilePrefs={tilePrefs}
               Icon={Flame}
               title="CT Drilling Calculator"
@@ -336,6 +358,7 @@ const Hub = () => {
             <HubCard
               data-testid="hub-reels-tile"
               tileId="reels"
+              guestBlocked={isGuest(user) && new Set(["timecards","parts-orders","schedule","crew-admin","tasks","certs","team-hub","equipment"]).has("reels")}
               tilePrefs={tilePrefs}
               Icon={Layers}
               title="String & Reel Manager"
@@ -347,6 +370,7 @@ const Hub = () => {
             <HubCard
               data-testid="hub-vm-tile"
               tileId="stress"
+              guestBlocked={isGuest(user) && new Set(["timecards","parts-orders","schedule","crew-admin","tasks","certs","team-hub","equipment"]).has("stress")}
               tilePrefs={tilePrefs}
               Icon={Gauge}
               title="Triaxial · Von Mises Egg"
@@ -358,6 +382,7 @@ const Hub = () => {
             <HubCard
               data-testid="hub-fatigue-tile"
               tileId="fatigue"
+              guestBlocked={isGuest(user) && new Set(["timecards","parts-orders","schedule","crew-admin","tasks","certs","team-hub","equipment"]).has("fatigue")}
               tilePrefs={tilePrefs}
               Icon={Activity}
               title="Reel Fatigue Heatmap"
@@ -369,6 +394,7 @@ const Hub = () => {
             <HubCard
               data-testid="hub-wellbore-tile"
               tileId="wellbore"
+              guestBlocked={isGuest(user) && new Set(["timecards","parts-orders","schedule","crew-admin","tasks","certs","team-hub","equipment"]).has("wellbore")}
               tilePrefs={tilePrefs}
               Icon={Box}
               title="3D Wellbore Viewer"
@@ -380,6 +406,7 @@ const Hub = () => {
             <HubCard
               data-testid="hub-certs-tile"
               tileId="certs"
+              guestBlocked={isGuest(user) && new Set(["timecards","parts-orders","schedule","crew-admin","tasks","certs","team-hub","equipment"]).has("certs")}
               tilePrefs={tilePrefs}
               Icon={ShieldCheck}
               title="Crew Certifications"
@@ -391,6 +418,7 @@ const Hub = () => {
             <HubCard
               data-testid="hub-tasks-tile"
               tileId="tasks"
+              guestBlocked={isGuest(user) && new Set(["timecards","parts-orders","schedule","crew-admin","tasks","certs","team-hub","equipment"]).has("tasks")}
               tilePrefs={tilePrefs}
               Icon={CheckSquare}
               title="Daily Tasks"
@@ -402,6 +430,7 @@ const Hub = () => {
             <HubCard
               data-testid="hub-parts-orders-tile"
               tileId="parts-orders"
+              guestBlocked={isGuest(user) && new Set(["timecards","parts-orders","schedule","crew-admin","tasks","certs","team-hub","equipment"]).has("parts-orders")}
               tilePrefs={tilePrefs}
               Icon={Package}
               title="Parts Orders"
@@ -413,6 +442,7 @@ const Hub = () => {
             <HubCard
               data-testid="hub-timecards-tile"
               tileId="timecards"
+              guestBlocked={isGuest(user) && new Set(["timecards","parts-orders","schedule","crew-admin","tasks","certs","team-hub","equipment"]).has("timecards")}
               tilePrefs={tilePrefs}
               Icon={DollarSign}
               title="Timecards & Payroll"
@@ -425,6 +455,7 @@ const Hub = () => {
               <HubCard
                 data-testid="hub-crew-admin-tile"
               tileId="crew-admin"
+              guestBlocked={isGuest(user) && new Set(["timecards","parts-orders","schedule","crew-admin","tasks","certs","team-hub","equipment"]).has("crew-admin")}
               tilePrefs={tilePrefs}
                 Icon={UserCog}
                 title="Crew Admin"
@@ -437,6 +468,7 @@ const Hub = () => {
             <HubCard
               data-testid="hub-docs-tile"
               tileId="documents"
+              guestBlocked={isGuest(user) && new Set(["timecards","parts-orders","schedule","crew-admin","tasks","certs","team-hub","equipment"]).has("documents")}
               tilePrefs={tilePrefs}
               Icon={FileText}
               title="Company Documents"
@@ -448,6 +480,7 @@ const Hub = () => {
             <HubCard
               data-testid="hub-erp-tile"
               tileId="erp-template"
+              guestBlocked={isGuest(user) && new Set(["timecards","parts-orders","schedule","crew-admin","tasks","certs","team-hub","equipment"]).has("erp-template")}
               tilePrefs={tilePrefs}
               Icon={AlertOctagon}
               title="Site-Specific ERP Template"
@@ -459,6 +492,7 @@ const Hub = () => {
             <HubCard
               data-testid="hub-crew-contacts-tile"
               tileId="crew-contacts"
+              guestBlocked={isGuest(user) && new Set(["timecards","parts-orders","schedule","crew-admin","tasks","certs","team-hub","equipment"]).has("crew-contacts")}
               tilePrefs={tilePrefs}
               Icon={Mail}
               title="Crew Email Contacts"
@@ -470,6 +504,7 @@ const Hub = () => {
             <HubCard
               data-testid="hub-equipment-tile"
               tileId="equipment"
+              guestBlocked={isGuest(user) && new Set(["timecards","parts-orders","schedule","crew-admin","tasks","certs","team-hub","equipment"]).has("equipment")}
               tilePrefs={tilePrefs}
               Icon={Wrench}
               title="Equipment & Assets"
@@ -481,6 +516,7 @@ const Hub = () => {
             <HubCard
               data-testid="hub-schedule-tile"
               tileId="schedule"
+              guestBlocked={isGuest(user) && new Set(["timecards","parts-orders","schedule","crew-admin","tasks","certs","team-hub","equipment"]).has("schedule")}
               tilePrefs={tilePrefs}
               Icon={Calendar}
               title="Crew Schedule"
@@ -492,6 +528,7 @@ const Hub = () => {
             <HubCard
               data-testid="hub-treatment-tile"
               tileId="treatment"
+              guestBlocked={isGuest(user) && new Set(["timecards","parts-orders","schedule","crew-admin","tasks","certs","team-hub","equipment"]).has("treatment")}
               tilePrefs={tilePrefs}
               Icon={ClipboardList}
               title={activeTreatment ? `Treatment: ${activeTreatment.name}` : "Treatment Log"}
@@ -505,6 +542,7 @@ const Hub = () => {
             <HubCard
               data-testid="hub-emergency-tile"
               tileId="emergency"
+              guestBlocked={isGuest(user) && new Set(["timecards","parts-orders","schedule","crew-admin","tasks","certs","team-hub","equipment"]).has("emergency")}
               tilePrefs={tilePrefs}
               Icon={AlertOctagon}
               title="Emergency SOPs"
@@ -515,6 +553,7 @@ const Hub = () => {
             <HubCard
               data-testid="hub-training-tile"
               tileId="training"
+              guestBlocked={isGuest(user) && new Set(["timecards","parts-orders","schedule","crew-admin","tasks","certs","team-hub","equipment"]).has("training")}
               tilePrefs={tilePrefs}
               Icon={GraduationCap}
               title="Training Mode"
@@ -526,6 +565,7 @@ const Hub = () => {
             <HubCard
               data-testid="hub-redeem-tile"
               tileId="redeem"
+              guestBlocked={isGuest(user) && new Set(["timecards","parts-orders","schedule","crew-admin","tasks","certs","team-hub","equipment"]).has("redeem")}
               tilePrefs={tilePrefs}
               Icon={Ticket}
               title="Have an Invite Code?"
@@ -536,6 +576,7 @@ const Hub = () => {
             <HubCard
               data-testid="hub-feedback-tile"
               tileId="feedback"
+              guestBlocked={isGuest(user) && new Set(["timecards","parts-orders","schedule","crew-admin","tasks","certs","team-hub","equipment"]).has("feedback")}
               tilePrefs={tilePrefs}
               Icon={MessageSquarePlus}
               title="Send Feedback"

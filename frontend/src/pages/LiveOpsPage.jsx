@@ -5,7 +5,8 @@ import { Phase1PageHeader } from "../components/Phase1Header";
 import { useAuth, API } from "../context/AuthContext";
 import { useActiveReel } from "../context/ActiveReelContext";
 import { MiniVonMises, MiniFatigue, LiveGauge, StripChart } from "../components/LiveOpsPanels";
-import { Play, Pause, Wifi, WifiOff, Maximize2, X, Zap, Settings, Rewind, FastForward, StepBack, StepForward, History } from "lucide-react";
+import { Play, Pause, Wifi, WifiOff, Maximize2, X, Zap, Settings, Rewind, FastForward, StepBack, StepForward, History, Download } from "lucide-react";
+import { postSampleResilient, drainOfflineQueue, offlineQueueLength, startOfflineDrain } from "../lib/offlineQueue";
 
 const RING = 600;             // seconds of history (10 min @ 1 Hz)
 const TICK_MS = 1000;         // 1 Hz
@@ -35,6 +36,69 @@ const PANELS = [
   { id: "chart",    label: "Live Chart" },
 ];
 
+function buildDossierHtml(d) {
+  const fmt = (v) => (v == null ? "—" : typeof v === "number" ? v.toFixed(1) : v);
+  const spark = (name, s) => `<tr><td>${name}</td><td>${fmt(s.min)}</td><td>${fmt(s.max)}</td><td>${fmt(s.avg)}</td><td>${s.count}</td></tr>`;
+  return `<!DOCTYPE html><html><head><title>Engineering Audit Dossier</title>
+    <style>
+      body{font:12px/1.4 -apple-system,Segoe UI,Roboto,sans-serif;color:#111;padding:24px;max-width:900px;margin:auto}
+      h1{font-size:20px;border-bottom:2px solid #107C41;padding-bottom:6px}
+      h2{font-size:14px;margin-top:20px;color:#107C41;text-transform:uppercase;letter-spacing:0.5px}
+      table{width:100%;border-collapse:collapse;font-size:11px;margin-top:6px}
+      th,td{border:1px solid #D4D4D4;padding:4px 6px;text-align:left}
+      th{background:#F3F4F6}
+      .pill{display:inline-block;padding:2px 6px;border-radius:3px;background:#F3F4F6;font-size:10px;font-weight:bold}
+      .sig{margin-top:30px;display:flex;gap:40px}
+      .sig div{flex:1;border-top:1px solid #262626;padding-top:4px;font-size:10px}
+      @media print{body{padding:0}}
+    </style></head><body>
+    <h1>Engineering Audit Dossier</h1>
+    <p><b>Generated:</b> ${d.generated_at} · <b>By:</b> ${d.generated_by}</p>
+    <p><b>Window:</b> ${d.window.start} → ${d.window.end}</p>
+
+    <h2>Job Header</h2>
+    <p><b>Crew lead:</b> ${d.job_header.crew_lead}</p>
+    <p><b>Active reel:</b> ${d.job_header.active_reel?.name || "—"}
+      ${d.job_header.active_reel ? `· ${d.job_header.active_reel.total_length_ft} ft · ${d.job_header.active_reel.intervals?.[0]?.grade || ""}` : ""}</p>
+    <p><b>Worst fatigue node:</b> ${(d.job_header.fatigue_worst * 100).toFixed(1)}%</p>
+
+    <h2>Pump Schedule / Treatments</h2>
+    ${d.pump_schedule.length === 0 ? "<p>No treatments logged in window.</p>" :
+      "<table><tr><th>Treatment</th><th>Started</th><th>Entries</th></tr>" +
+      d.pump_schedule.map((t) => `<tr><td>${t.treatment || ""}</td><td>${t.started_at || ""}</td><td>${t.entries}</td></tr>`).join("") +
+      "</table>"}
+
+    <h2>Recorded Channels · ${d.sample_count} samples</h2>
+    <table><tr><th>Channel</th><th>Min</th><th>Max</th><th>Avg</th><th>Count</th></tr>
+      ${spark("Weight (lbf)", d.recorded_channels.weight_lb)}
+      ${spark("P internal (psi)", d.recorded_channels.p_internal_psi)}
+      ${spark("P external (psi)", d.recorded_channels.p_external_psi)}
+      ${spark("Traction pressure (psi)", d.recorded_channels.traction_pressure_psi)}
+      ${spark("Axial force (lbf)", d.recorded_channels.axial_force_lbf)}
+      ${spark("Depth (ft)", d.recorded_channels.depth_ft)}
+    </table>
+
+    <h2>Von Mises Alerts · ${d.vm_alert_count} total</h2>
+    ${d.vm_alerts.length === 0 ? "<p>None.</p>" :
+      "<table><tr><th>Time</th><th>VM (psi)</th><th>% of 80% SMYS</th></tr>" +
+      d.vm_alerts.map((a) => `<tr><td>${a.ts}</td><td>${a.vm}</td><td class="pill">${a.pct_of_safe}%</td></tr>`).join("") +
+      "</table>"}
+
+    <h2>Fatigue Delta</h2>
+    <p><b>Worst damage now:</b> ${(d.fatigue_delta.worst_damage_now * 100).toFixed(1)}% · <b>Nodes:</b> ${d.fatigue_delta.node_count}</p>
+
+    <h2>Crew Hours (${d.crew_hours.length} lines)</h2>
+    ${d.crew_hours.length === 0 ? "<p>No timecard entries in window.</p>" :
+      "<table><tr><th>User</th><th>Hours</th><th>Pay code</th><th>Job #</th><th>Description</th></tr>" +
+      d.crew_hours.map((h) => `<tr><td>${h.user_name || ""}</td><td>${h.hours}</td><td>${h.pay_code || ""}</td><td>${h.job_number || ""}</td><td>${h.description || ""}</td></tr>`).join("") +
+      "</table>"}
+
+    <h2>Crew Signatures</h2>
+    <div class="sig"><div>Crew lead</div><div>Supervisor</div><div>Management</div></div>
+  </body></html>`;
+}
+
+
 export default function LiveOpsPage() {
   const { user } = useAuth();
   const { activeReel, currentDepth, setCurrentDepth } = useActiveReel();
@@ -53,6 +117,26 @@ export default function LiveOpsPage() {
   const timerRef = useRef(null);
   const feedTickRef = useRef(0);
   const playbackTimerRef = useRef(null);
+
+  useEffect(() => { startOfflineDrain(); }, []);
+
+  const downloadDossier = async () => {
+    try {
+      const r = await axios.get(`${API}/dossier`, { withCredentials: true });
+      const html = buildDossierHtml(r.data);
+      const w = window.open("", "_blank");
+      if (w) {
+        w.document.write(html);
+        w.document.close();
+        setTimeout(() => w.print(), 500);
+      } else {
+        toast.error("Pop-up blocked — allow pop-ups to print the dossier.");
+      }
+      toast.success(`Dossier ready · ${r.data.sample_count} samples · ${r.data.vm_alert_count} alerts`);
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Dossier failed");
+    }
+  };
 
   // Load prefs (liveops layout)
   useEffect(() => {
@@ -92,16 +176,16 @@ export default function LiveOpsPage() {
         setCurrentDepth(Math.round(next.depth_ft));
         return buf;
       });
-      // feed server-side ring buffer (fire-and-forget)
+      // feed server-side ring buffer (resilient — queues offline if network drops)
       try {
         const last = samples[samples.length - 1];
         const sample = nextSimSample(last, t);
-        await axios.post(`${API}/liveops/feed`, {
+        await postSampleResilient({
           ...sample,
           reel_id: activeReel?.reel_id,
           source: connected ? "wits" : "simulated",
-        }, { withCredentials: true });
-      } catch { /* non-blocking */ }
+        });
+      } catch { /* already handled by resilient wrapper */ }
       // Every 3 seconds, advance the fatigue engine with the latest traction pressure
       if (t % 3 === 0 && activeReel?.reel_id) {
         try {
@@ -268,6 +352,12 @@ export default function LiveOpsPage() {
             className={`flex items-center gap-1 px-3 py-1 rounded font-bold text-xs ${mode === "playback" ? "bg-amber-500 text-black" : "bg-white/10 border border-white/20"}`}>
             <History className="w-3.5 h-3.5" />
             {mode === "playback" ? "Exit playback" : "Playback"}
+          </button>
+          <button
+            data-testid="liveops-dossier-btn"
+            onClick={downloadDossier}
+            className="flex items-center gap-1 px-3 py-1 rounded font-bold text-xs bg-white/10 border border-white/20">
+            <Download className="w-3.5 h-3.5" />Dossier
           </button>
           <button
             data-testid="liveops-customize-btn"

@@ -120,8 +120,20 @@ join only.
 - `/api/paycodes` CRUD + `/base-rate`
 
 ## Changelog
-- **Feb 2026 (phase1 — part 3)**: Live Ops split-screen dashboard (`/live-ops`) +
-  Hub customization (per-user tile show/hide + reorder + home default).
+- **Feb 2026 (phase2 — scaffolds)**: Guest role (view-only client access, blocked
+  from timecards/parts-orders/schedule/crew-admin/tasks/certs/team-hub/equipment).
+  DAQ Configs `/api/daq/configs` CRUD + listener-status callback endpoint for
+  WITS 0 TCP / WITS 0 Serial / Modbus TCP / WITSML REST — profiles + status
+  surface, in-process listener skeleton engages when real field DAQ comes
+  online. `/daq` UI page for supervisors. Module 4 K_t stress-concentration
+  per reel (`POST /api/fatigue/kt`) folded into fatigue uplift calc.
+  Engineering Audit Dossier at `/api/dossier` with sparklines, VM alerts,
+  fatigue delta, crew hours — Live Ops "Dossier" button prints a formatted HTML
+  report. Client-side offline queue (`lib/offlineQueue.js`) auto-syncs
+  `/api/liveops/feed` POSTs when network returns. 19/19 Phase 1 + Phase 2
+  pytests pass.
+- **Feb 2026 (phase1 — part 3)**: Live Ops split-screen dashboard (`/live-ops`),
+  playback scrubber with 10 min history, hub customization.
   New `/api/me/prefs` CRUD, `/api/liveops/feed` + `/api/liveops/stream` ring
   buffer, reusable mini panels (`MiniVonMises`, `MiniFatigue`, `LiveGauge`,
   `StripChart`). Click-to-enlarge full-screen on any panel. Simulated 1 Hz feed

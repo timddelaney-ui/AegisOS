@@ -17,6 +17,13 @@ export const HUB_TILES = {
     subtitle: "Split-screen Von Mises + Fatigue + Weight + Pressure + chart. Click any panel to go full-screen.",
     required: true,          // always available (recommended as home default)
   },
+  daq: {
+    label: "DAQ Listeners",
+    Icon: Activity, accent: "bg-[#DBEAFE] text-[#0056B3]",
+    path: "/daq", badge: "PHASE 2",
+    subtitle: "WITS 0 / Modbus TCP / WITSML profiles. Enable when the field unit is wired in.",
+    roleGate: "crew",
+  },
   workbook: {
     label: "Workbook (17 Sheets)", Icon: FileSpreadsheet, accent: "bg-[#E6F4EA] text-[#107C41]",
     path: "/app", subtitle: "The classic calculation workbook — hydraulics, N2, fishing, and 14 more.",
@@ -104,7 +111,7 @@ export const HUB_TILES = {
 
 export const DEFAULT_TILE_ORDER = [
   "live-ops", "workbook", "ctd-calculator", "reels", "stress", "fatigue",
-  "wellbore", "certs", "tasks", "parts-orders", "timecards",
+  "wellbore", "daq", "certs", "tasks", "parts-orders", "timecards",
   "treatment", "team-hub", "documents", "erp-template", "crew-contacts",
   "equipment", "schedule", "crew-admin", "emergency", "training",
 ];

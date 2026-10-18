@@ -75,6 +75,7 @@ export default function RbacAdminPage() {
                 <span className="text-[10px] font-bold uppercase bg-black/5 px-1.5 py-0.5 rounded">{ROLE_LABEL[m.role_plan] || m.role_plan}</span>
                 {canEdit && (
                   <div className="flex gap-1">
+                    <button data-testid={`promote-guest-${m.user_id}`} onClick={() => setRole(m.user_id, "guest")} className="bg-[#FEF3C7] px-2 py-1 rounded font-bold text-[10px]">Guest</button>
                     <button data-testid={`promote-crew-${m.user_id}`} onClick={() => setRole(m.user_id, "crew")} className="bg-[#F3F4F6] px-2 py-1 rounded font-bold text-[10px]">Crew</button>
                     <button data-testid={`promote-sup-${m.user_id}`} onClick={() => setRole(m.user_id, "supervisor")} className="bg-[#DBEAFE] px-2 py-1 rounded font-bold text-[10px]">Supervisor</button>
                     {canSetMgmt && <button data-testid={`promote-mgmt-${m.user_id}`} onClick={() => setRole(m.user_id, "management")} className="bg-[#DCFCE7] px-2 py-1 rounded font-bold text-[10px]">Management</button>}

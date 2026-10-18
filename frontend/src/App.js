@@ -33,6 +33,7 @@ import PartsOrdersPage from "./pages/PartsOrdersPage";
 import TimecardsPage from "./pages/TimecardsPage";
 import RbacAdminPage from "./pages/RbacAdminPage";
 import LiveOpsPage from "./pages/LiveOpsPage";
+import DaqConfigPage from "./pages/DaqConfigPage";
 import { ActiveReelProvider } from "./context/ActiveReelContext";
 import ManagerGreeting from "./components/ManagerGreeting";
 import RedeemDialog from "./components/RedeemDialog";
@@ -251,6 +252,7 @@ const AppRouter = () => {
         <Route path="/timecards" element={<ProtectedRoute><TimecardsPage /></ProtectedRoute>} />
         <Route path="/crew-admin" element={<ProtectedRoute><RbacAdminPage /></ProtectedRoute>} />
         <Route path="/live-ops" element={<ProtectedRoute><LiveOpsPage /></ProtectedRoute>} />
+        <Route path="/daq" element={<ProtectedRoute><DaqConfigPage /></ProtectedRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <AdvisoryFooter />
