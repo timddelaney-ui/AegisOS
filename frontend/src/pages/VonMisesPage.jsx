@@ -1,8 +1,9 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, useRef } from "react";
 import { Phase1PageHeader } from "../components/Phase1Header";
 import { useActiveReel } from "../context/ActiveReelContext";
-import { thinWallVonMises, vmEnvelope, intervalAt } from "../lib/ctPhysics";
-import { AlertTriangle } from "lucide-react";
+import { triaxialVonMises, vmEnvelope, intervalAt } from "../lib/ctPhysics";
+import { AlertTriangle, Volume2, VolumeX, Zap } from "lucide-react";
+import ShareLinksButton from "../components/ShareLinksButton";
 
 const PAD = 44;
 const W = 680, H = 380;
@@ -18,18 +19,22 @@ export default function VonMisesPage() {
   const [p_i, setPi] = useState(5000);
   const [p_o, setPo] = useState(0);
   const [F_axial, setF] = useState(0);
+  const [muted, setMuted] = useState(() => {
+    try { return localStorage.getItem("coilaegis_vm_muted") === "1"; } catch { return false; }
+  });
+  const nearLimitRef = useRef(false);
 
   useEffect(() => { setCurrentDepth(depth); }, [depth, setCurrentDepth]);
 
   const seg = useMemo(() => intervalAt(activeReel, depth) || { od_in: 2.0, wt_in: 0.175, smys_psi: 90000 }, [activeReel, depth]);
 
   const dp = num(p_i) - num(p_o);
-  const stress = useMemo(() => thinWallVonMises({
-    OD: seg.od_in, WT: seg.wt_in, dp, F_axial: num(F_axial), smys: seg.smys_psi,
-  }), [seg, dp, F_axial]);
+  const stress = useMemo(() => triaxialVonMises({
+    OD: seg.od_in, WT: seg.wt_in, p_i: num(p_i), p_o: num(p_o), F_axial: num(F_axial), smys: seg.smys_psi,
+  }), [seg, p_i, p_o, F_axial]);
 
-  const env80 = useMemo(() => vmEnvelope({ OD: seg.od_in, WT: seg.wt_in, smys: seg.smys_psi, utilization_target: 1.0 }), [seg]);
-  const env100 = useMemo(() => vmEnvelope({ OD: seg.od_in, WT: seg.wt_in, smys: seg.smys_psi, utilization_target: 1.25 }), [seg]);
+  const env80  = useMemo(() => vmEnvelope({ OD: seg.od_in, WT: seg.wt_in, smys: seg.smys_psi, p_o: num(p_o), utilization_target: 1.0 }),  [seg, p_o]);
+  const env100 = useMemo(() => vmEnvelope({ OD: seg.od_in, WT: seg.wt_in, smys: seg.smys_psi, p_o: num(p_o), utilization_target: 1.25 }), [seg, p_o]);
 
   // Compute plot ranges from envelope — symmetric around origin for a proper egg
   const { xMin, xMax, yMin, yMax } = useMemo(() => {
@@ -55,6 +60,23 @@ export default function VonMisesPage() {
   const alert = util >= 0.95;
   const warn = util >= 0.80;
 
+  // Audio chirp when operating point first enters the 95%-of-80%-SMYS band.
+  useEffect(() => {
+    const wasNear = nearLimitRef.current;
+    nearLimitRef.current = alert;
+    if (alert && !wasNear && !muted) {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const o = ctx.createOscillator(); const g = ctx.createGain();
+        o.type = "square"; o.frequency.value = 880;
+        g.gain.value = 0.08;
+        o.connect(g); g.connect(ctx.destination);
+        o.start();
+        setTimeout(() => { try { o.stop(); ctx.close(); } catch {} }, 220);
+      } catch { /* audio unsupported */ }
+    }
+  }, [alert, muted]);
+
   // Nice tick marks
   const xTicks = useMemo(() => {
     const step = Math.pow(10, Math.floor(Math.log10(xMax))) / 2;
@@ -71,7 +93,23 @@ export default function VonMisesPage() {
 
   return (
     <div className="min-h-screen bg-[#F3F3F3]">
-      <Phase1PageHeader title="API RP 5C7 Triaxial · Von Mises Egg" subtitle="80% SMYS working limit · thin-wall" />
+      <Phase1PageHeader title="API RP 5C7 Triaxial · Von Mises Egg" subtitle="Thick-wall Lamé · 80 % SMYS working limit · 100 % SMYS yield" right={
+        <div className="flex items-center gap-1">
+          <button
+            data-testid="vm-mute-toggle"
+            onClick={() => {
+              const next = !muted;
+              setMuted(next);
+              try { localStorage.setItem("coilaegis_vm_muted", next ? "1" : "0"); } catch {}
+            }}
+            title={muted ? "Enable 95% warning chirp" : "Mute 95% warning chirp"}
+            className="text-[10px] font-bold px-2 py-0.5 rounded bg-white/10 border border-white/20 hover:bg-white/20 flex items-center gap-1"
+          >
+            {muted ? <VolumeX className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}
+          </button>
+          <ShareLinksButton scope="stress" compact />
+        </div>
+      } />
       <div className="max-w-6xl mx-auto p-2 space-y-2">
         {!activeReel && (
           <div className="bg-[#FFF3CD] text-[#856404] text-[11px] rounded p-2 border border-[#FFE69C]">

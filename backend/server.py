@@ -3249,11 +3249,17 @@ class TreatmentCreate(BaseModel):
 class TreatmentEntryCreate(BaseModel):
     text: str
     event_at: Optional[str] = None   # ISO timestamp of when the event actually happened (if different from logged time)
+    kind: Optional[str] = "note"     # 'note' | 'event' | 'npt'
+    npt_category: Optional[str] = None   # equipment | weather | wait_on_well | hse | other
+    npt_minutes: Optional[int] = None    # duration for NPT entries
 
 
 class TreatmentEntryUpdate(BaseModel):
     text: Optional[str] = None
     event_at: Optional[str] = None   # retroactively correct the event time
+    kind: Optional[str] = None
+    npt_category: Optional[str] = None
+    npt_minutes: Optional[int] = None
 
 
 @api_router.get("/treatments")
@@ -3372,6 +3378,26 @@ async def list_treatment_entries(treatment_id: str, since: Optional[str] = None,
     return {"entries": [_serialize(d) for d in docs], "treatment": _serialize(trt)}
 
 
+ALLOWED_ENTRY_KINDS = ("note", "event", "npt")
+ALLOWED_NPT_CATEGORIES = ("equipment", "weather", "wait_on_well", "hse", "other")
+
+
+def _validate_entry_kind(kind: Optional[str], npt_cat: Optional[str], npt_min: Optional[int]) -> dict:
+    k = (kind or "note").lower()
+    if k not in ALLOWED_ENTRY_KINDS:
+        raise HTTPException(400, f"kind must be one of {ALLOWED_ENTRY_KINDS}")
+    out = {"kind": k, "npt_category": None, "npt_minutes": None}
+    if k == "npt":
+        cat = (npt_cat or "").lower()
+        if cat not in ALLOWED_NPT_CATEGORIES:
+            raise HTTPException(400, f"npt_category must be one of {ALLOWED_NPT_CATEGORIES}")
+        if npt_min is None or int(npt_min) <= 0 or int(npt_min) > 7 * 24 * 60:
+            raise HTTPException(400, "npt_minutes must be a positive integer ≤ 10080")
+        out["npt_category"] = cat
+        out["npt_minutes"] = int(npt_min)
+    return out
+
+
 @api_router.post("/treatments/{treatment_id}/entries")
 async def add_treatment_entry(treatment_id: str, body: TreatmentEntryCreate, user: dict = Depends(require_user)):
     team_id = user.get("team_id")
@@ -3417,6 +3443,7 @@ async def add_treatment_entry(treatment_id: str, body: TreatmentEntryCreate, use
         "text": text,
         "created_at": now,
         "event_at": event_at,
+        **_validate_entry_kind(body.kind, body.npt_category, body.npt_minutes),
     }
     await db.treatment_entries.insert_one(doc)
     # Roll-up counters on the treatment doc
@@ -3462,6 +3489,12 @@ async def edit_treatment_entry(treatment_id: str, entry_id: str, body: Treatment
             raise
         except Exception:
             raise HTTPException(400, "Invalid event_at timestamp.")
+    if body.kind is not None or body.npt_category is not None or body.npt_minutes is not None:
+        # Merge against existing values so partial updates work (e.g. just changing kind back to 'note')
+        merged_kind = body.kind if body.kind is not None else entry.get("kind") or "note"
+        merged_cat = body.npt_category if body.npt_category is not None else entry.get("npt_category")
+        merged_min = body.npt_minutes if body.npt_minutes is not None else entry.get("npt_minutes")
+        update.update(_validate_entry_kind(merged_kind, merged_cat, merged_min))
     await db.treatment_entries.update_one(
         {"entry_id": entry_id, "treatment_id": treatment_id, "team_id": team_id},
         {"$set": update},
@@ -3487,6 +3520,48 @@ async def delete_treatment_entry(treatment_id: str, entry_id: str, user: dict = 
         {"$inc": {"entry_count": -1}, "$set": {"updated_at": datetime.now(timezone.utc)}},
     )
     return {"success": True}
+
+
+@api_router.get("/treatments/events-timeline")
+async def treatments_events_timeline(
+    rig_id: Optional[str] = None,
+    limit: int = 500,
+    user: dict = Depends(require_user),
+):
+    """
+    Returns treatment entries with kind in ('event', 'npt') for the current team
+    (optionally filtered to a rig). Used by the Live Ops playback scrubber to
+    render Significant-Event and NPT pins alongside manual annotations.
+    """
+    team_id = user.get("team_id")
+    if not team_id:
+        return {"events": []}
+    q: Dict[str, Any] = {"team_id": team_id, "kind": {"$in": ["event", "npt"]}}
+    if rig_id:
+        q["rig_id"] = rig_id
+    docs = await db.treatment_entries.find(q, {"_id": 0}).sort("event_at", -1).limit(min(limit, 2000)).to_list(min(limit, 2000))
+    out = []
+    for d in docs:
+        ev = _serialize(d)
+        # Normalize timestamp_ms for the pin layer (works for both naive and ISO strings)
+        ev_at = d.get("event_at") or d.get("created_at")
+        ts_ms = None
+        if isinstance(ev_at, datetime):
+            if ev_at.tzinfo is None:
+                ev_at = ev_at.replace(tzinfo=timezone.utc)
+            ts_ms = int(ev_at.timestamp() * 1000)
+        elif isinstance(ev_at, str):
+            try:
+                parsed = datetime.fromisoformat(ev_at.replace("Z", "+00:00"))
+                if parsed.tzinfo is None:
+                    parsed = parsed.replace(tzinfo=timezone.utc)
+                ts_ms = int(parsed.timestamp() * 1000)
+            except Exception:
+                pass
+        ev["timestamp_ms"] = ts_ms
+        out.append(ev)
+    return {"events": out}
+
 
 
 # ============ FILE / MEDIA STORAGE (Emergent Object Storage) ============

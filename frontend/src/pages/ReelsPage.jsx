@@ -7,6 +7,7 @@ import { isSupervisorOrHigher, isManagement } from "../lib/roles";
 import { useActiveReel } from "../context/ActiveReelContext";
 import { defaultSmys } from "../lib/ctPhysics";
 import { Plus, Upload, Trash2, CheckCircle2, Lock } from "lucide-react";
+import ShareLinksButton from "../components/ShareLinksButton";
 
 const emptyInterval = () => ({ start_md_ft: 0, end_md_ft: 1000, od_in: 2.0, wt_in: 0.175, grade: "QT-900", smys_psi: 90000 });
 
@@ -102,7 +103,7 @@ export default function ReelsPage() {
 
   return (
     <div className="min-h-screen bg-[#F3F3F3]">
-      <Phase1PageHeader title="String & Reel Manager" subtitle="Tapered CT reel profiles — the active reel feeds every sheet, Von Mises egg, and fatigue heatmap." />
+      <Phase1PageHeader title="String & Reel Manager" subtitle="Tapered CT reel profiles — the active reel feeds every sheet, Von Mises egg, and fatigue heatmap." right={<ShareLinksButton scope="reels" compact />} />
       <div className="max-w-6xl mx-auto p-3 space-y-3">
         {!canWrite && (
           <div className="bg-[#FFF3CD] border border-[#FFE69C] text-[#856404] text-[12px] rounded px-3 py-2 flex items-center gap-2">

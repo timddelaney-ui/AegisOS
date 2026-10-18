@@ -9,6 +9,7 @@ import { useAuth, API } from "../context/AuthContext";
 import { useActiveReel } from "../context/ActiveReelContext";
 import { isSupervisorOrHigher } from "../lib/roles";
 import { Upload, Play } from "lucide-react";
+import ShareLinksButton from "../components/ShareLinksButton";
 
 // Color-code a station by DLS (deg per 100 ft)
 const dlsColor = (dls) => {
@@ -118,7 +119,7 @@ export default function WellborePage() {
 
   return (
     <div className="min-h-screen bg-[#F3F3F3]">
-      <Phase1PageHeader title="3D Wellbore Viewer" subtitle={survey ? `${survey.well_name} · ${survey.stations?.length} stations · MD ${Math.round(maxMD)} ft` : "Upload a directional survey to render the well path."} />
+      <Phase1PageHeader title="3D Wellbore Viewer" subtitle={survey ? `${survey.well_name} · ${survey.stations?.length} stations · MD ${Math.round(maxMD)} ft` : "Upload a directional survey to render the well path."} right={<ShareLinksButton scope="wellbore" compact />} />
       <div className="max-w-6xl mx-auto p-3 space-y-3">
 
         {canUpload && (

@@ -156,8 +156,29 @@ join only.
   Engineering Job Audit Dossier PDF.
 - Stripe tiers go live (Tier 1 Hand $2.99/mo, Tier 2 Unit $249/yr).
 
-## Changelog — 2026-02-18
-### Rig Fleet Status badges + Welcome Tour
+## Changelog — 2026-02-18 · Field Beta drop
+### Thick-wall Von Mises + Injector-skate ovality + Universal Share Links
+- **Von Mises flipped back to thick-wall Lamé** (API RP 5C7). Dual envelope
+  rendered: solid orange = 80 % SMYS working limit, dashed dark red = 100 %
+  SMYS yield. Envelope now solved analytically (quadratic in σ_a per Δp with
+  closed-form burst / collapse tips) — correct behaviour on both sides.
+  Audio chirp at 95 % of 80 % SMYS (muteable, persisted). Thin-wall helper
+  kept as a shim so no legacy callers break.
+- **Injector-skate panel on the Fatigue page**: skate pressure → clamp force
+  → ring deflection (Timoshenko, k=π/4−2/π) → ovality % → contact stress →
+  Peterson K_t → fatigue multiplier (K_t² × over-pressure factor). Over-cap
+  banner at 1600 psi with scaled damage warning. All clean-room public
+  mechanics, no proprietary coefficients.
+- **Universal Share Links**: `ShareLinksButton` now works on every tool page
+  (Live Ops, Stress, Fatigue, Wellbore, Reels). Scope + target_id persisted
+  server-side; `/share/{token}` redirects to the correct route. TTL options:
+  4h / 24h / 7d / Never. Mode toggle: Read-only / Training.
+- **Training-mode share links**: adds a sticky "TRAINING SIMULATION ·
+  READ-ONLY FIELD DATA" banner globally plus a floating AI panel with 4
+  preset what-if prompts wired to `/api/ai/chat`.
+- 12/12 Phase 2 pytests still passing.
+
+## Changelog — 2026-02-18 · Rig Fleet Status badges + Welcome Tour
 - **Rig Status**: new `rig_status` collection (status: running/standby/down/yard
   + optional note). Supervisor+ can PUT via inline chip-menu in the rig dropdown;
   management sees fleet state at a glance. Shown as colored chips on every row

@@ -5,14 +5,33 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Loader2, ClipboardList, Play, Square, Send, Trash2,
   Copy, Printer, RefreshCw, User, Pencil, Check, X, Zap, Clock,
+  Star, AlertTriangle, StickyNote, Columns,
 } from "lucide-react";
 import { API, useAuth } from "../context/AuthContext";
 import { useRig, rigLabel } from "../context/RigContext";
 import RigSelector from "../components/RigSelector";
 import { usePullToRefresh, PullIndicator } from "../hooks/usePullToRefresh";
 import { fmtTime as fmtClock, fmtShort as fmtTime } from "../lib/timeFormat";
+import LiveStripSidebar from "../components/LiveStripSidebar";
 
 const POLL_MS = 3000;
+
+// Entry kinds — a plain note vs. significant operational event vs. non-productive time
+const ENTRY_KINDS = [
+  { id: "note",  label: "Note",  Icon: StickyNote,    color: "#6B7280", chipBg: "#F3F4F6" },
+  { id: "event", label: "Event", Icon: Star,          color: "#F59E0B", chipBg: "#FEF3C7" },
+  { id: "npt",   label: "NPT",   Icon: AlertTriangle, color: "#DC2626", chipBg: "#FEE2E2" },
+];
+const KIND_META = Object.fromEntries(ENTRY_KINDS.map((k) => [k.id, k]));
+
+const NPT_CATEGORIES = [
+  { id: "equipment",    label: "Equipment" },
+  { id: "weather",      label: "Weather" },
+  { id: "wait_on_well", label: "Wait on well" },
+  { id: "hse",          label: "HSE" },
+  { id: "other",        label: "Other" },
+];
+const NPT_LABEL = Object.fromEntries(NPT_CATEGORIES.map((n) => [n.id, n.label]));
 
 // 24-hour "HH:MM:SS" clock for the vertical stamp bar beside each entry.
 const stampBar = (iso) => fmtClock(iso);
@@ -81,17 +100,32 @@ const EntryComposer = ({ treatmentId, onAdded }) => {
   const [useCustomTime, setUseCustomTime] = useState(false);
   const [eventAt, setEventAt] = useState(() => toLocalDTInput());
   const [quickStamping, setQuickStamping] = useState(false);
+  const [kind, setKind] = useState("note");
+  const [nptCategory, setNptCategory] = useState("equipment");
+  const [nptMinutes, setNptMinutes] = useState("");
   const inputRef = useRef(null);
 
   const send = async (overrideText) => {
     const t = (overrideText ?? text).trim();
     if (!t) return;
+    if (kind === "npt" && (!nptMinutes || Number(nptMinutes) <= 0)) {
+      toast.error("NPT requires a duration in minutes.");
+      return;
+    }
     setBusy(true);
     try {
-      const body = { text: t };
+      const body = { text: t, kind };
       if (useCustomTime && eventAt) body.event_at = fromLocalDTInput(eventAt);
+      if (kind === "npt") {
+        body.npt_category = nptCategory;
+        body.npt_minutes = Number(nptMinutes);
+      }
       const { data } = await axios.post(`${API}/treatments/${treatmentId}/entries`, body, { withCredentials: true });
-      if (overrideText === undefined) setText("");
+      if (overrideText === undefined) {
+        setText("");
+        setKind("note");
+        setNptMinutes("");
+      }
       setUseCustomTime(false);
       setEventAt(toLocalDTInput());
       onAdded(data);
@@ -115,6 +149,58 @@ const EntryComposer = ({ treatmentId, onAdded }) => {
 
   return (
     <form className="bg-white border-t border-[#D4D4D4] p-2 flex flex-col gap-1.5 sticky bottom-0 safe-bottom" onSubmit={(e) => { e.preventDefault(); send(); }} data-testid="treatment-composer">
+      {/* Kind selector */}
+      <div className="flex items-center gap-1" data-testid="treatment-kind-selector">
+        {ENTRY_KINDS.map((k) => {
+          const Icon = k.Icon;
+          const active = kind === k.id;
+          return (
+            <button
+              key={k.id}
+              type="button"
+              data-testid={`treatment-kind-${k.id}`}
+              onClick={() => setKind(k.id)}
+              className="text-[10px] font-bold uppercase px-2 py-1 rounded flex items-center gap-1 transition-colors"
+              style={active
+                ? { background: k.color, color: "white" }
+                : { background: k.chipBg, color: k.color }}
+            >
+              <Icon className="w-3 h-3" strokeWidth={2.5} />
+              {k.label}
+            </button>
+          );
+        })}
+        <span className="text-[9px] text-[#8A8A8A] ml-2 italic">
+          {kind === "event" && "Pins to Live Ops playback timeline"}
+          {kind === "npt" && "Pins to timeline + counted toward NPT total"}
+        </span>
+      </div>
+
+      {/* NPT category + minutes */}
+      {kind === "npt" && (
+        <div className="flex items-center gap-2" data-testid="treatment-npt-fields">
+          <select
+            data-testid="treatment-npt-category"
+            value={nptCategory}
+            onChange={(e) => setNptCategory(e.target.value)}
+            className="px-2 py-1 border border-[#CCC] rounded text-[11px] bg-white"
+          >
+            {NPT_CATEGORIES.map((n) => <option key={n.id} value={n.id}>{n.label}</option>)}
+          </select>
+          <input
+            data-testid="treatment-npt-minutes"
+            type="number"
+            value={nptMinutes}
+            onChange={(e) => setNptMinutes(e.target.value)}
+            min={1}
+            step={1}
+            placeholder="Minutes"
+            className="px-2 py-1 border border-[#CCC] rounded text-[11px] w-24"
+          />
+          <span className="text-[10px] text-[#595959]">of non-productive time</span>
+        </div>
+      )}
+
       <div className="flex gap-2">
         <textarea
           ref={inputRef}
@@ -124,7 +210,11 @@ const EntryComposer = ({ treatmentId, onAdded }) => {
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (text.trim() && !busy) send(); }
           }}
-          placeholder="Log a note — Enter to send, Shift+Enter for newline"
+          placeholder={
+            kind === "event" ? 'Significant event — e.g. "Tagged bottom at 4,210 ft"'
+            : kind === "npt" ? 'NPT reason — e.g. "Pump 2 seal failure, waiting on parts"'
+            : "Log a note — Enter to send, Shift+Enter for newline"
+          }
           rows={2}
           maxLength={2000}
           className="flex-1 px-2.5 py-2 border border-[#CCC] rounded text-sm resize-none"
@@ -229,8 +319,24 @@ const TreatmentEntryRow = ({ entry, mine, treatmentId, onPatched, onDeleted }) =
           </div>
         )}
       </div>
-      <div className={`flex-1 min-w-0 border-l-2 pl-2 ${mine ? "border-[#C44A08]" : "border-[#D4D4D4]"}`}>
+      <div className={`flex-1 min-w-0 border-l-2 pl-2 ${
+        entry.kind === "event" ? "border-[#F59E0B]" :
+        entry.kind === "npt" ? "border-[#DC2626]" :
+        mine ? "border-[#C44A08]" : "border-[#D4D4D4]"
+      }`}>
         <div className="text-[10px] font-bold text-[#595959] flex items-center gap-1 flex-wrap">
+          {entry.kind === "event" && (
+            <span className="inline-flex items-center gap-0.5 text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-[#FEF3C7] text-[#F59E0B]">
+              <Star className="w-2.5 h-2.5" strokeWidth={2.8} />Event
+            </span>
+          )}
+          {entry.kind === "npt" && (
+            <span className="inline-flex items-center gap-0.5 text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-[#FEE2E2] text-[#DC2626]">
+              <AlertTriangle className="w-2.5 h-2.5" strokeWidth={2.8} />NPT
+              {entry.npt_category && <span className="ml-0.5 opacity-80">· {NPT_LABEL[entry.npt_category] || entry.npt_category}</span>}
+              {entry.npt_minutes && <span className="ml-0.5">· {entry.npt_minutes}m</span>}
+            </span>
+          )}
           <User className="w-3 h-3" /> {entry.author_name}
           {wasBackdated && (
             <span className="text-[9px] font-normal italic text-[#C36600]">· logged {stampBar(createdAt)}</span>
@@ -290,9 +396,21 @@ const TreatmentPage = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [closing, setClosing] = useState(false);
+  const [splitView, setSplitView] = useState(() => {
+    try { return localStorage.getItem("coilaegis_treatment_split_v1") === "1"; }
+    catch { return false; }
+  });
   const pollRef = useRef(null);
   const sinceRef = useRef(null);
   const scrollRef = useRef(null);
+
+  const toggleSplit = () => {
+    setSplitView((v) => {
+      const next = !v;
+      try { localStorage.setItem("coilaegis_treatment_split_v1", next ? "1" : "0"); } catch {}
+      return next;
+    });
+  };
 
   const loadActive = useCallback(async () => {
     setLoading(true);
@@ -397,10 +515,24 @@ const TreatmentPage = () => {
         <button onClick={() => navigate("/hub")} data-testid="treatment-back" className="flex items-center gap-1.5 text-sm font-semibold tap-44 -ml-2 pl-2 pr-2"><ArrowLeft className="w-4 h-4" /> Back</button>
         <h1 className="text-sm font-semibold ml-2 flex items-center gap-2 min-w-0"><ClipboardList className="w-4 h-4 flex-shrink-0" /> <span className="truncate">Treatment · {rigLabel(rigId)}</span></h1>
         {refreshing && <RefreshCw className="w-3 h-3 animate-spin ml-2 opacity-70 flex-shrink-0" />}
+        <div className="ml-auto flex items-center gap-1">
+          <button
+            data-testid="treatment-split-toggle"
+            onClick={toggleSplit}
+            title={splitView ? "Hide live chart" : "Show live chart beside the log"}
+            className={`text-[11px] font-bold px-2 py-1 rounded flex items-center gap-1 tap-44 ${splitView ? "bg-white text-[#C44A08]" : "bg-white/10 border border-white/30 text-white hover:bg-white/20"}`}
+          >
+            <Columns className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">{splitView ? "Hide chart" : "Live chart"}</span>
+          </button>
+        </div>
       </header>
       <div className="print:hidden"><RigSelector /></div>
 
-      <div className="flex-1 p-3 pb-4 overflow-hidden flex flex-col scroll-smooth-mobile" ref={pullRef}>
+      <div className="flex-1 flex overflow-hidden">
+        {/* Left: treatment log (full width or 60%) */}
+        <div className={`${splitView ? "w-full lg:w-3/5" : "w-full"} flex flex-col overflow-hidden transition-all`}>
+          <div className="flex-1 p-3 pb-4 overflow-hidden flex flex-col scroll-smooth-mobile" ref={pullRef}>
         <PullIndicator progress={progress} refreshing={pulling} />
         <div className="max-w-3xl mx-auto w-full flex-1 flex flex-col space-y-3">
           {loading ? (
@@ -481,6 +613,21 @@ const TreatmentPage = () => {
           )}
         </div>
       </div>
+        </div>
+        {/* Right: live chart sidebar (desktop split). On mobile, hidden under the lg breakpoint. */}
+        {splitView && (
+          <div className="hidden lg:flex w-2/5 flex-shrink-0 border-l border-black/40">
+            <LiveStripSidebar />
+          </div>
+        )}
+      </div>
+
+      {/* Mobile split: slide-in bottom sheet with the live chart */}
+      {splitView && (
+        <div className="lg:hidden fixed inset-x-0 bottom-0 h-[42vh] z-40 shadow-[0_-6px_18px_rgba(0,0,0,0.4)] print:hidden">
+          <LiveStripSidebar compact />
+        </div>
+      )}
 
       <style>{`
         @media print {

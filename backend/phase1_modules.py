@@ -1766,7 +1766,14 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
 
     class ShareLinkCreate(BaseModel):
         label: Optional[str] = None
-        days: int = 7
+        days: int = 7                              # legacy; kept for compat
+        ttl_hours: Optional[int] = None            # overrides `days` when provided; 0 = never expires
+        scope: Optional[str] = "live-ops"          # which page: live-ops | stress | fatigue | wellbore | reels | treatment | job
+        mode: Optional[str] = "readonly"           # readonly | training (training adds AI panel on shared page)
+        target_id: Optional[str] = None            # e.g. reel_id or job_id when the scope needs one
+
+    ALLOWED_SCOPES = {"live-ops", "stress", "fatigue", "wellbore", "reels", "treatment", "job", "all"}
+    ALLOWED_MODES = {"readonly", "training"}
 
     @api_router.post("/share-links")
     async def create_share_link(body: ShareLinkCreate, user: dict = Depends(require_user)):
@@ -1774,14 +1781,27 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
         team_id = user.get("team_id")
         if not team_id:
             raise HTTPException(400, "No team.")
-        days = max(1, min(int(body.days or 7), 30))
+        scope = (body.scope or "live-ops").lower()
+        if scope not in ALLOWED_SCOPES:
+            raise HTTPException(400, f"scope must be one of {ALLOWED_SCOPES}")
+        mode = (body.mode or "readonly").lower()
+        if mode not in ALLOWED_MODES:
+            raise HTTPException(400, f"mode must be one of {ALLOWED_MODES}")
+        # TTL: ttl_hours precedes days. ttl_hours=0 => never expires.
+        ttl_hours = body.ttl_hours
+        if ttl_hours is None:
+            ttl_hours = max(1, min(int(body.days or 7), 30)) * 24
+        else:
+            ttl_hours = max(0, min(int(ttl_hours), 24 * 365))  # cap at 1 year
         token = _secrets.token_urlsafe(32)
         link_id = f"share_{uuid.uuid4().hex[:12]}"
         now = now_utc()
-        expires_at = now + timedelta(days=days)
+        expires_at = None if ttl_hours == 0 else (now + timedelta(hours=ttl_hours))
         doc = {
             "link_id": link_id, "team_id": team_id, "token": token,
             "label": (body.label or "Client view").strip()[:80],
+            "scope": scope, "mode": mode, "target_id": (body.target_id or None),
+            "ttl_hours": ttl_hours,
             "created_by": user["email"], "created_at": now,
             "expires_at": expires_at, "revoked": False,
             "last_used_at": None, "use_count": 0,
@@ -2207,6 +2227,27 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
             samesite="none", secure=True, path="/",
             max_age=7 * 24 * 3600,
         )
-        return {"success": True, "redirect": "/live-ops", "label": link.get("label"), "team_id": link["team_id"]}
+        # Route the shared viewer to the correct tool, with training-mode flag
+        scope = (link.get("scope") or "live-ops").lower()
+        mode = (link.get("mode") or "readonly").lower()
+        route_map = {
+            "live-ops": "/live-ops",
+            "stress": "/stress",
+            "fatigue": "/fatigue",
+            "wellbore": "/wellbore",
+            "reels": "/reels",
+            "treatment": "/treatment",
+            "job": "/live-ops",
+            "all": "/hub",
+        }
+        redirect = route_map.get(scope, "/live-ops")
+        if mode == "training":
+            # Append training query flag so the UI shows "TRAINING SIMULATION" banner + AI panel
+            redirect = f"{redirect}?training=1"
+        return {
+            "success": True, "redirect": redirect,
+            "scope": scope, "mode": mode, "target_id": link.get("target_id"),
+            "label": link.get("label"), "team_id": link["team_id"],
+        }
 
     return api_router

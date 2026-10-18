@@ -4,9 +4,10 @@ import { toast } from "sonner";
 import { Phase1PageHeader } from "../components/Phase1Header";
 import { useAuth, API } from "../context/AuthContext";
 import { useActiveReel } from "../context/ActiveReelContext";
-import { damageColor } from "../lib/ctPhysics";
+import { damageColor, injectorSkateMechanics, DEFAULT_SKATE, intervalAt } from "../lib/ctPhysics";
 import { isSupervisorOrHigher } from "../lib/roles";
-import { Play, Pause, RotateCcw, Zap, AlertTriangle } from "lucide-react";
+import { Play, Pause, RotateCcw, Zap, AlertTriangle, Gauge } from "lucide-react";
+import ShareLinksButton from "../components/ShareLinksButton";
 
 export default function FatiguePage() {
   const { user } = useAuth();
@@ -71,9 +72,15 @@ export default function FatiguePage() {
 
   const totalFt = useMemo(() => (nodes.length - 1) * spacing, [nodes, spacing]);
 
+  // Injector-skate ovality + fatigue scaling (local client-side preview — Phase 2 pathway).
+  const seg = useMemo(() => intervalAt(activeReel, depth) || { od_in: 2.0, wt_in: 0.175 }, [activeReel, depth]);
+  const skate = useMemo(() => injectorSkateMechanics({
+    skate_pressure_psi: pressure, OD: seg.od_in, WT: seg.wt_in,
+  }), [pressure, seg.od_in, seg.wt_in]);
+
   return (
     <div className="min-h-screen bg-[#F3F3F3]">
-      <Phase1PageHeader title="Reel Fatigue · Palmgren-Miner" subtitle={`Driven by live traction pressure · ${spacing} ft stations`} />
+      <Phase1PageHeader title="Reel Fatigue · Palmgren-Miner" subtitle={`Driven by live traction pressure · ${spacing} ft stations`} right={<ShareLinksButton scope="fatigue" compact />} />
       <div className="max-w-6xl mx-auto p-3 space-y-3">
         {!activeReel && (
           <div className="bg-[#FFF3CD] text-[#856404] text-sm rounded p-3 border border-[#FFE69C]">
@@ -124,6 +131,57 @@ export default function FatiguePage() {
               </div>
             )}
           </div>
+        </div>
+
+        {/* Injector-skate ovality + fatigue scaling (clean-room public mechanics) */}
+        <div
+          data-testid="skate-panel"
+          className={`rounded-lg border p-3 ${skate.over_recommended ? "bg-[#FFF3CD] border-[#FFE69C]" : "bg-white border-[#D4D4D4]"}`}
+        >
+          <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+            <h3 className="font-bold text-sm flex items-center gap-1.5">
+              <Gauge className="w-4 h-4 text-[#FF6B1A]" />
+              Injector Skate · Ovality + Fatigue Scaling
+            </h3>
+            <span className="text-[10px] text-[#595959]">
+              Recommended cap {DEFAULT_SKATE.recommended_max_psi} psi · pipe {seg.od_in}" × {seg.wt_in}"
+            </span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 text-[11px]">
+            <div className="flex flex-col">
+              <span className="font-bold text-[9px] uppercase text-[#595959]">Skate psi</span>
+              <span className="font-bold tabular-nums text-[14px]" data-testid="skate-pressure-display">{Math.round(skate.skate_pressure_psi).toLocaleString()}</span>
+            </div>
+            <div className="flex flex-col">
+              <span className="font-bold text-[9px] uppercase text-[#595959]">Clamp force</span>
+              <span className="font-bold tabular-nums text-[14px]">{Math.round(skate.clamping_force_lbf).toLocaleString()} lbf</span>
+            </div>
+            <div className={`flex flex-col rounded px-1 ${skate.ovality_pct > 2 ? "bg-[#F8D7DA]" : ""}`}>
+              <span className="font-bold text-[9px] uppercase text-[#595959]">Ovality</span>
+              <span className="font-bold tabular-nums text-[14px]" data-testid="skate-ovality">{skate.ovality_pct.toFixed(2)}%</span>
+            </div>
+            <div className="flex flex-col">
+              <span className="font-bold text-[9px] uppercase text-[#595959]">Contact σ</span>
+              <span className="font-bold tabular-nums text-[14px]">{Math.round(skate.contact_stress_psi).toLocaleString()} psi</span>
+            </div>
+            <div className={`flex flex-col rounded px-1 ${skate.K_t > 1.5 ? "bg-[#FFF3CD]" : ""}`}>
+              <span className="font-bold text-[9px] uppercase text-[#595959]">K<sub>t</sub></span>
+              <span className="font-bold tabular-nums text-[14px]" data-testid="skate-kt">{skate.K_t.toFixed(2)}</span>
+            </div>
+            <div className={`flex flex-col rounded px-1 ${skate.fatigue_scale > 1.5 ? "bg-[#F8D7DA]" : "bg-[#FFF7EF]"}`}>
+              <span className="font-bold text-[9px] uppercase text-[#595959]">Fatigue × </span>
+              <span className="font-bold tabular-nums text-[14px]" data-testid="skate-fatigue-scale">{skate.fatigue_scale.toFixed(2)}×</span>
+            </div>
+          </div>
+          {skate.over_recommended && (
+            <p className="mt-2 text-[11px] font-bold text-[#856404] flex items-center gap-1">
+              <AlertTriangle className="w-3.5 h-3.5" />
+              Skate pressure {Math.round(skate.skate_pressure_psi)} psi exceeds the {DEFAULT_SKATE.recommended_max_psi} psi anti-slip cap — cycle damage scaled by {skate.fatigue_scale.toFixed(2)}×.
+            </p>
+          )}
+          <p className="text-[10px] text-[#8A8A8A] mt-1 italic">
+            Clean-room public mechanics (Timoshenko ring deflection + Peterson K<sub>t</sub>). Advisory only.
+          </p>
         </div>
 
         <div className="bg-white border border-[#D4D4D4] rounded-lg p-3">

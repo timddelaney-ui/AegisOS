@@ -49,8 +49,8 @@ const SLIDES = [
         <ul className="mt-3 space-y-1.5 text-white/70 text-sm list-disc pl-4 marker:text-[#FF6B1A]">
           <li><strong className="text-white">Playback</strong> scrubs back 10 full minutes of history</li>
           <li><strong className="text-white">Drop note</strong> drops a timestamped pin on the timeline — "spike here = pump failure"</li>
-          <li><strong className="text-white">Rig auto ON</strong> lets the rig computer drop its own notes when thresholds fire</li>
-          <li><strong className="text-white">CSV / LAS</strong> export the window with every annotation embedded</li>
+          <li><strong className="text-white">Significant Events & NPT</strong> you log in Treatment also pin to the timeline — click any pin to jump</li>
+          <li><strong className="text-white">CSV / LAS</strong> export the window with every annotation + event embedded</li>
           <li><strong className="text-white">Dossier</strong> builds an auto-formatted job audit PDF</li>
         </ul>
       </>

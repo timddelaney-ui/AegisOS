@@ -1,17 +1,18 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { toast } from "sonner";
 import { Phase1PageHeader } from "../components/Phase1Header";
 import { useAuth, API } from "../context/AuthContext";
 import { useActiveReel } from "../context/ActiveReelContext";
 import { MiniVonMises, MiniFatigue, LiveGauge, StripChart } from "../components/LiveOpsPanels";
-import { Play, Pause, Wifi, WifiOff, Maximize2, X, Zap, Settings, Rewind, FastForward, StepBack, StepForward, History, Download, StickyNote, Cpu } from "lucide-react";
+import { Play, Pause, Wifi, WifiOff, Maximize2, X, Zap, Settings, Rewind, FastForward, StepBack, StepForward, History, Download, StickyNote, Clock, Star } from "lucide-react";
 import { postSampleResilient, drainOfflineQueue, offlineQueueLength, startOfflineDrain } from "../lib/offlineQueue";
 import { samplesToCSV, samplesToLAS, downloadBlob } from "../lib/playbackExport";
 import ShareLinksButton from "../components/ShareLinksButton";
 import { AnnotationPins, DropAnnotationModal, ViewAnnotationModal } from "../components/AnnotationLayer";
-import { evaluateRules, resetRuleCooldowns } from "../lib/rigAnnotationRules";
 import { isSupervisorOrHigher, isManagement } from "../lib/roles";
+import { useRig } from "../context/RigContext";
 
 const RING = 600;             // seconds of history (10 min @ 1 Hz)
 const TICK_MS = 1000;         // 1 Hz
@@ -123,16 +124,19 @@ export default function LiveOpsPage() {
   const feedTickRef = useRef(0);
   const playbackTimerRef = useRef(null);
 
-  // -------- Annotations (manual + rig-computer) --------
+  // -------- Annotations (manual only — supervisor+) --------
   const canAnnotate = isSupervisorOrHigher(user);
   const canDeleteAny = isManagement(user);
   const [annotations, setAnnotations] = useState([]);
-  const [rigRules, setRigRules] = useState([]);
-  const [rigAutoEnabled, setRigAutoEnabled] = useState(false);  // off by default — awaits user approval before firing against live data
   const [dropOpen, setDropOpen] = useState(false);
   const [viewAnnot, setViewAnnot] = useState(null);
   const annotPollRef = useRef(null);
-  const pendingIngestRef = useRef([]);  // batched rig-computer annotations
+
+  // -------- Treatment events (significant events + NPT pins) --------
+  const { rigId } = useRig();
+  const navigate = useNavigate();
+  const [tEvents, setTEvents] = useState([]);  // merged treatment "event" + "npt" entries for pinning
+  const tEventsPollRef = useRef(null);
 
   const refreshAnnotations = async () => {
     try {
@@ -141,34 +145,24 @@ export default function LiveOpsPage() {
     } catch { /* silent */ }
   };
 
+  const refreshTreatmentEvents = async () => {
+    try {
+      const r = await axios.get(`${API}/treatments/events-timeline`, { params: { rig_id: rigId, limit: 500 }, withCredentials: true });
+      setTEvents(r.data?.events || []);
+    } catch { /* silent */ }
+  };
+
   useEffect(() => {
     refreshAnnotations();
-    axios.get(`${API}/liveops/annotations/rules`, { withCredentials: true })
-      .then((r) => setRigRules(r.data?.rules || []))
-      .catch(() => {});
+    refreshTreatmentEvents();
     annotPollRef.current = setInterval(refreshAnnotations, 15000);
-    return () => { if (annotPollRef.current) clearInterval(annotPollRef.current); };
-  }, []);
-
-  // Flush any rig-computer annotations we've queued up (every 5 s while feed runs).
-  useEffect(() => {
-    if (!rigAutoEnabled) return;
-    const t = setInterval(async () => {
-      const batch = pendingIngestRef.current.splice(0, pendingIngestRef.current.length);
-      if (!batch.length) return;
-      try {
-        await axios.post(`${API}/liveops/annotations/ingest`, {
-          items: batch,
-          source: connected ? "wits0" : "simulated",
-        }, { withCredentials: true });
-        await refreshAnnotations();
-      } catch (e) {
-        // Re-queue on failure (bounded to 100)
-        pendingIngestRef.current = [...batch, ...pendingIngestRef.current].slice(0, 100);
-      }
-    }, 5000);
-    return () => clearInterval(t);
-  }, [rigAutoEnabled, connected]);
+    tEventsPollRef.current = setInterval(refreshTreatmentEvents, 10000);
+    return () => {
+      if (annotPollRef.current) clearInterval(annotPollRef.current);
+      if (tEventsPollRef.current) clearInterval(tEventsPollRef.current);
+    };
+    // eslint-disable-next-line
+  }, [rigId]);
 
   useEffect(() => { startOfflineDrain(); }, []);
 
@@ -220,22 +214,14 @@ export default function LiveOpsPage() {
       feedTickRef.current += 1;
       const t = feedTickRef.current;
       const nowMs = Date.now();
-      let evalSample = null;
       setSamples((prev) => {
         const last = prev[prev.length - 1];
         const next = { ...nextSimSample(last, t), ts: new Date(nowMs).toISOString(), source: connected ? "wits" : "simulated" };
-        evalSample = next;
         const buf = [...prev, next];
         if (buf.length > RING) buf.splice(0, buf.length - RING);
-        // live reel depth → update global context
         setCurrentDepth(Math.round(next.depth_ft));
         return buf;
       });
-      // Rig-computer rule evaluator (Phase 2 pathway — off by default; user approves).
-      if (rigAutoEnabled && evalSample && rigRules.length) {
-        const fired = evaluateRules(evalSample, rigRules, nowMs);
-        if (fired.length) pendingIngestRef.current.push(...fired);
-      }
       // feed server-side ring buffer (resilient — queues offline if network drops)
       try {
         const last = samples[samples.length - 1];
@@ -264,7 +250,7 @@ export default function LiveOpsPage() {
     }, TICK_MS);
     return () => { if (timerRef.current) clearInterval(timerRef.current); timerRef.current = null; };
     // eslint-disable-next-line
-  }, [running, connected, activeReel?.reel_id, rigAutoEnabled, rigRules.length]);
+  }, [running, connected, activeReel?.reel_id]);
 
   // Mode-aware "current sample": in playback, we read from the scrubber;
   // in live, we read the newest.
@@ -421,7 +407,10 @@ export default function LiveOpsPage() {
     setPlaybackPlaying(false);
     setRunning(false);
     setViewAnnot(annot);
-    toast.success(`Jumped to ${new Date(annot.timestamp_ms).toLocaleTimeString()}`);
+    const label = annot.kind === "event" ? "event"
+                : annot.kind === "npt" ? "NPT"
+                : "note";
+    toast.success(`Jumped to ${label} at ${new Date(annot.timestamp_ms).toLocaleTimeString()}`);
   };
 
   const scrubRelativeSec = (idx) => (idx - (samples.length - 1)); // negative = seconds ago
@@ -513,16 +502,6 @@ export default function LiveOpsPage() {
               <StickyNote className="w-3.5 h-3.5" />Drop note
             </button>
           )}
-          {canAnnotate && (
-            <button
-              data-testid="liveops-rig-auto-btn"
-              onClick={() => { resetRuleCooldowns(); setRigAutoEnabled((v) => !v); }}
-              title="Let the rig computer drop annotations automatically when threshold rules fire"
-              className={`flex items-center gap-1 px-3 py-1 rounded font-bold text-xs ${rigAutoEnabled ? "bg-[#0056B3] text-white" : "bg-white/10 border border-white/20"}`}>
-              <Cpu className="w-3.5 h-3.5" />
-              Rig auto {rigAutoEnabled ? "ON" : "OFF"}
-            </button>
-          )}
           <button
             data-testid="liveops-customize-btn"
             onClick={() => setShowPrefs(!showPrefs)}
@@ -579,7 +558,7 @@ export default function LiveOpsPage() {
             <div className="relative flex-1 min-w-[160px]">
               <div className="absolute inset-x-0 top-0 pointer-events-none" style={{ zIndex: 5 }}>
                 <AnnotationPins
-                  annotations={annotations}
+                  annotations={[...annotations, ...tEvents]}
                   samples={samples}
                   onPinClick={(p) => jumpToAnnotation(p)}
                 />
@@ -740,6 +719,7 @@ export default function LiveOpsPage() {
           onClose={() => setViewAnnot(null)}
           onEdit={editAnnotation}
           onDelete={deleteAnnotation}
+          onOpenTreatment={() => { setViewAnnot(null); navigate("/treatment"); }}
         />
       )}
     </div>
