@@ -4,6 +4,7 @@ import { Send, Loader2, MessageSquare, AlertOctagon, Sparkles } from "lucide-rea
 import { API } from "../context/AuthContext";
 import { useRig, rigLabel } from "../context/RigContext";
 import AttachmentUploader from "./AttachmentUploader";
+import { fmtDateTime as fmtDT } from "../lib/timeFormat";
 
 /**
  * CrewChat — polled, rig-scoped group chat for a team.
@@ -110,7 +111,7 @@ const CrewChat = ({ currentUserId }) => {
                   <Sparkles className="w-3 h-3" strokeWidth={2.5} /> {m.sender_name}
                 </div>
                 <div className="whitespace-pre-wrap leading-relaxed text-[#262626]">{m.text}</div>
-                <div className="text-[9px] text-[#595959] mt-1">{new Date(m.created_at).toLocaleString()}</div>
+                <div className="text-[9px] text-[#595959] mt-1">{fmtDT(m.created_at)}</div>
               </div>
             );
           }
@@ -121,7 +122,7 @@ const CrewChat = ({ currentUserId }) => {
               }`}>
                 {!mine && <div className="text-[10px] font-bold mb-0.5 opacity-80">{m.sender_name}</div>}
                 <div>{m.text}</div>
-                <div className={`text-[9px] mt-0.5 ${mine ? "text-white/70" : "text-[#595959]"}`}>{new Date(m.created_at).toLocaleString()}</div>
+                <div className={`text-[9px] mt-0.5 ${mine ? "text-white/70" : "text-[#595959]"}`}>{fmtDT(m.created_at)}</div>
               </div>
             </div>
           );

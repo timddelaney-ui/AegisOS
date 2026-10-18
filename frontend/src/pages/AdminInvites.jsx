@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { API, useAuth } from "../context/AuthContext";
 import { ArrowLeft, Loader2, Plus, Copy, Check, Trash2, Gift, ShieldAlert, Link as LinkIcon } from "lucide-react";
+import { fmtDateTime as fmtDT } from "../lib/timeFormat";
 
 const AdminInvites = () => {
   const navigate = useNavigate();
@@ -135,7 +136,7 @@ const AdminInvites = () => {
                           <div className="mt-2 pt-2 border-t border-[#EFEFEF]">
                             <p className="text-[10px] font-semibold text-[#595959] mb-1">Redeemed by:</p>
                             {inv.redemptions.map((r) => (
-                              <p key={`${r.email}-${r.redeemed_at}`} className="text-[11px] text-[#333]">{r.email} — {new Date(r.redeemed_at).toLocaleString()}</p>
+                              <p key={`${r.email}-${r.redeemed_at}`} className="text-[11px] text-[#333]">{r.email} — {fmtDT(r.redeemed_at)}</p>
                             ))}
                           </div>
                         )}

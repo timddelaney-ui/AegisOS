@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { API, useAuth } from "../context/AuthContext";
 import { ArrowLeft, Loader2, Bug, Lightbulb, Palette, Calculator, HelpCircle, ShieldAlert } from "lucide-react";
+import { fmtDateTime as fmtDT } from "../lib/timeFormat";
 
 const CATEGORY_META = {
   bug: { label: "Bug", Icon: Bug, color: "text-[#C00000] bg-[#F8D7DA] border-[#F5C6CB]" },
@@ -98,7 +99,7 @@ const AdminFeedback = () => {
                             className={`text-[10px] font-bold px-2 py-[2px] rounded border-0 outline-none cursor-pointer ${STATUS_COLOR[it.status] || ""}`}>
                             {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s.replace("_", " ").toUpperCase()}</option>)}
                           </select>
-                          <span className="text-[10px] text-[#595959] ml-auto">{new Date(it.created_at).toLocaleString()}</span>
+                          <span className="text-[10px] text-[#595959] ml-auto">{fmtDT(it.created_at)}</span>
                         </div>
                         <h3 className="text-sm font-bold text-[#262626]">{it.subject}</h3>
                         <p className="text-[12px] text-[#333] mt-1 whitespace-pre-wrap">{it.message}</p>

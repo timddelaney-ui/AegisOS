@@ -6,9 +6,9 @@ import { API } from "../context/AuthContext";
 import { useRig, rigLabel } from "../context/RigContext";
 import AttachmentUploader from "./AttachmentUploader";
 
-const fmt = (iso) => {
-  try { return new Date(iso).toLocaleString(); } catch { return iso; }
-};
+// 24-hour military-time display across the handover.
+import { fmtDateTime } from "../lib/timeFormat";
+const fmt = (iso) => fmtDateTime(iso);
 
 const buildText = (rigLabelStr, s) => {
   if (!s) return "";

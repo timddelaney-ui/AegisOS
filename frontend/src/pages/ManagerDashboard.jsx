@@ -5,8 +5,10 @@ import { ArrowLeft, ShieldCheck, Wrench, AlertTriangle, Package, ListChecks, Use
 import { API, useAuth } from "../context/AuthContext";
 import { rigLabel } from "../context/RigContext";
 
-const fmt = (iso) => { try { return new Date(iso).toLocaleString(); } catch { return iso; } };
-const short = (iso) => { try { return new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }); } catch { return iso; } };
+import { fmtDateTime, fmtShort } from "../lib/timeFormat";
+
+const fmt = (iso) => fmtDateTime(iso);
+const short = (iso) => fmtShort(iso);
 
 const StatCard = ({ label, value, Icon, accent }) => (
   <div className="bg-white border border-[#E5E7EB] rounded-lg p-3 flex items-center gap-3" style={{ borderTop: `3px solid ${accent}` }}>

@@ -4,6 +4,7 @@ import { ShieldAlert, ClipboardList, Wrench, CheckCircle2, Circle, Plus, Trash2,
 import { API, useAuth } from "../context/AuthContext";
 import { useRig, rigLabel } from "../context/RigContext";
 import AttachmentUploader from "./AttachmentUploader";
+import { fmtDateTime as fmtDT } from "../lib/timeFormat";
 
 const KEY = (rigId, kind) => `ctp_checklist_v1::${rigId}::${kind}`;
 
@@ -149,7 +150,7 @@ const ChecklistTier = ({ kind, expanded, onToggle }) => {
                     <div className="flex items-center gap-2 mt-0.5 text-[10px] text-[#8A8A8A]">
                       <span className="uppercase tracking-wide font-semibold">{it.cadence}</span>
                       {it.lastCheckedAt && (
-                        <span>• {new Date(it.lastCheckedAt).toLocaleString()} by {it.lastCheckedBy || "—"}</span>
+                        <span>• {fmtDT(it.lastCheckedAt)} by {it.lastCheckedBy || "—"}</span>
                       )}
                     </div>
                   </div>

@@ -10,18 +10,12 @@ import { API, useAuth } from "../context/AuthContext";
 import { useRig, rigLabel } from "../context/RigContext";
 import RigSelector from "../components/RigSelector";
 import { usePullToRefresh, PullIndicator } from "../hooks/usePullToRefresh";
+import { fmtTime as fmtClock, fmtShort as fmtTime } from "../lib/timeFormat";
 
 const POLL_MS = 3000;
 
-const fmtTime = (iso) => {
-  const d = new Date(iso);
-  return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" });
-};
-
-const stampBar = (iso) => {
-  const d = new Date(iso);
-  return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-};
+// 24-hour "HH:MM:SS" clock for the vertical stamp bar beside each entry.
+const stampBar = (iso) => fmtClock(iso);
 
 const StartCard = ({ rigId, onStarted }) => {
   const [name, setName] = useState("");
@@ -387,7 +381,10 @@ const TreatmentPage = () => {
   const groupedByDay = useMemo(() => {
     const map = new Map();
     for (const e of entries) {
-      const dayKey = new Date(e.created_at).toLocaleDateString();
+      const ref = e.event_at || e.created_at;
+      // Group by local calendar day in 24-hour aware format
+      const d = new Date(ref);
+      const dayKey = `${String(d.getFullYear())}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
       if (!map.has(dayKey)) map.set(dayKey, []);
       map.get(dayKey).push(e);
     }
@@ -450,25 +447,31 @@ const TreatmentPage = () => {
                   </div>
                 ) : (
                   <div className="p-3 space-y-4">
-                    {groupedByDay.map(([day, list]) => (
-                      <div key={day}>
-                        <div className="text-[10px] font-bold text-[#595959] uppercase tracking-wide sticky top-0 bg-white/95 py-1 -mx-3 px-3 print:static">
-                          {day}
+                    {groupedByDay.map(([day, list]) => {
+                      // Convert "YYYY-MM-DD" group key → "DD Mon YYYY" for display
+                      const [y, m, dd] = day.split("-").map(Number);
+                      const d = new Date(y, m - 1, dd);
+                      const headerLabel = d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+                      return (
+                        <div key={day}>
+                          <div className="text-[10px] font-bold text-[#595959] uppercase tracking-wide sticky top-0 bg-white/95 py-1 -mx-3 px-3 print:static">
+                            {headerLabel}
+                          </div>
+                          <div className="space-y-1.5 mt-1">
+                            {list.map((e) => (
+                              <TreatmentEntryRow
+                                key={e.entry_id}
+                                entry={e}
+                                mine={e.author === user?.email}
+                                treatmentId={active.treatment_id}
+                                onPatched={(updated) => setEntries((prev) => prev.map((x) => x.entry_id === updated.entry_id ? updated : x))}
+                                onDeleted={() => setEntries((prev) => prev.filter((x) => x.entry_id !== e.entry_id))}
+                              />
+                            ))}
+                          </div>
                         </div>
-                        <div className="space-y-1.5 mt-1">
-                          {list.map((e) => (
-                            <TreatmentEntryRow
-                              key={e.entry_id}
-                              entry={e}
-                              mine={e.author === user?.email}
-                              treatmentId={active.treatment_id}
-                              onPatched={(updated) => setEntries((prev) => prev.map((x) => x.entry_id === updated.entry_id ? updated : x))}
-                              onDeleted={() => setEntries((prev) => prev.filter((x) => x.entry_id !== e.entry_id))}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
