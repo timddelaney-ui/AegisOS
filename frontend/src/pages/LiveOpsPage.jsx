@@ -5,10 +5,11 @@ import { Phase1PageHeader } from "../components/Phase1Header";
 import { useAuth, API } from "../context/AuthContext";
 import { useActiveReel } from "../context/ActiveReelContext";
 import { MiniVonMises, MiniFatigue, LiveGauge, StripChart } from "../components/LiveOpsPanels";
-import { Play, Pause, Wifi, WifiOff, Maximize2, X, Zap, Settings } from "lucide-react";
+import { Play, Pause, Wifi, WifiOff, Maximize2, X, Zap, Settings, Rewind, FastForward, StepBack, StepForward, History } from "lucide-react";
 
-const RING = 180;             // seconds of history
+const RING = 600;             // seconds of history (10 min @ 1 Hz)
 const TICK_MS = 1000;         // 1 Hz
+const CHART_WINDOW = 180;     // how many samples the strip chart shows at once
 
 // --- Jittered simulator — fakes a plausible CT job scenario ---
 function nextSimSample(prev, t) {
@@ -44,8 +45,14 @@ export default function LiveOpsPage() {
   const [fatigue, setFatigue] = useState({ damage: [], spacing: 100, worst_damage: 0 });
   const [layout, setLayout] = useState(["vm", "fatigue", "weight", "pressure", "chart"]);
   const [showPrefs, setShowPrefs] = useState(false);
+  // Playback mode: scrub backwards through the recorded buffer.
+  const [mode, setMode] = useState("live");           // 'live' | 'playback'
+  const [playbackIdx, setPlaybackIdx] = useState(0);  // index into samples[]
+  const [playbackPlaying, setPlaybackPlaying] = useState(false);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1);  // 1x, 2x, 5x
   const timerRef = useRef(null);
   const feedTickRef = useRef(0);
+  const playbackTimerRef = useRef(null);
 
   // Load prefs (liveops layout)
   useEffect(() => {
@@ -115,7 +122,80 @@ export default function LiveOpsPage() {
     // eslint-disable-next-line
   }, [running, connected, activeReel?.reel_id]);
 
-  const latest = samples[samples.length - 1] || {};
+  // Mode-aware "current sample": in playback, we read from the scrubber;
+  // in live, we read the newest.
+  const latest = mode === "playback"
+    ? (samples[Math.min(playbackIdx, samples.length - 1)] || {})
+    : (samples[samples.length - 1] || {});
+
+  // What the strip chart shows: live = all samples; playback = window ending at scrubber.
+  const chartSamples = useMemo(() => {
+    if (mode !== "playback") return samples;
+    const end = Math.min(playbackIdx + 1, samples.length);
+    const start = Math.max(0, end - CHART_WINDOW);
+    return samples.slice(start, end);
+  }, [mode, samples, playbackIdx]);
+
+  // Playback tick loop
+  useEffect(() => {
+    if (!playbackPlaying || mode !== "playback") {
+      if (playbackTimerRef.current) clearInterval(playbackTimerRef.current);
+      playbackTimerRef.current = null;
+      return;
+    }
+    playbackTimerRef.current = setInterval(() => {
+      setPlaybackIdx((prev) => {
+        const next = prev + 1;
+        if (next >= samples.length - 1) {
+          setPlaybackPlaying(false);
+          return samples.length - 1;
+        }
+        return next;
+      });
+    }, Math.max(100, TICK_MS / playbackSpeed));
+    return () => { if (playbackTimerRef.current) clearInterval(playbackTimerRef.current); playbackTimerRef.current = null; };
+  }, [playbackPlaying, playbackSpeed, mode, samples.length]);
+
+  const loadHistory = async () => {
+    try {
+      const r = await axios.get(`${API}/liveops/stream`, { params: { limit: RING }, withCredentials: true });
+      const srv = r.data?.samples || [];
+      if (srv.length === 0) {
+        toast.info("No recorded samples yet — start the feed first.");
+        return;
+      }
+      // Normalize server samples to same shape as live buffer
+      const normalized = srv.map((s) => ({
+        depth_ft: s.depth_ft, p_internal_psi: s.p_internal_psi, p_external_psi: s.p_external_psi,
+        traction_pressure_psi: s.traction_pressure_psi, weight_lb: s.weight_lb,
+        axial_force_lbf: s.axial_force_lbf, pressure_psi: s.pressure_psi,
+        ts: s.created_at, source: s.source,
+      }));
+      setSamples(normalized);
+      setMode("playback");
+      setPlaybackIdx(normalized.length - 1);
+      setPlaybackPlaying(false);
+      setRunning(false); // pause live feed while scrubbing
+      toast.success(`Loaded ${normalized.length} samples for playback`);
+    } catch (e) {
+      toast.error("Failed to load history");
+    }
+  };
+
+  const enterPlayback = () => {
+    if (samples.length === 0) { loadHistory(); return; }
+    setMode("playback");
+    setPlaybackIdx(samples.length - 1);
+    setPlaybackPlaying(false);
+    setRunning(false);
+  };
+
+  const exitPlayback = () => {
+    setMode("live");
+    setPlaybackPlaying(false);
+  };
+
+  const scrubRelativeSec = (idx) => (idx - (samples.length - 1)); // negative = seconds ago
 
   const renderPanel = (id, large = false) => {
     switch (id) {
@@ -128,7 +208,7 @@ export default function LiveOpsPage() {
       case "pressure":
         return <LiveGauge title="Pressure" unit="psi" value={latest.pressure_psi || latest.p_internal_psi || 0} min={0} max={10000} warnAbove={7500} criticalAbove={9000} large={large} color="#C00000" />;
       case "chart":
-        return <StripChart samples={samples} series={[
+        return <StripChart samples={chartSamples} series={[
           { key: "weight_lb", color: "#0056B3", label: "Weight" },
           { key: "p_internal_psi", color: "#C00000", label: "P int" },
           { key: "traction_pressure_psi", color: "#C36600", label: "Traction" },
@@ -155,9 +235,15 @@ export default function LiveOpsPage() {
     savePrefs(next);
   };
 
+  const subtitle = mode === "playback"
+    ? `PLAYBACK · T${scrubRelativeSec(playbackIdx) >= 0 ? "+" : ""}${scrubRelativeSec(playbackIdx)}s · ${samples.length}s buffered`
+    : running
+      ? `${connected ? "Connected · WITS" : "Simulated"} · ${samples.length}/${RING}s · depth ${Math.round(latest.depth_ft || 0)} ft`
+      : "Idle";
+
   return (
     <div className="min-h-screen bg-[#0D1A24]">
-      <Phase1PageHeader title="Live Ops" subtitle={running ? `${connected ? "Connected · WITS" : "Simulated"} · ${samples.length}/${RING}s · depth ${Math.round(latest.depth_ft || 0)} ft` : "Idle"} />
+      <Phase1PageHeader title="Live Ops" subtitle={subtitle} />
 
       <div className="max-w-7xl mx-auto p-2 space-y-2">
         {/* Controls */}
@@ -177,6 +263,13 @@ export default function LiveOpsPage() {
             {connected ? "Connected to unit" : "Not connected"}
           </button>
           <button
+            data-testid="liveops-playback-btn"
+            onClick={mode === "playback" ? exitPlayback : enterPlayback}
+            className={`flex items-center gap-1 px-3 py-1 rounded font-bold text-xs ${mode === "playback" ? "bg-amber-500 text-black" : "bg-white/10 border border-white/20"}`}>
+            <History className="w-3.5 h-3.5" />
+            {mode === "playback" ? "Exit playback" : "Playback"}
+          </button>
+          <button
             data-testid="liveops-customize-btn"
             onClick={() => setShowPrefs(!showPrefs)}
             className="flex items-center gap-1 px-3 py-1 rounded font-bold text-xs bg-white/10 border border-white/20">
@@ -192,6 +285,72 @@ export default function LiveOpsPage() {
             ) : <span className="text-amber-300">No active reel · set one in Reels</span>}
           </div>
         </div>
+
+        {/* Playback scrubber */}
+        {mode === "playback" && (
+          <div data-testid="liveops-scrubber" className="bg-amber-500/15 border border-amber-500/40 text-white rounded-lg p-2 flex items-center gap-2 flex-wrap">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-300">Playback</span>
+            <button
+              data-testid="playback-step-back"
+              onClick={() => setPlaybackIdx((i) => Math.max(0, i - 1))}
+              className="w-7 h-7 rounded bg-white/10 hover:bg-white/20 flex items-center justify-center"
+              aria-label="step back">
+              <StepBack className="w-3.5 h-3.5" />
+            </button>
+            <button
+              data-testid="playback-play"
+              onClick={() => setPlaybackPlaying(!playbackPlaying)}
+              className={`w-8 h-8 rounded flex items-center justify-center font-bold ${playbackPlaying ? "bg-amber-500 text-black" : "bg-white/10"}`}
+              aria-label="play">
+              {playbackPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+            </button>
+            <button
+              data-testid="playback-step-forward"
+              onClick={() => setPlaybackIdx((i) => Math.min(samples.length - 1, i + 1))}
+              className="w-7 h-7 rounded bg-white/10 hover:bg-white/20 flex items-center justify-center"
+              aria-label="step forward">
+              <StepForward className="w-3.5 h-3.5" />
+            </button>
+            <div className="flex items-center gap-1">
+              {[1, 2, 5].map((s) => (
+                <button
+                  key={s}
+                  data-testid={`playback-speed-${s}x`}
+                  onClick={() => setPlaybackSpeed(s)}
+                  className={`text-[10px] font-bold px-2 py-1 rounded ${playbackSpeed === s ? "bg-amber-500 text-black" : "bg-white/10"}`}>
+                  {s}×
+                </button>
+              ))}
+            </div>
+            <input
+              data-testid="playback-scrubber"
+              type="range"
+              min={0}
+              max={Math.max(0, samples.length - 1)}
+              value={playbackIdx}
+              onChange={(e) => { setPlaybackIdx(Number(e.target.value)); setPlaybackPlaying(false); }}
+              className="flex-1 min-w-[160px] h-1.5 accent-amber-400"
+            />
+            <span className="text-[11px] tabular-nums text-amber-200 font-bold">
+              T{scrubRelativeSec(playbackIdx) >= 0 ? "+" : ""}{scrubRelativeSec(playbackIdx)}s
+            </span>
+            <span className="text-[10px] text-white/60">
+              {playbackIdx + 1} / {samples.length}
+            </span>
+            <button
+              data-testid="playback-jump-latest"
+              onClick={() => { setPlaybackIdx(samples.length - 1); setPlaybackPlaying(false); }}
+              className="text-[10px] font-bold text-amber-300 hover:text-white px-2 py-1 rounded border border-amber-500/50">
+              Jump to latest
+            </button>
+            <button
+              data-testid="playback-reload"
+              onClick={loadHistory}
+              className="text-[10px] font-bold text-white/80 hover:text-white px-2 py-1 rounded border border-white/20">
+              Reload history
+            </button>
+          </div>
+        )}
 
         {showPrefs && (
           <div data-testid="liveops-customize-panel" className="bg-[#111827] text-white rounded-lg p-2 text-xs">
