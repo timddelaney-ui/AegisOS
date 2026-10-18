@@ -23,6 +23,16 @@ import CTDrillingCalculator from "./pages/CTDrillingCalculator";
 import DocumentsPage from "./pages/DocumentsPage";
 import ErpTemplatePage from "./pages/ErpTemplatePage";
 import CrewContactsPage from "./pages/CrewContactsPage";
+import ReelsPage from "./pages/ReelsPage";
+import VonMisesPage from "./pages/VonMisesPage";
+import FatiguePage from "./pages/FatiguePage";
+import WellborePage from "./pages/WellborePage";
+import CertificationsPage from "./pages/CertificationsPage";
+import TasksPage from "./pages/TasksPage";
+import PartsOrdersPage from "./pages/PartsOrdersPage";
+import TimecardsPage from "./pages/TimecardsPage";
+import RbacAdminPage from "./pages/RbacAdminPage";
+import { ActiveReelProvider } from "./context/ActiveReelContext";
 import ManagerGreeting from "./components/ManagerGreeting";
 import RedeemDialog from "./components/RedeemDialog";
 import FeedbackDialog from "./components/FeedbackDialog";
@@ -230,6 +240,15 @@ const AppRouter = () => {
         <Route path="/erp-template" element={<ProtectedRoute><ErpTemplatePage /></ProtectedRoute>} />
         <Route path="/erp-template/:templateId" element={<ProtectedRoute><ErpTemplatePage /></ProtectedRoute>} />
         <Route path="/crew-contacts" element={<ProtectedRoute><CrewContactsPage /></ProtectedRoute>} />
+        <Route path="/reels" element={<ProtectedRoute><ReelsPage /></ProtectedRoute>} />
+        <Route path="/stress" element={<ProtectedRoute><VonMisesPage /></ProtectedRoute>} />
+        <Route path="/fatigue" element={<ProtectedRoute><FatiguePage /></ProtectedRoute>} />
+        <Route path="/wellbore" element={<ProtectedRoute><WellborePage /></ProtectedRoute>} />
+        <Route path="/certs" element={<ProtectedRoute><CertificationsPage /></ProtectedRoute>} />
+        <Route path="/tasks" element={<ProtectedRoute><TasksPage /></ProtectedRoute>} />
+        <Route path="/parts-orders" element={<ProtectedRoute><PartsOrdersPage /></ProtectedRoute>} />
+        <Route path="/timecards" element={<ProtectedRoute><TimecardsPage /></ProtectedRoute>} />
+        <Route path="/crew-admin" element={<ProtectedRoute><RbacAdminPage /></ProtectedRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <AdvisoryFooter />
@@ -278,7 +297,11 @@ const LandingRedirect = () => {
 
 function App() {
   useEffect(() => { registerServiceWorker(); }, []);
-  return <AppRouter />;
+  return (
+    <ActiveReelProvider>
+      <AppRouter />
+    </ActiveReelProvider>
+  );
 }
 
 export default App;

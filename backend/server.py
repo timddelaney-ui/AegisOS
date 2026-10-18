@@ -407,7 +407,12 @@ async def create_team(body: TeamCreate, user: dict = Depends(require_user)):
         "created_at": datetime.now(timezone.utc),
     }
     await db.teams.insert_one(team)
-    await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"team_id": team_id}})
+    # First user to create a workspace is auto-promoted to Management
+    # so there is always an admin on the team.
+    await db.users.update_one(
+        {"user_id": user["user_id"]},
+        {"$set": {"team_id": team_id, "role": "ops_manager"}},
+    )
     return _serialize({k: v for k, v in team.items() if k != "_id"})
 
 
@@ -416,6 +421,13 @@ async def join_team(body: TeamJoin, user: dict = Depends(require_user)):
     team = await db.teams.find_one({"invite_code": body.invite_code.upper()}, {"_id": 0})
     if not team:
         raise HTTPException(404, "Invalid invite code")
+    # Enforce workspace allowed-email domain allowlist if configured
+    domains = team.get("allowed_domains") or []
+    if domains:
+        email = (user.get("email") or "").lower()
+        tail = email.split("@")[-1] if "@" in email else ""
+        if tail and tail not in domains:
+            raise HTTPException(403, f"Workspace restricts sign-in to {', '.join(domains)}.")
     await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"team_id": team["team_id"]}})
     return _serialize(team)
 
@@ -3689,6 +3701,11 @@ async def delete_attachment(attachment_id: str, user: dict = Depends(require_use
         {"$set": {"is_deleted": True, "deleted_at": datetime.now(timezone.utc), "deleted_by": user["email"]}},
     )
     return {"success": True}
+
+
+# ============ PHASE 1 MODULES (RBAC, Reels, Fatigue, Surveys, Certs, Tasks, Parts, Timecards) ============
+from phase1_modules import register_phase1  # noqa: E402
+register_phase1(api_router, db, require_user, get_current_user, _is_admin)
 
 
 # ============ APP CONFIG ============

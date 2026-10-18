@@ -6,6 +6,7 @@ import {
   FileSpreadsheet, FolderOpen, Users, Sparkles, ChevronRight, Crown, AlertTriangle,
   MessageSquare, Wrench, GraduationCap, AlertOctagon, FileText, Calendar, Gauge,
   Ticket, MessageSquarePlus, Zap, Menu, ShieldCheck, HardHat, ClipboardList, Flame, Mail,
+  Layers, Activity, Thermometer, Box, Package, Clock, CheckSquare, DollarSign, UserCog,
 } from "lucide-react";
 import { workbookData } from "../mock/workbookData";
 import ExcelHeader from "../components/ExcelHeader";
@@ -283,6 +284,89 @@ const Hub = () => {
               onClick={() => navigate("/ctd-calculator")}
               badge="NEW"
             />
+            <HubCard
+              data-testid="hub-reels-tile"
+              Icon={Layers}
+              title="String & Reel Manager"
+              subtitle="Tapered CT reel profile — the active reel feeds every sheet, Von Mises egg, and fatigue heatmap."
+              accent="bg-[#FEF3C7] text-[#92400E]"
+              onClick={() => navigate("/reels")}
+              badge="NEW"
+            />
+            <HubCard
+              data-testid="hub-vm-tile"
+              Icon={Gauge}
+              title="Triaxial · Von Mises Egg"
+              subtitle="API RP 5C7 live operating envelope. Visual alert when operating point crosses 80% SMYS."
+              accent="bg-[#FDE8E8] text-[#C00000]"
+              onClick={() => navigate("/stress")}
+              badge="NEW"
+            />
+            <HubCard
+              data-testid="hub-fatigue-tile"
+              Icon={Activity}
+              title="Reel Fatigue Heatmap"
+              subtitle="Palmgren-Miner damage per station, driven by live traction pressure. Green → red at 80% derate."
+              accent="bg-[#F0F9F3] text-[#0D6535]"
+              onClick={() => navigate("/fatigue")}
+              badge="NEW"
+            />
+            <HubCard
+              data-testid="hub-wellbore-tile"
+              Icon={Box}
+              title="3D Wellbore Viewer"
+              subtitle="Minimum-curvature survey rendered in 3D. DLS color-coded, BHA tip animates with depth."
+              accent="bg-[#DBEAFE] text-[#0056B3]"
+              onClick={() => navigate("/wellbore")}
+              badge="NEW"
+            />
+            <HubCard
+              data-testid="hub-certs-tile"
+              Icon={ShieldCheck}
+              title="Crew Certifications"
+              subtitle="Lifting, iron, PCE, CT unit, snubbing, H2S, first aid — expiry traffic lights."
+              accent="bg-[#DCFCE7] text-[#065F46]"
+              onClick={() => navigate("/certs")}
+              badge="NEW"
+            />
+            <HubCard
+              data-testid="hub-tasks-tile"
+              Icon={CheckSquare}
+              title="Daily Tasks"
+              subtitle="Supervisor-assigned tasks. Crew ticks them complete through the day."
+              accent="bg-[#E0E7FF] text-[#4338CA]"
+              onClick={() => navigate("/tasks")}
+              badge="NEW"
+            />
+            <HubCard
+              data-testid="hub-parts-orders-tile"
+              Icon={Package}
+              title="Parts Orders"
+              subtitle="Crew submit → Supervisor approve → Procurement. Audit trail on every move."
+              accent="bg-[#FCE7C0] text-[#C36600]"
+              onClick={() => navigate("/parts-orders")}
+              badge="NEW"
+            />
+            <HubCard
+              data-testid="hub-timecards-tile"
+              Icon={DollarSign}
+              title="Timecards & Payroll"
+              subtitle="Daily hours by job + pay code. Two-step approval. CSV export, per pay-period."
+              accent="bg-[#DCFCE7] text-[#065F46]"
+              onClick={() => navigate("/timecards")}
+              badge="NEW"
+            />
+            {(user?.role === "field_manager" || user?.role === "ops_manager" || user?.role === "admin") && (
+              <HubCard
+                data-testid="hub-crew-admin-tile"
+                Icon={UserCog}
+                title="Crew Admin"
+                subtitle="Promote crew ↔ Supervisor ↔ Management, set base pay rates, restrict workspace domain."
+                accent="bg-[#E0E7FF] text-[#5A67D8]"
+                onClick={() => navigate("/crew-admin")}
+                badge="NEW"
+              />
+            )}
             <HubCard
               data-testid="hub-docs-tile"
               Icon={FileText}
