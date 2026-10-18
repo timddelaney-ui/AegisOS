@@ -112,6 +112,125 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
             })
         return {"members": out}
 
+    # -----------------------------------------------------------------
+    # USER PREFS — Hub tile customization, home page, live-ops layout
+    # -----------------------------------------------------------------
+    DEFAULT_HUB_TILES = [
+        "live-ops", "workbook", "ctd-calculator", "reels", "stress", "fatigue",
+        "wellbore", "certs", "tasks", "parts-orders", "timecards", "crew-admin",
+        "documents", "team-hub", "treatment", "handover", "ai-sop", "crew-contacts",
+    ]
+
+    class UserPrefsUpdate(BaseModel):
+        hub_tiles: Optional[List[Dict[str, Any]]] = None  # [{id,visible,order}]
+        home_default: Optional[str] = None  # 'hub' | 'live-ops' | 'workbook'
+        liveops_layout: Optional[List[str]] = None  # ordered panel ids: ['vm','fatigue','weight','pressure','chart']
+
+    @api_router.get("/me/prefs")
+    async def get_my_prefs(user: dict = Depends(require_user)):
+        p = await db.user_prefs.find_one({"user_id": user["user_id"]}, {"_id": 0}) or {}
+        defaults = {
+            "user_id": user["user_id"],
+            "hub_tiles": [{"id": t, "visible": True, "order": i} for i, t in enumerate(DEFAULT_HUB_TILES)],
+            "home_default": "hub",
+            "liveops_layout": ["vm", "fatigue", "weight", "pressure", "chart"],
+        }
+        for k, v in defaults.items():
+            p.setdefault(k, v)
+        return ser(p)
+
+    @api_router.patch("/me/prefs")
+    async def patch_my_prefs(body: UserPrefsUpdate, user: dict = Depends(require_user)):
+        update: Dict[str, Any] = {"updated_at": now_utc()}
+        if body.hub_tiles is not None:
+            # Keep only known tiles, re-order
+            seen = set()
+            clean = []
+            for t in body.hub_tiles:
+                tid = str(t.get("id") or "")
+                if not tid or tid in seen:
+                    continue
+                seen.add(tid)
+                clean.append({"id": tid, "visible": bool(t.get("visible", True)), "order": int(t.get("order", len(clean)))})
+            clean.sort(key=lambda x: x["order"])
+            update["hub_tiles"] = clean
+        if body.home_default is not None:
+            if body.home_default not in ("hub", "live-ops", "workbook"):
+                raise HTTPException(400, "home_default must be hub|live-ops|workbook")
+            update["home_default"] = body.home_default
+        if body.liveops_layout is not None:
+            update["liveops_layout"] = [str(s) for s in body.liveops_layout]
+        await db.user_prefs.update_one(
+            {"user_id": user["user_id"]},
+            {"$set": update, "$setOnInsert": {"user_id": user["user_id"], "created_at": now_utc()}},
+            upsert=True,
+        )
+        p = await db.user_prefs.find_one({"user_id": user["user_id"]}, {"_id": 0})
+        return ser(p)
+
+    # -----------------------------------------------------------------
+    # LIVE OPS — DAQ feed ring buffer (weight, pressure, depth)
+    # -----------------------------------------------------------------
+    # Phase 1: client-side simulator POSTs samples; team sees the latest.
+    # Phase 2 will swap in real WITS 0 / WITSML / Modbus listeners.
+    LIVEOPS_MAX_SAMPLES = 600  # ~10 min @ 1 Hz
+
+    class LiveSample(BaseModel):
+        rig_id: Optional[str] = None
+        reel_id: Optional[str] = None
+        weight_lb: Optional[float] = None
+        pressure_psi: Optional[float] = None
+        traction_pressure_psi: Optional[float] = None
+        depth_ft: Optional[float] = None
+        p_internal_psi: Optional[float] = None
+        p_external_psi: Optional[float] = None
+        axial_force_lbf: Optional[float] = None
+        source: str = "simulated"  # 'simulated' | 'wits' | 'modbus' | 'manual'
+
+    @api_router.post("/liveops/feed")
+    async def feed_liveops(body: LiveSample, user: dict = Depends(require_user)):
+        team_id = user.get("team_id")
+        if not team_id:
+            raise HTTPException(400, "No team.")
+        now = now_utc()
+        doc = {**body.model_dump(), "team_id": team_id, "created_at": now, "user_email": user["email"]}
+        await db.liveops_samples.insert_one(doc)
+        # Keep only the last N samples per team (soft cap, pruned opportunistically)
+        count = await db.liveops_samples.count_documents({"team_id": team_id})
+        if count > LIVEOPS_MAX_SAMPLES * 2:
+            cutoff = await db.liveops_samples.find({"team_id": team_id}, {"created_at": 1, "_id": 0}).sort("created_at", -1).skip(LIVEOPS_MAX_SAMPLES).limit(1).to_list(1)
+            if cutoff:
+                await db.liveops_samples.delete_many({"team_id": team_id, "created_at": {"$lt": cutoff[0]["created_at"]}})
+        doc.pop("_id", None)
+        return ser(doc)
+
+    @api_router.get("/liveops/stream")
+    async def stream_liveops(
+        limit: int = 300,
+        since: Optional[str] = None,
+        user: dict = Depends(require_user),
+    ):
+        team_id = user.get("team_id")
+        if not team_id:
+            return {"samples": [], "latest": None}
+        q: Dict[str, Any] = {"team_id": team_id}
+        if since:
+            try:
+                q["created_at"] = {"$gt": datetime.fromisoformat(since.replace("Z", "+00:00"))}
+            except Exception:
+                pass
+        docs = await db.liveops_samples.find(q, {"_id": 0}).sort("created_at", -1).limit(min(limit, LIVEOPS_MAX_SAMPLES)).to_list(min(limit, LIVEOPS_MAX_SAMPLES))
+        docs.reverse()
+        latest = docs[-1] if docs else None
+        return {"samples": [ser(d) for d in docs], "latest": ser(latest) if latest else None}
+
+    @api_router.delete("/liveops/stream")
+    async def clear_liveops(user: dict = Depends(require_user)):
+        require_supervisor(user)
+        team_id = user.get("team_id")
+        res = await db.liveops_samples.delete_many({"team_id": team_id})
+        return {"cleared": res.deleted_count}
+
     @api_router.post("/rbac/promote")
     async def rbac_promote(body: RolePromote, user: dict = Depends(require_user)):
         require_supervisor(user)

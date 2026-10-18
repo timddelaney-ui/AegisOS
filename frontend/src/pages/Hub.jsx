@@ -13,6 +13,8 @@ import ExcelHeader from "../components/ExcelHeader";
 import RigSelector from "../components/RigSelector";
 import AIPanel from "../components/AIPanel";
 import { usePullToRefresh, PullIndicator } from "../hooks/usePullToRefresh";
+import { HubCustomizeButton } from "../components/HubCustomize";
+import { DEFAULT_TILE_ORDER } from "../lib/hubRegistry";
 
 const greetings = ["Kettle's on", "Ready for shift", "How's the shift", "Morning, hand", "Evening, tool push", "Coffee's brewing"];
 const proTips = [
@@ -24,10 +26,16 @@ const proTips = [
   "Ask the AI 'Troubleshoot' about surface symptoms and it'll walk you through diagnosis.",
 ];
 
-const HubCard = ({ Icon, title, subtitle, onClick, accent, badge, gradient, "data-testid": testId }) => (
+const HubCard = ({ Icon, title, subtitle, onClick, accent, badge, gradient, tileId, tilePrefs, "data-testid": testId }) => {
+  if (tilePrefs && tileId && tilePrefs.hidden?.has(tileId)) return null;
+  const order = tilePrefs?.order?.indexOf(tileId);
+  const style = order >= 0 ? { order } : undefined;
+  return (
   <button
     data-testid={testId}
+    data-tile-id={tileId}
     onClick={onClick}
+    style={style}
     className={`group relative overflow-hidden rounded-xl border border-[#D4D4D4] bg-white p-4 text-left shadow-sm hover:shadow-md hover:border-[#107C41] transition-all hover:-translate-y-0.5 ${gradient || ""}`}
   >
     <div className="flex items-start gap-3">
@@ -44,7 +52,8 @@ const HubCard = ({ Icon, title, subtitle, onClick, accent, badge, gradient, "dat
       <ChevronRight className="w-4 h-4 text-[#C4C4C4] group-hover:text-[#107C41] flex-shrink-0" />
     </div>
   </button>
-);
+  );
+};
 
 const StatChip = ({ Icon, value, label, color }) => (
   <div className="flex flex-col items-center bg-white border border-[#D4D4D4] rounded-lg py-2.5 px-2 shadow-sm">
@@ -65,6 +74,29 @@ const Hub = () => {
   const [loading, setLoading] = useState(true);
   const [aiOpen, setAiOpen] = useState(false);
   const [aiMode, setAiMode] = useState("assistant");
+  const [tilePrefs, setTilePrefs] = useState(null); // {order:string[], hidden:Set<string>}
+
+  const loadPrefs = useCallback(async () => {
+    try {
+      const r = await axios.get(`${API}/me/prefs`, { withCredentials: true });
+      const ht = r.data?.hub_tiles || [];
+      const order = ht.filter((t) => t.visible !== false).sort((a, b) => a.order - b.order).map((t) => t.id);
+      const hidden = new Set(ht.filter((t) => t.visible === false).map((t) => t.id));
+      // Any tile the user has never seen yet is visible by default
+      DEFAULT_TILE_ORDER.forEach((id) => {
+        if (!ht.find((t) => t.id === id) && !order.includes(id)) order.push(id);
+      });
+      setTilePrefs({ order, hidden });
+
+      // Home redirect: honor user's chosen home default on first Hub load this session
+      if (!sessionStorage.getItem("ctp_home_routed") && r.data?.home_default && r.data.home_default !== "hub") {
+        sessionStorage.setItem("ctp_home_routed", "1");
+        navigate(r.data.home_default === "live-ops" ? "/live-ops" : "/app");
+      }
+    } catch { /* ignore */ }
+  }, [navigate]);
+
+  useEffect(() => { loadPrefs(); }, [loadPrefs]);
 
   const loadAll = useCallback(async () => {
     const rigId = (() => { try { return localStorage.getItem("ctp_active_rig_v2") || "RIG1"; } catch { return "RIG1"; } })();
@@ -274,9 +306,26 @@ const Hub = () => {
           )}
 
           {/* Cards row */}
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="flex items-center justify-between -mb-1">
+            <p className="text-[11px] font-bold text-[#595959] uppercase tracking-wide">Modules</p>
+            <HubCustomizeButton onApply={loadPrefs} />
+          </div>
+          <div className="flex flex-wrap gap-2 [&>*]:flex-1 [&>*]:min-w-[280px] [&>*]:basis-[calc(50%-0.25rem)]" data-testid="hub-tiles-grid">
+            <HubCard
+              data-testid="hub-live-ops-tile"
+              tileId="live-ops"
+              tilePrefs={tilePrefs}
+              Icon={Zap}
+              title="Live Ops"
+              subtitle="Split-screen Von Mises + Fatigue + Weight + Pressure + chart. Click a panel to go full-screen."
+              accent="bg-[#F0F9F3] text-[#0D6535]"
+              onClick={() => navigate("/live-ops")}
+              badge="LIVE"
+            />
             <HubCard
               data-testid="hub-ctd-tile"
+              tileId="ctd-calculator"
+              tilePrefs={tilePrefs}
               Icon={Flame}
               title="CT Drilling Calculator"
               subtitle="Stand-alone balanced & underbalanced drilling solver. ECD, BHP, N₂ GLR, choke & UB-margin."
@@ -286,6 +335,8 @@ const Hub = () => {
             />
             <HubCard
               data-testid="hub-reels-tile"
+              tileId="reels"
+              tilePrefs={tilePrefs}
               Icon={Layers}
               title="String & Reel Manager"
               subtitle="Tapered CT reel profile — the active reel feeds every sheet, Von Mises egg, and fatigue heatmap."
@@ -295,6 +346,8 @@ const Hub = () => {
             />
             <HubCard
               data-testid="hub-vm-tile"
+              tileId="stress"
+              tilePrefs={tilePrefs}
               Icon={Gauge}
               title="Triaxial · Von Mises Egg"
               subtitle="API RP 5C7 live operating envelope. Visual alert when operating point crosses 80% SMYS."
@@ -304,6 +357,8 @@ const Hub = () => {
             />
             <HubCard
               data-testid="hub-fatigue-tile"
+              tileId="fatigue"
+              tilePrefs={tilePrefs}
               Icon={Activity}
               title="Reel Fatigue Heatmap"
               subtitle="Palmgren-Miner damage per station, driven by live traction pressure. Green → red at 80% derate."
@@ -313,6 +368,8 @@ const Hub = () => {
             />
             <HubCard
               data-testid="hub-wellbore-tile"
+              tileId="wellbore"
+              tilePrefs={tilePrefs}
               Icon={Box}
               title="3D Wellbore Viewer"
               subtitle="Minimum-curvature survey rendered in 3D. DLS color-coded, BHA tip animates with depth."
@@ -322,6 +379,8 @@ const Hub = () => {
             />
             <HubCard
               data-testid="hub-certs-tile"
+              tileId="certs"
+              tilePrefs={tilePrefs}
               Icon={ShieldCheck}
               title="Crew Certifications"
               subtitle="Lifting, iron, PCE, CT unit, snubbing, H2S, first aid — expiry traffic lights."
@@ -331,6 +390,8 @@ const Hub = () => {
             />
             <HubCard
               data-testid="hub-tasks-tile"
+              tileId="tasks"
+              tilePrefs={tilePrefs}
               Icon={CheckSquare}
               title="Daily Tasks"
               subtitle="Supervisor-assigned tasks. Crew ticks them complete through the day."
@@ -340,6 +401,8 @@ const Hub = () => {
             />
             <HubCard
               data-testid="hub-parts-orders-tile"
+              tileId="parts-orders"
+              tilePrefs={tilePrefs}
               Icon={Package}
               title="Parts Orders"
               subtitle="Crew submit → Supervisor approve → Procurement. Audit trail on every move."
@@ -349,6 +412,8 @@ const Hub = () => {
             />
             <HubCard
               data-testid="hub-timecards-tile"
+              tileId="timecards"
+              tilePrefs={tilePrefs}
               Icon={DollarSign}
               title="Timecards & Payroll"
               subtitle="Daily hours by job + pay code. Two-step approval. CSV export, per pay-period."
@@ -359,6 +424,8 @@ const Hub = () => {
             {(user?.role === "field_manager" || user?.role === "ops_manager" || user?.role === "admin") && (
               <HubCard
                 data-testid="hub-crew-admin-tile"
+              tileId="crew-admin"
+              tilePrefs={tilePrefs}
                 Icon={UserCog}
                 title="Crew Admin"
                 subtitle="Promote crew ↔ Supervisor ↔ Management, set base pay rates, restrict workspace domain."
@@ -369,6 +436,8 @@ const Hub = () => {
             )}
             <HubCard
               data-testid="hub-docs-tile"
+              tileId="documents"
+              tilePrefs={tilePrefs}
               Icon={FileText}
               title="Company Documents"
               subtitle="Upload SOPs, maintenance & daily checklists. AI references them alongside industry standards."
@@ -378,6 +447,8 @@ const Hub = () => {
             />
             <HubCard
               data-testid="hub-erp-tile"
+              tileId="erp-template"
+              tilePrefs={tilePrefs}
               Icon={AlertOctagon}
               title="Site-Specific ERP Template"
               subtitle="1-page emergency response cover sheet — crew, muster point, hospital. Fill, save, print."
@@ -387,6 +458,8 @@ const Hub = () => {
             />
             <HubCard
               data-testid="hub-crew-contacts-tile"
+              tileId="crew-contacts"
+              tilePrefs={tilePrefs}
               Icon={Mail}
               title="Crew Email Contacts"
               subtitle="Address book for shift-end handover emails. Mark defaults for one-click send."
@@ -395,6 +468,9 @@ const Hub = () => {
               badge="NEW"
             />
             <HubCard
+              data-testid="hub-equipment-tile"
+              tileId="equipment"
+              tilePrefs={tilePrefs}
               Icon={Wrench}
               title="Equipment & Assets"
               subtitle="Engine hours, injector meters, lifting certs, BOP/PCE tests, reel + iron MAWP — all flagged."
@@ -403,6 +479,9 @@ const Hub = () => {
               badge="NEW"
             />
             <HubCard
+              data-testid="hub-schedule-tile"
+              tileId="schedule"
+              tilePrefs={tilePrefs}
               Icon={Calendar}
               title="Crew Schedule"
               subtitle="Assign day/night shifts with 14/14, 20/10 rotations. Print or save as PDF."
@@ -412,6 +491,8 @@ const Hub = () => {
             />
             <HubCard
               data-testid="hub-treatment-tile"
+              tileId="treatment"
+              tilePrefs={tilePrefs}
               Icon={ClipboardList}
               title={activeTreatment ? `Treatment: ${activeTreatment.name}` : "Treatment Log"}
               subtitle={activeTreatment
@@ -422,6 +503,9 @@ const Hub = () => {
               badge={activeTreatment ? "LIVE" : "NEW"}
             />
             <HubCard
+              data-testid="hub-emergency-tile"
+              tileId="emergency"
+              tilePrefs={tilePrefs}
               Icon={AlertOctagon}
               title="Emergency SOPs"
               subtitle="17 scenarios with AER/OH&S citations. Bookmark before your next well."
@@ -429,6 +513,9 @@ const Hub = () => {
               onClick={() => navigate("/app", { state: { openEmergency: true } })}
             />
             <HubCard
+              data-testid="hub-training-tile"
+              tileId="training"
+              tilePrefs={tilePrefs}
               Icon={GraduationCap}
               title="Training Mode"
               subtitle="New hand? Get plain-English walk-throughs of what's happening downhole."
@@ -438,6 +525,8 @@ const Hub = () => {
             />
             <HubCard
               data-testid="hub-redeem-tile"
+              tileId="redeem"
+              tilePrefs={tilePrefs}
               Icon={Ticket}
               title="Have an Invite Code?"
               subtitle="Redeem a code from your admin for exclusive Pro access."
@@ -446,6 +535,8 @@ const Hub = () => {
             />
             <HubCard
               data-testid="hub-feedback-tile"
+              tileId="feedback"
+              tilePrefs={tilePrefs}
               Icon={MessageSquarePlus}
               title="Send Feedback"
               subtitle="Bug, idea, or feature request — every submission gets reviewed."

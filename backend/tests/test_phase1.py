@@ -183,6 +183,47 @@ def test_shift_batch_multi_rate():
         assert len(batch_ids) == 1
 
 
+def test_me_prefs_default_and_patch():
+    with c() as x:
+        r = x.get("/me/prefs")
+        assert r.status_code == 200
+        p = r.json()
+        assert "hub_tiles" in p and "home_default" in p and "liveops_layout" in p
+        r = x.patch("/me/prefs", json={
+            "home_default": "live-ops",
+            "liveops_layout": ["weight", "pressure", "vm"],
+            "hub_tiles": [
+                {"id": "live-ops", "visible": True, "order": 0},
+                {"id": "stress", "visible": False, "order": 1},
+            ],
+        })
+        assert r.status_code == 200, r.text
+        p2 = r.json()
+        assert p2["home_default"] == "live-ops"
+        assert p2["liveops_layout"] == ["weight", "pressure", "vm"]
+        assert [t["id"] for t in p2["hub_tiles"]] == ["live-ops", "stress"]
+        assert p2["hub_tiles"][1]["visible"] is False
+        x.patch("/me/prefs", json={"home_default": "hub"})
+
+
+def test_liveops_feed_and_stream():
+    with c() as x:
+        x.delete("/liveops/stream")
+        for i in range(3):
+            r = x.post("/liveops/feed", json={
+                "weight_lb": 10000 + i * 100,
+                "pressure_psi": 5000 + i * 50,
+                "depth_ft": 1000 + i * 20,
+                "source": "simulated",
+            })
+            assert r.status_code == 200
+        r = x.get("/liveops/stream", params={"limit": 10})
+        samples = r.json()["samples"]
+        assert len(samples) >= 3
+        assert r.json()["latest"]["weight_lb"] == 10200
+        x.delete("/liveops/stream")
+
+
 def test_rbac_promote_roundtrip():
     # Promote demo to supervisor, verify, then re-promote back to mgmt via DB side-effect
     with c() as x:

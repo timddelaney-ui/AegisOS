@@ -120,12 +120,22 @@ join only.
 - `/api/paycodes` CRUD + `/base-rate`
 
 ## Changelog
-- **Feb 2026 (phase1)**: Built Modules 1, 2, 3, 6, A, B, C, D, and three-role
-  RBAC on top of Emergent Google Auth. Added react-three-fiber v9 + three.js.
-  11/11 new backend pytests pass. 231/243 overall pass (12 pre-existing
-  PWA-icon failures unrelated).
-- (Prior entries retained in /app/memory/CHANGELOG_FULL.md if needed; omitted
-  here for brevity.)
+- **Feb 2026 (phase1 — part 3)**: Live Ops split-screen dashboard (`/live-ops`) +
+  Hub customization (per-user tile show/hide + reorder + home default).
+  New `/api/me/prefs` CRUD, `/api/liveops/feed` + `/api/liveops/stream` ring
+  buffer, reusable mini panels (`MiniVonMises`, `MiniFatigue`, `LiveGauge`,
+  `StripChart`). Click-to-enlarge full-screen on any panel. Simulated 1 Hz feed
+  in Phase 1 (Weight / Pressure / Depth / Traction / P int). Fatigue engine
+  advances automatically every 3 seconds while the feed is running. All 14
+  Phase 1 pytests pass.
+- **Feb 2026 (phase1 — part 2)**: Shift Composer on `/timecards` — one date +
+  multiple activities at different rates (Field $60, Shop $40, Travel $35,
+  Moving-Equipment $55, default). Pay-code schema extended with
+  `flat_rate_per_hour`. Von Mises page compressed, egg switched to thin-wall
+  parametric envelope for proper rotated-ellipse shape.
+- **Feb 2026 (phase1 — part 1)**: Built Modules 1, 2, 3, 6, A, B, C, D, and
+  three-role RBAC on top of Emergent Google Auth. Added react-three-fiber v9 +
+  three.js.
 
 ## Roadmap
 ### Phase 2
