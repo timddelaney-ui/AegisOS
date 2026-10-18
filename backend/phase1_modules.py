@@ -1014,27 +1014,44 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
     # -----------------------------------------------------------------
     # MODULE D — Timecards + Pay Codes + Payroll
     # -----------------------------------------------------------------
-    # Default pay codes seeded per workspace. Workspace can override multipliers and rate.
+    # Default pay codes seeded per workspace. Workspace can override multipliers, rates, labels.
+    # Rate resolution per line:
+    #   • is_per_diem=True   → total = flat_rate_per_day × days
+    #   • flat_rate_per_hour → total = flat_rate_per_hour × hours (overrides base rate)
+    #   • multiplier         → total = base_rate_hourly × multiplier × hours
     DEFAULT_PAY_CODES = [
-        {"code": "regular", "label": "Regular", "multiplier": 1.0, "flat_rate_per_day": None, "is_per_diem": False},
-        {"code": "overtime", "label": "Overtime", "multiplier": 1.5, "flat_rate_per_day": None, "is_per_diem": False},
-        {"code": "double_time", "label": "Double-time", "multiplier": 2.0, "flat_rate_per_day": None, "is_per_diem": False},
-        {"code": "per_diem", "label": "Per Diem", "multiplier": None, "flat_rate_per_day": 100.0, "is_per_diem": True},
-        {"code": "days_off_premium", "label": "Days-off Premium", "multiplier": 2.0, "flat_rate_per_day": None, "is_per_diem": False},
-        {"code": "travel_standby", "label": "Travel/Standby", "multiplier": 0.75, "flat_rate_per_day": None, "is_per_diem": False},
+        {"code": "regular", "label": "Regular (base rate)", "multiplier": 1.0, "flat_rate_per_hour": None, "flat_rate_per_day": None, "is_per_diem": False},
+        {"code": "overtime", "label": "Overtime (1.5×)", "multiplier": 1.5, "flat_rate_per_hour": None, "flat_rate_per_day": None, "is_per_diem": False},
+        {"code": "double_time", "label": "Double-time (2.0×)", "multiplier": 2.0, "flat_rate_per_hour": None, "flat_rate_per_day": None, "is_per_diem": False},
+        {"code": "field_rate", "label": "Field rate", "multiplier": None, "flat_rate_per_hour": 60.0, "flat_rate_per_day": None, "is_per_diem": False},
+        {"code": "shop_rate", "label": "Shop rate", "multiplier": None, "flat_rate_per_hour": 40.0, "flat_rate_per_day": None, "is_per_diem": False},
+        {"code": "travel_rate", "label": "Travel rate", "multiplier": None, "flat_rate_per_hour": 35.0, "flat_rate_per_day": None, "is_per_diem": False},
+        {"code": "moving_equipment", "label": "Moving equipment", "multiplier": None, "flat_rate_per_hour": 55.0, "flat_rate_per_day": None, "is_per_diem": False},
+        {"code": "per_diem", "label": "Per Diem (days)", "multiplier": None, "flat_rate_per_hour": None, "flat_rate_per_day": 100.0, "is_per_diem": True},
+        {"code": "days_off_premium", "label": "Days-off premium (2.0×)", "multiplier": 2.0, "flat_rate_per_hour": None, "flat_rate_per_day": None, "is_per_diem": False},
+        {"code": "standby", "label": "Standby (0.75×)", "multiplier": 0.75, "flat_rate_per_hour": None, "flat_rate_per_day": None, "is_per_diem": False},
     ]
 
     async def _ensure_paycodes(team_id: str):
-        count = await db.pay_codes.count_documents({"team_id": team_id})
-        if count == 0:
-            now = now_utc()
-            for pc in DEFAULT_PAY_CODES:
+        """Seed default pay codes and backfill any missing new defaults for existing workspaces."""
+        existing_codes = set()
+        async for d in db.pay_codes.find({"team_id": team_id}, {"code": 1, "_id": 0}):
+            existing_codes.add(d["code"])
+        now = now_utc()
+        for pc in DEFAULT_PAY_CODES:
+            if pc["code"] not in existing_codes:
                 await db.pay_codes.insert_one({"team_id": team_id, **pc, "created_at": now, "updated_at": now})
+        # Migration: rename legacy 'travel_standby' label if it still exists
+        await db.pay_codes.update_one(
+            {"team_id": team_id, "code": "travel_standby"},
+            {"$set": {"label": "Standby (legacy)"}},
+        )
 
     class PayCodeUpsert(BaseModel):
         code: str
         label: str
         multiplier: Optional[float] = None
+        flat_rate_per_hour: Optional[float] = None
         flat_rate_per_day: Optional[float] = None
         is_per_diem: bool = False
 
@@ -1060,6 +1077,7 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
             {"$set": {
                 "label": body.label.strip(),
                 "multiplier": body.multiplier,
+                "flat_rate_per_hour": body.flat_rate_per_hour,
                 "flat_rate_per_day": body.flat_rate_per_day,
                 "is_per_diem": bool(body.is_per_diem),
                 "updated_at": now,
@@ -1071,7 +1089,8 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
     @api_router.delete("/paycodes/{code}")
     async def delete_paycode(code: str, user: dict = Depends(require_user)):
         require_supervisor(user)
-        if code in ("regular", "overtime", "double_time", "per_diem", "days_off_premium", "travel_standby"):
+        # Default codes can be edited but not deleted
+        if code in {pc["code"] for pc in DEFAULT_PAY_CODES}:
             raise HTTPException(400, "Default pay codes can be edited but not deleted.")
         await db.pay_codes.delete_one({"team_id": user.get("team_id"), "code": code})
         return {"success": True}
@@ -1113,13 +1132,18 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
         pc = await db.pay_codes.find_one({"team_id": team_id, "code": pay_code}, {"_id": 0})
         if not pc:
             raise HTTPException(400, f"Unknown pay_code '{pay_code}'. Use GET /api/paycodes.")
-        base = float(user_doc.get("base_rate_hourly") or 0.0)
         if pc.get("is_per_diem"):
-            total = (pc.get("flat_rate_per_day") or 0.0) * hours
-            return {"pay_code_label": pc["label"], "rate_used": pc.get("flat_rate_per_day") or 0.0, "multiplier": None, "line_total": round(total, 2)}
+            rate = float(pc.get("flat_rate_per_day") or 0.0)
+            total = rate * hours  # 'hours' here means 'days'
+            return {"pay_code_label": pc["label"], "rate_used": rate, "multiplier": None, "line_total": round(total, 2)}
+        # Flat hourly rate on the pay code overrides base rate
+        if pc.get("flat_rate_per_hour") is not None:
+            rate = float(pc["flat_rate_per_hour"])
+            return {"pay_code_label": pc["label"], "rate_used": rate, "multiplier": None, "line_total": round(rate * hours, 2)}
+        # Otherwise: base rate × multiplier
+        base = float(user_doc.get("base_rate_hourly") or 0.0)
         mult = float(pc.get("multiplier") or 1.0)
-        line_total = base * mult * hours
-        return {"pay_code_label": pc["label"], "rate_used": base, "multiplier": mult, "line_total": round(line_total, 2)}
+        return {"pay_code_label": pc["label"], "rate_used": base, "multiplier": mult, "line_total": round(base * mult * hours, 2)}
 
     @api_router.post("/timecards/lines")
     async def create_tc_line(body: TimecardLineCreate, user: dict = Depends(require_user)):
@@ -1148,6 +1172,57 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
         await db.timecard_lines.insert_one(doc)
         doc.pop("_id", None)
         return ser(doc)
+
+    class TimecardShiftActivity(BaseModel):
+        hours: float
+        pay_code: str
+        description: str
+
+    class TimecardShiftBatch(BaseModel):
+        work_date: str
+        job_number: str
+        rig_id: Optional[str] = None
+        activities: List[TimecardShiftActivity]
+
+    @api_router.post("/timecards/shift")
+    async def create_tc_shift(body: TimecardShiftBatch, user: dict = Depends(require_user)):
+        """One shift = one date + one job #, but multiple activities at different rates
+        (shop, field, travel, moving equipment, OT, per-diem day, etc.) in one submission."""
+        team_id = user.get("team_id")
+        if not team_id:
+            raise HTTPException(400, "No team.")
+        if not body.activities:
+            raise HTTPException(400, "At least one activity required.")
+        await _ensure_paycodes(team_id)
+        wd = _parse_date(body.work_date)
+        now = now_utc()
+        inserted: List[Dict[str, Any]] = []
+        for act in body.activities:
+            if float(act.hours) <= 0:
+                continue
+            cost = await _compute_line_cost(team_id, user, act.pay_code, float(act.hours))
+            line_id = f"tcl_{uuid.uuid4().hex[:12]}"
+            doc = {
+                "line_id": line_id, "team_id": team_id,
+                "user_id": user["user_id"], "user_email": user["email"],
+                "user_name": user.get("name") or "",
+                "work_date": wd, "hours": float(act.hours),
+                "description": act.description.strip()[:500],
+                "job_number": body.job_number.strip()[:60],
+                "pay_code": act.pay_code,
+                "rig_id": body.rig_id,
+                **cost,
+                "status": "draft",
+                "shift_batch_id": f"shift_{wd.strftime('%Y%m%d')}_{user['user_id']}_{int(now.timestamp())}",
+                "history": [{"action": "created", "by": user["email"], "at": now.isoformat()}],
+                "created_at": now, "updated_at": now,
+            }
+            await db.timecard_lines.insert_one(doc)
+            doc.pop("_id", None)
+            inserted.append(ser(doc))
+        if not inserted:
+            raise HTTPException(400, "All activities had zero hours.")
+        return {"inserted": inserted, "count": len(inserted), "total": sum(d["line_total"] for d in inserted)}
 
     @api_router.get("/timecards/lines")
     async def list_tc_lines(

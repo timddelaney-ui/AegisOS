@@ -154,8 +154,33 @@ def test_paycodes_seeded():
     with c() as x:
         r = x.get("/paycodes")
         codes = [p["code"] for p in r.json()["paycodes"]]
-        for c_ in ["regular", "overtime", "double_time", "per_diem", "days_off_premium", "travel_standby"]:
-            assert c_ in codes
+        # Multiplier codes + per-diem + flat-rate codes (shop/travel/field/moving equipment)
+        for c_ in ["regular", "overtime", "double_time", "per_diem", "days_off_premium",
+                   "shop_rate", "travel_rate", "field_rate", "moving_equipment", "standby"]:
+            assert c_ in codes, f"missing seed code {c_}"
+
+
+def test_shift_batch_multi_rate():
+    """One shift date, multiple activities, each at its own rate."""
+    with c() as x:
+        r = x.post("/timecards/shift", json={
+            "work_date": "2026-10-20",
+            "job_number": f"PT-{_rand()}",
+            "activities": [
+                {"pay_code": "shop_rate", "hours": 2.0, "description": "Rig up"},
+                {"pay_code": "travel_rate", "hours": 1.5, "description": "Drive"},
+                {"pay_code": "field_rate", "hours": 8.0, "description": "On-site"},
+                {"pay_code": "moving_equipment", "hours": 1.0, "description": "Rig move"},
+            ],
+        })
+        assert r.status_code == 200, r.text
+        payload = r.json()
+        assert payload["count"] == 4
+        # Default rates: shop 40, travel 35, field 60, moving 55 → total = 80 + 52.5 + 480 + 55 = 667.5
+        assert abs(payload["total"] - 667.5) < 0.01
+        # All lines share a shift_batch_id
+        batch_ids = {ln["shift_batch_id"] for ln in payload["inserted"]}
+        assert len(batch_ids) == 1
 
 
 def test_rbac_promote_roundtrip():
