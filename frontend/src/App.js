@@ -34,6 +34,7 @@ import TimecardsPage from "./pages/TimecardsPage";
 import RbacAdminPage from "./pages/RbacAdminPage";
 import LiveOpsPage from "./pages/LiveOpsPage";
 import DaqConfigPage from "./pages/DaqConfigPage";
+import ShareRedeemPage from "./pages/ShareRedeemPage";
 import { ActiveReelProvider } from "./context/ActiveReelContext";
 import ManagerGreeting from "./components/ManagerGreeting";
 import RedeemDialog from "./components/RedeemDialog";
@@ -222,6 +223,7 @@ const AppRouter = () => {
   return (
     <>
       <Routes>
+        <Route path="/share/:token" element={<ShareRedeemPage />} />
         <Route path="/" element={<LandingRedirect />} />
         <Route path="/login" element={<Login />} />
         <Route path="/pricing" element={<Pricing />} />

@@ -6,7 +6,7 @@ Imported by server.py — relies on `api_router`, `db`, `require_user`,
 `get_current_user`, `_serialize`, `_is_admin`, and `_user_role` from server.py.
 """
 
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form, Response
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone, timedelta
@@ -1758,5 +1758,113 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
             "sample_count": len(samples),
         }
         return dossier
+
+    # -----------------------------------------------------------------
+    # PHASE 2 — Guest Share Links (7-day read-only URL to Live Ops)
+    # -----------------------------------------------------------------
+    import secrets as _secrets
+
+    class ShareLinkCreate(BaseModel):
+        label: Optional[str] = None
+        days: int = 7
+
+    @api_router.post("/share-links")
+    async def create_share_link(body: ShareLinkCreate, user: dict = Depends(require_user)):
+        require_supervisor(user)
+        team_id = user.get("team_id")
+        if not team_id:
+            raise HTTPException(400, "No team.")
+        days = max(1, min(int(body.days or 7), 30))
+        token = _secrets.token_urlsafe(32)
+        link_id = f"share_{uuid.uuid4().hex[:12]}"
+        now = now_utc()
+        expires_at = now + timedelta(days=days)
+        doc = {
+            "link_id": link_id, "team_id": team_id, "token": token,
+            "label": (body.label or "Client view").strip()[:80],
+            "created_by": user["email"], "created_at": now,
+            "expires_at": expires_at, "revoked": False,
+            "last_used_at": None, "use_count": 0,
+        }
+        await db.share_links.insert_one(doc)
+        doc.pop("_id", None)
+        return ser({**doc, "share_url_path": f"/share/{token}"})
+
+    @api_router.get("/share-links")
+    async def list_share_links(user: dict = Depends(require_user)):
+        require_supervisor(user)
+        team_id = user.get("team_id")
+        if not team_id:
+            return {"links": []}
+        docs = await db.share_links.find({"team_id": team_id}, {"_id": 0}).sort("created_at", -1).to_list(100)
+        now = now_utc()
+        out = []
+        for d in docs:
+            exp = d.get("expires_at")
+            if isinstance(exp, datetime) and exp.tzinfo is None:
+                exp = exp.replace(tzinfo=timezone.utc)
+            d["is_expired"] = bool(isinstance(exp, datetime) and exp < now)
+            d["share_url_path"] = f"/share/{d['token']}"
+            out.append(ser(d))
+        return {"links": out}
+
+    @api_router.delete("/share-links/{link_id}")
+    async def revoke_share_link(link_id: str, user: dict = Depends(require_user)):
+        require_supervisor(user)
+        res = await db.share_links.update_one(
+            {"link_id": link_id, "team_id": user.get("team_id")},
+            {"$set": {"revoked": True, "revoked_at": now_utc(), "revoked_by": user["email"]}},
+        )
+        if res.matched_count == 0:
+            raise HTTPException(404, "Not found.")
+        return {"success": True}
+
+    # PUBLIC — no auth required. Validates share token, creates a guest session, sets cookie.
+    @api_router.get("/share/{token}")
+    async def redeem_share_link(token: str, response: Response):
+        link = await db.share_links.find_one({"token": token}, {"_id": 0})
+        if not link:
+            raise HTTPException(404, "Invalid or expired link.")
+        if link.get("revoked"):
+            raise HTTPException(403, "This share link has been revoked.")
+        exp = link.get("expires_at")
+        if isinstance(exp, datetime) and exp.tzinfo is None:
+            exp = exp.replace(tzinfo=timezone.utc)
+        now = now_utc()
+        if isinstance(exp, datetime) and exp < now:
+            raise HTTPException(403, "This share link has expired.")
+
+        guest_user_id = f"shareguest_{link['link_id']}"
+        await db.users.update_one(
+            {"user_id": guest_user_id},
+            {"$set": {
+                "user_id": guest_user_id,
+                "email": f"guest+{link['link_id']}@share.local",
+                "name": link.get("label") or "Client Guest",
+                "role": "guest",
+                "team_id": link["team_id"],
+                "subscription_status": "active",
+                "last_login": now,
+            }},
+            upsert=True,
+        )
+        session_token = _secrets.token_urlsafe(48)
+        await db.user_sessions.insert_one({
+            "session_token": session_token,
+            "user_id": guest_user_id,
+            "created_at": now,
+            "expires_at": min(exp, now + timedelta(days=7)) if isinstance(exp, datetime) else (now + timedelta(days=7)),
+            "share_link_id": link["link_id"],
+        })
+        await db.share_links.update_one(
+            {"link_id": link["link_id"]},
+            {"$inc": {"use_count": 1}, "$set": {"last_used_at": now}},
+        )
+        response.set_cookie(
+            key="session_token", value=session_token, httponly=True,
+            samesite="none", secure=True, path="/",
+            max_age=7 * 24 * 3600,
+        )
+        return {"success": True, "redirect": "/live-ops", "label": link.get("label"), "team_id": link["team_id"]}
 
     return api_router

@@ -80,7 +80,50 @@ def test_dossier_shape():
             assert ch in d["recorded_channels"]
 
 
-def test_guest_role_blocked_from_internal():
+def test_share_link_create_redeem_revoke():
+    """Full lifecycle: create → public redeem → guest cookie → revoke."""
+    with c() as x:
+        r = x.post("/share-links", json={"label": "Pytest Client", "days": 7})
+        assert r.status_code == 200, r.text
+        link = r.json()
+        token = link["token"]
+        link_id = link["link_id"]
+
+    # Fresh client without cookies — simulates the client-side link redemption
+    with httpx.Client(base_url=API, timeout=20) as pub:
+        r = pub.get(f"/share/{token}")
+        assert r.status_code == 200, r.text
+        assert r.json()["redirect"] == "/live-ops"
+        # Secure+SameSite=None cookies aren't stored over HTTP by httpx — grab manually
+        sess_cookie = r.cookies.get("session_token") or None
+        if not sess_cookie:
+            # Parse from raw Set-Cookie header as fallback
+            raw = r.headers.get("set-cookie", "")
+            for part in raw.split(","):
+                if "session_token=" in part:
+                    sess_cookie = part.split("session_token=")[1].split(";")[0]
+                    break
+        assert sess_cookie, "Share redemption did not set session_token cookie"
+        # Use the token explicitly on subsequent calls
+        headers = {"Cookie": f"session_token={sess_cookie}"}
+        r = pub.get("/rbac/me", headers=headers)
+        assert r.status_code == 200
+        me = r.json()
+        assert me["role_plan"] == "guest"
+        # Guest blocked from DAQ
+        r = pub.get("/daq/configs", headers=headers)
+        assert r.status_code == 403
+
+    # Revoke
+    with c() as x:
+        r = x.delete(f"/share-links/{link_id}")
+        assert r.status_code == 200
+
+    # Fresh public attempt now fails
+    with httpx.Client(base_url=API, timeout=20) as pub2:
+        r = pub2.get(f"/share/{token}")
+        assert r.status_code == 403
+
     with c() as x:
         # Promote demo to guest
         r = x.post("/rbac/promote", json={"user_id": "demo_pro_user", "role": "guest"})

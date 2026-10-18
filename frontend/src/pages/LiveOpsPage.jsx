@@ -7,6 +7,8 @@ import { useActiveReel } from "../context/ActiveReelContext";
 import { MiniVonMises, MiniFatigue, LiveGauge, StripChart } from "../components/LiveOpsPanels";
 import { Play, Pause, Wifi, WifiOff, Maximize2, X, Zap, Settings, Rewind, FastForward, StepBack, StepForward, History, Download } from "lucide-react";
 import { postSampleResilient, drainOfflineQueue, offlineQueueLength, startOfflineDrain } from "../lib/offlineQueue";
+import { samplesToCSV, samplesToLAS, downloadBlob } from "../lib/playbackExport";
+import ShareLinksButton from "../components/ShareLinksButton";
 
 const RING = 600;             // seconds of history (10 min @ 1 Hz)
 const TICK_MS = 1000;         // 1 Hz
@@ -359,6 +361,7 @@ export default function LiveOpsPage() {
             className="flex items-center gap-1 px-3 py-1 rounded font-bold text-xs bg-white/10 border border-white/20">
             <Download className="w-3.5 h-3.5" />Dossier
           </button>
+          <ShareLinksButton />
           <button
             data-testid="liveops-customize-btn"
             onClick={() => setShowPrefs(!showPrefs)}
@@ -438,6 +441,32 @@ export default function LiveOpsPage() {
               onClick={loadHistory}
               className="text-[10px] font-bold text-white/80 hover:text-white px-2 py-1 rounded border border-white/20">
               Reload history
+            </button>
+            <button
+              data-testid="playback-export-csv"
+              onClick={() => {
+                const win = chartSamples.length ? chartSamples : samples;
+                if (win.length === 0) return toast.error("No samples in window");
+                downloadBlob(`liveops_playback_${Date.now()}.csv`, samplesToCSV(win), "text/csv");
+                toast.success(`Exported ${win.length} samples as CSV`);
+              }}
+              className="text-[10px] font-bold text-amber-300 hover:text-white px-2 py-1 rounded border border-amber-500/50">
+              CSV
+            </button>
+            <button
+              data-testid="playback-export-las"
+              onClick={() => {
+                const win = chartSamples.length ? chartSamples : samples;
+                if (win.length === 0) return toast.error("No samples in window");
+                downloadBlob(`liveops_playback_${Date.now()}.las`, samplesToLAS(win, {
+                  reel_name: activeReel?.name,
+                  generated_by: user?.email,
+                  well: "Live Ops Playback",
+                }), "text/plain");
+                toast.success(`Exported ${win.length} samples as LAS 2.0`);
+              }}
+              className="text-[10px] font-bold text-amber-300 hover:text-white px-2 py-1 rounded border border-amber-500/50">
+              LAS
             </button>
           </div>
         )}
