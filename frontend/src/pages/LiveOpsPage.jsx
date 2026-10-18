@@ -387,6 +387,43 @@ export default function LiveOpsPage() {
   const canEditView = viewAnnot && viewAnnot.source === "manual" && (viewAnnot.author_user_id === user?.user_id || canDeleteAny);
   const canDeleteView = viewAnnot && (viewAnnot.source === "manual" ? (viewAnnot.author_user_id === user?.user_id || canDeleteAny) : canDeleteAny);
 
+  // Snap the scrubber to the sample nearest a given epoch-ms timestamp.
+  // If currently live, auto-enter playback. Loads server history first if
+  // the ring buffer is empty.
+  const jumpToAnnotation = async (annot) => {
+    if (!annot?.timestamp_ms) { setViewAnnot(annot); return; }
+    let buf = samples;
+    if (buf.length === 0) {
+      // Fetch history then re-run the jump against the fresh buffer.
+      try {
+        const r = await axios.get(`${API}/liveops/stream`, { params: { limit: RING }, withCredentials: true });
+        const srv = r.data?.samples || [];
+        if (srv.length === 0) { toast.info("No samples recorded for playback yet."); setViewAnnot(annot); return; }
+        buf = srv.map((s) => ({
+          depth_ft: s.depth_ft, p_internal_psi: s.p_internal_psi, p_external_psi: s.p_external_psi,
+          traction_pressure_psi: s.traction_pressure_psi, weight_lb: s.weight_lb,
+          axial_force_lbf: s.axial_force_lbf, pressure_psi: s.pressure_psi,
+          ts: s.created_at, source: s.source,
+        }));
+        setSamples(buf);
+      } catch { toast.error("Couldn't load history"); setViewAnnot(annot); return; }
+    }
+    if (buf.length === 0) { setViewAnnot(annot); return; }
+    // Find the nearest sample to the annotation's timestamp
+    let best = 0, bestDelta = Infinity;
+    for (let i = 0; i < buf.length; i++) {
+      const t = Date.parse(buf[i].ts || buf[i].created_at || 0);
+      const d = Math.abs(t - annot.timestamp_ms);
+      if (d < bestDelta) { bestDelta = d; best = i; }
+    }
+    setMode("playback");
+    setPlaybackIdx(best);
+    setPlaybackPlaying(false);
+    setRunning(false);
+    setViewAnnot(annot);
+    toast.success(`Jumped to ${new Date(annot.timestamp_ms).toLocaleTimeString()}`);
+  };
+
   const scrubRelativeSec = (idx) => (idx - (samples.length - 1)); // negative = seconds ago
 
   const renderPanel = (id, large = false) => {
@@ -544,7 +581,7 @@ export default function LiveOpsPage() {
                 <AnnotationPins
                   annotations={annotations}
                   samples={samples}
-                  onPinClick={(p) => setViewAnnot(p)}
+                  onPinClick={(p) => jumpToAnnotation(p)}
                 />
               </div>
               <input

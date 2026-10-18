@@ -283,3 +283,59 @@ def test_annotation_guest_can_read_not_write():
     finally:
         with c() as x:
             x.delete(f"/share-links/{link_id}")
+
+
+# -----------------------------------------------------------------
+# Admin Rig Rename (per-team labels)
+# -----------------------------------------------------------------
+def test_rig_labels_management_can_write_crew_cannot():
+    with c() as x:
+        # Starts empty (or whatever previous test left)
+        r = x.get("/rigs/labels")
+        assert r.status_code == 200
+        assert "labels" in r.json()
+
+        # Management upsert
+        r = x.put("/rigs/labels", json={"labels": {
+            "RIG1": "North Pad Unit 7",
+            "RIG2": "Duvernay Day Shift",
+            "YARD": "Nisku Yard",
+        }})
+        assert r.status_code == 200, r.text
+        assert r.json()["saved"] == 3
+
+        r = x.get("/rigs/labels")
+        d = r.json()["labels"]
+        assert d["RIG1"] == "North Pad Unit 7"
+        assert d["YARD"] == "Nisku Yard"
+
+        # Empty string clears the override
+        r = x.put("/rigs/labels", json={"labels": {"RIG2": ""}})
+        assert r.status_code == 200
+        r = x.get("/rigs/labels")
+        assert "RIG2" not in r.json()["labels"]
+        assert r.json()["labels"]["RIG1"] == "North Pad Unit 7"
+
+        # Invalid rig_id is silently skipped
+        r = x.put("/rigs/labels", json={"labels": {"RIG999": "ghost"}})
+        assert r.status_code == 200
+        assert r.json()["saved"] == 0
+
+    # Crew (non-management) blocked — demote then try to write
+    with c() as x:
+        x.post("/rbac/promote", json={"user_id": "demo_pro_user", "role": "crew"})
+    try:
+        with c() as x:
+            r = x.put("/rigs/labels", json={"labels": {"RIG1": "nope"}})
+            assert r.status_code == 403
+            # But crew CAN read
+            r = x.get("/rigs/labels")
+            assert r.status_code == 200
+    finally:
+        subprocess.run(["mongosh", "--quiet", "--eval",
+            'db=db.getSiblingDB("test_database"); db.users.updateOne({user_id:"demo_pro_user"},{$set:{role:"ops_manager"}})'],
+            check=False)
+
+    # Cleanup
+    with c() as x:
+        x.put("/rigs/labels", json={"labels": {"RIG1": "", "YARD": ""}})

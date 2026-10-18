@@ -2058,6 +2058,48 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
             await db.rig_annotation_rules.insert_many(payload)
         return {"saved": len(payload)}
 
+    # -----------------------------------------------------------------
+    # PHASE 2 — Admin Rig Rename (per-team labels for RIG1..RIG25 + YARD)
+    # Any authenticated user can read labels (needed to render the rig
+    # selector dropdown). Only management can write.
+    # -----------------------------------------------------------------
+    class RigLabelsUpdate(BaseModel):
+        labels: Dict[str, str]  # { "RIG1": "North Pad Unit", ... }
+
+    @api_router.get("/rigs/labels")
+    async def get_rig_labels(user: dict = Depends(require_user)):
+        team_id = user.get("team_id")
+        if not team_id:
+            return {"labels": {}}
+        docs = await db.rig_labels.find({"team_id": team_id}, {"_id": 0}).to_list(50)
+        return {"labels": {d["rig_id"]: d["label"] for d in docs if d.get("label")}}
+
+    @api_router.put("/rigs/labels")
+    async def put_rig_labels(body: RigLabelsUpdate, user: dict = Depends(require_user)):
+        require_management(user)
+        team_id = user.get("team_id")
+        if not team_id:
+            raise HTTPException(400, "No team.")
+        allowed = set([f"RIG{i}" for i in range(1, 26)]) | {"YARD"}
+        now = now_utc()
+        saved = 0
+        for rig_id, label in body.labels.items():
+            if rig_id not in allowed:
+                continue
+            label_clean = (label or "").strip()[:60]
+            if label_clean:
+                await db.rig_labels.update_one(
+                    {"team_id": team_id, "rig_id": rig_id},
+                    {"$set": {"team_id": team_id, "rig_id": rig_id, "label": label_clean,
+                              "updated_by": user["email"], "updated_at": now}},
+                    upsert=True,
+                )
+                saved += 1
+            else:
+                # Empty string = reset to default (delete override)
+                await db.rig_labels.delete_one({"team_id": team_id, "rig_id": rig_id})
+        return {"saved": saved}
+
     # PUBLIC — no auth required. Validates share token, creates a guest session, sets cookie.
     @api_router.get("/share/{token}")
     async def redeem_share_link(token: str, response: Response):

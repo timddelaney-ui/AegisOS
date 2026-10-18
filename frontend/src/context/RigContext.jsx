@@ -17,6 +17,19 @@ export const RIGS = [
   { id: "YARD", label: "Yard", accent: "#6B7280" },
 ];
 
+// Module-level cache of custom labels, kept in sync by RigProvider via refreshLabels().
+// All non-hook callers of rigLabel() read from this transparently — so custom names
+// propagate across every page/component that already imports `rigLabel`.
+let _labelCache = {};
+try {
+  const stored = localStorage.getItem("ctp_rig_labels_v1");
+  if (stored) _labelCache = JSON.parse(stored) || {};
+} catch { /* ignore */ }
+const _writeLabelCache = (v) => {
+  _labelCache = v || {};
+  try { localStorage.setItem("ctp_rig_labels_v1", JSON.stringify(_labelCache)); } catch { /* ignore */ }
+};
+
 const RigContext = createContext({
   rigId: "RIG1",
   setRigId: () => {},
@@ -24,6 +37,8 @@ const RigContext = createContext({
   lastSeen: {},
   markSeen: () => {},
   unreadFor: () => ({ chat: false, checklist: false }),
+  labels: {},
+  refreshLabels: () => {},
 });
 
 function readLastSeen() {
@@ -42,6 +57,7 @@ export const RigProvider = ({ children }) => {
   });
   const [activity, setActivity] = useState({}); // { [rigId]: { last_chat_at, last_checklist_at } }
   const [lastSeen, setLastSeen] = useState(readLastSeen);
+  const [labels, setLabels] = useState({}); // { RIG1: "North Pad Unit", ... }
   const timerRef = useRef(null);
 
   useEffect(() => {
@@ -64,11 +80,25 @@ export const RigProvider = ({ children }) => {
     }
   }, []);
 
+  const refreshLabels = useCallback(async () => {
+    try {
+      const { data } = await axios.get(`${API}/rigs/labels`, { withCredentials: true });
+      const next = data?.labels || {};
+      setLabels(next);
+      _writeLabelCache(next);
+    } catch (e) {
+      if (e?.response?.status && e.response.status !== 401) {
+        console.debug("RigContext: labels fetch failed", e.response.status);
+      }
+    }
+  }, []);
+
   useEffect(() => {
     fetchActivity();
+    refreshLabels();
     timerRef.current = setInterval(fetchActivity, 15000);
     return () => clearInterval(timerRef.current);
-  }, [fetchActivity]);
+  }, [fetchActivity, refreshLabels]);
 
   const markSeen = useCallback((rid, channel) => {
     setLastSeen((prev) => {
@@ -88,8 +118,8 @@ export const RigProvider = ({ children }) => {
   }, [activity, lastSeen]);
 
   const value = useMemo(
-    () => ({ rigId, setRigId, activity, lastSeen, markSeen, unreadFor, refreshActivity: fetchActivity }),
-    [rigId, setRigId, activity, lastSeen, markSeen, unreadFor, fetchActivity]
+    () => ({ rigId, setRigId, activity, lastSeen, markSeen, unreadFor, refreshActivity: fetchActivity, labels, refreshLabels }),
+    [rigId, setRigId, activity, lastSeen, markSeen, unreadFor, fetchActivity, labels, refreshLabels]
   );
 
   return <RigContext.Provider value={value}>{children}</RigContext.Provider>;
@@ -97,4 +127,14 @@ export const RigProvider = ({ children }) => {
 
 export const useRig = () => useContext(RigContext);
 export const rigAccent = (id) => (RIGS.find((r) => r.id === id) || RIGS[0]).accent;
-export const rigLabel  = (id) => (RIGS.find((r) => r.id === id) || RIGS[0]).label;
+// Default (hard-coded) label — "Rig 1" / "Yard".
+export const rigDefaultLabel = (id) => (RIGS.find((r) => r.id === id) || RIGS[0]).label;
+// Returns the team's custom override if set, else the default. Works outside of
+// hooks because it reads a module-level cache that RigProvider keeps in sync.
+export const rigLabel = (id) => _labelCache?.[id] || rigDefaultLabel(id);
+
+// Hook that returns the team-override label if set, else the default.
+export const useRigLabel = (id) => {
+  const { labels } = useRig();
+  return labels?.[id] || rigDefaultLabel(id);
+};

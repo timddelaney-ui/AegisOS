@@ -157,6 +157,26 @@ join only.
 - Stripe tiers go live (Tier 1 Hand $2.99/mo, Tier 2 Unit $249/yr).
 
 ## Changelog — 2026-02-18
+### Admin Rig Rename (team-scoped custom labels)
+- Management opens the rig dropdown → "Rename" (pencil) button → bulk editor
+  with one row per rig/yard, 60-char max, "reset" chip to clear overrides.
+- Backend `GET /api/rigs/labels` + `PUT /api/rigs/labels` (management-gated).
+  Stored per team in `rig_labels` collection; empty string = reset to default.
+- Context exposes a module-level label cache populated by `refreshLabels()` so
+  the existing `rigLabel(id)` function (called in 15+ places — ManagerDashboard,
+  CrewChat, TreatmentPage, NotificationCenter, HandoverModal, etc.) transparently
+  picks up custom names without touching those files. localStorage mirror
+  keeps labels available on next page load before the API responds.
+- New pytest `test_rig_labels_management_can_write_crew_cannot` — 25/25 Phase 2
+  tests passing.
+
+### Annotation Jump-to (replay from any pin)
+- Clicking an annotation pin now snaps the scrubber to the sample nearest
+  that timestamp (bisect by `|ts_sample - ts_annot|`).
+- If currently in live mode, auto-pauses the feed, enters playback, loads
+  history from server if ring-buffer is empty, then jumps.
+- Toast "Jumped to HH:MM:SS", view modal opens with the note's details.
+
 ### Playback Annotations (manual + rig-computer)
 - Supervisor+ can drop timestamped notes directly on the Live Ops playback
   timeline (severity: info | warn | critical) via the new "Drop note" button.
