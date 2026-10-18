@@ -104,7 +104,7 @@ const Login = () => {
 
               <div className="mt-6 bg-[#FF6B1A]/10 border border-[#FF6B1A]/30 rounded-lg p-3 text-xs">
                 <p className="font-bold text-[#FF6B1A] mb-1">30-Day Free Trial — No credit card</p>
-                <p className="text-white/70">Full platform access for 30 days. Then <span className="font-semibold text-white">$2.99/month</span> or <span className="font-semibold text-white">$24.99/year</span>.</p>
+                <p className="text-white/70">Full platform access for 30 days. Then <span className="font-semibold text-white">$19.99/month</span> or <span className="font-semibold text-white">$179/year</span>.</p>
               </div>
             </div>
           </div>
@@ -169,7 +169,7 @@ const Login = () => {
               <li><strong className="text-white">Cited, not guessed.</strong> Every result carries the API, AER, CSA, or IWCF reference in brackets.</li>
               <li><strong className="text-white">Advisory-only by design.</strong> A safety notice stays on every screen — this app supports safe work practices, it does not replace the licensee program, JHA, or site ERP.</li>
               <li><strong className="text-white">Team-aware.</strong> Invite your tool push and day shift to the same workspace. Shared jobs, shared feedback loop.</li>
-              <li><strong className="text-white">30-day free trial.</strong> Full access, no credit card. Upgrade to Pro ($2.99/mo or $24.99/yr) when you're ready.</li>
+              <li><strong className="text-white">30-day free trial.</strong> Full access, no credit card. Upgrade to Pro ($19.99/mo or $179/yr) when you're ready.</li>
             </ul>
           </div>
 

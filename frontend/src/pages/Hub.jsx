@@ -618,7 +618,7 @@ const Hub = () => {
               <Crown className="w-8 h-8 flex-shrink-0" strokeWidth={2} />
               <div className="flex-1">
                 <p className="text-sm font-bold">Cheaper than a coffee</p>
-                <p className="text-[11px] opacity-90">$2.99/mo or $24.99/yr — every sheet, AI, Emergency SOPs, and jobs.</p>
+                <p className="text-[11px] opacity-90">$19.99/mo or $179/yr — every sheet, AI, Emergency SOPs, and jobs.</p>
               </div>
               <button onClick={() => navigate("/pricing")} className="bg-white text-[#C44A08] px-3 py-2 rounded text-sm font-bold hover:bg-[#FFF7EF]">
                 Upgrade

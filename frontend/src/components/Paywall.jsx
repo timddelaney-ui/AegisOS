@@ -27,12 +27,12 @@ const Paywall = ({ sheetTitle, trialExpired = false }) => {
           </div>
           <div className="grid grid-cols-2 gap-3 text-center">
             <div className="bg-white border border-[#D4D4D4] rounded p-2">
-              <p className="text-2xl font-bold text-[#FF6B1A]">$2.99</p>
+              <p className="text-2xl font-bold text-[#FF6B1A]">$19.99</p>
               <p className="text-[10px] text-[#595959]">per month</p>
             </div>
             <div className="bg-white border border-[#FF6B1A] rounded p-2 relative">
-              <div className="absolute -top-2 right-1 bg-[#FF6B1A] text-white text-[8px] font-bold px-1 py-[1px] rounded">-30%</div>
-              <p className="text-2xl font-bold text-[#FF6B1A]">$24.99</p>
+              <div className="absolute -top-2 right-1 bg-[#FF6B1A] text-white text-[8px] font-bold px-1 py-[1px] rounded">-25%</div>
+              <p className="text-2xl font-bold text-[#FF6B1A]">$179</p>
               <p className="text-[10px] text-[#595959]">per year</p>
             </div>
           </div>
