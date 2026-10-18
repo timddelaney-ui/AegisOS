@@ -21,14 +21,30 @@ export const RIGS = [
 // All non-hook callers of rigLabel() read from this transparently — so custom names
 // propagate across every page/component that already imports `rigLabel`.
 let _labelCache = {};
+let _statusCache = {};
 try {
   const stored = localStorage.getItem("ctp_rig_labels_v1");
   if (stored) _labelCache = JSON.parse(stored) || {};
+  const storedS = localStorage.getItem("ctp_rig_status_v1");
+  if (storedS) _statusCache = JSON.parse(storedS) || {};
 } catch { /* ignore */ }
 const _writeLabelCache = (v) => {
   _labelCache = v || {};
   try { localStorage.setItem("ctp_rig_labels_v1", JSON.stringify(_labelCache)); } catch { /* ignore */ }
 };
+const _writeStatusCache = (v) => {
+  _statusCache = v || {};
+  try { localStorage.setItem("ctp_rig_status_v1", JSON.stringify(_statusCache)); } catch { /* ignore */ }
+};
+
+// Rig status palette — matched to field-safe colors.
+export const RIG_STATUS_META = {
+  running: { label: "Running",  color: "#10B981", bg: "#10B98120", short: "RUN" },
+  standby: { label: "Standby",  color: "#F59E0B", bg: "#F59E0B20", short: "STBY" },
+  down:    { label: "Down",     color: "#EF4444", bg: "#EF444420", short: "DOWN" },
+  yard:    { label: "In Yard",  color: "#6B7280", bg: "#6B728020", short: "YARD" },
+};
+export const RIG_STATUS_LIST = ["running", "standby", "down", "yard"];
 
 const RigContext = createContext({
   rigId: "RIG1",
@@ -58,6 +74,7 @@ export const RigProvider = ({ children }) => {
   const [activity, setActivity] = useState({}); // { [rigId]: { last_chat_at, last_checklist_at } }
   const [lastSeen, setLastSeen] = useState(readLastSeen);
   const [labels, setLabels] = useState({}); // { RIG1: "North Pad Unit", ... }
+  const [statuses, setStatuses] = useState({}); // { RIG1: {status, note, updated_by, updated_at}, ... }
   const timerRef = useRef(null);
 
   useEffect(() => {
@@ -93,12 +110,29 @@ export const RigProvider = ({ children }) => {
     }
   }, []);
 
+  const refreshStatuses = useCallback(async () => {
+    try {
+      const { data } = await axios.get(`${API}/rigs/status`, { withCredentials: true });
+      const next = data?.statuses || {};
+      setStatuses(next);
+      _writeStatusCache(next);
+    } catch (e) {
+      if (e?.response?.status && e.response.status !== 401) {
+        console.debug("RigContext: statuses fetch failed", e.response.status);
+      }
+    }
+  }, []);
+
   useEffect(() => {
     fetchActivity();
     refreshLabels();
-    timerRef.current = setInterval(fetchActivity, 15000);
+    refreshStatuses();
+    timerRef.current = setInterval(() => {
+      fetchActivity();
+      refreshStatuses(); // keep fleet status fresh every 15s
+    }, 15000);
     return () => clearInterval(timerRef.current);
-  }, [fetchActivity, refreshLabels]);
+  }, [fetchActivity, refreshLabels, refreshStatuses]);
 
   const markSeen = useCallback((rid, channel) => {
     setLastSeen((prev) => {
@@ -118,8 +152,8 @@ export const RigProvider = ({ children }) => {
   }, [activity, lastSeen]);
 
   const value = useMemo(
-    () => ({ rigId, setRigId, activity, lastSeen, markSeen, unreadFor, refreshActivity: fetchActivity, labels, refreshLabels }),
-    [rigId, setRigId, activity, lastSeen, markSeen, unreadFor, fetchActivity, labels, refreshLabels]
+    () => ({ rigId, setRigId, activity, lastSeen, markSeen, unreadFor, refreshActivity: fetchActivity, labels, refreshLabels, statuses, refreshStatuses }),
+    [rigId, setRigId, activity, lastSeen, markSeen, unreadFor, fetchActivity, labels, refreshLabels, statuses, refreshStatuses]
   );
 
   return <RigContext.Provider value={value}>{children}</RigContext.Provider>;
@@ -132,6 +166,11 @@ export const rigDefaultLabel = (id) => (RIGS.find((r) => r.id === id) || RIGS[0]
 // Returns the team's custom override if set, else the default. Works outside of
 // hooks because it reads a module-level cache that RigProvider keeps in sync.
 export const rigLabel = (id) => _labelCache?.[id] || rigDefaultLabel(id);
+
+// Returns the team's status for a rig (defaults to 'yard'). Non-hook accessor
+// backed by the module-level cache; use useRig().statuses for reactive reads.
+export const rigStatus = (id) => (_statusCache?.[id]?.status) || "yard";
+export const rigStatusNote = (id) => (_statusCache?.[id]?.note) || null;
 
 // Hook that returns the team-override label if set, else the default.
 export const useRigLabel = (id) => {

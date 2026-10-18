@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Menu, LogOut, Users, FolderOpen, Sparkles, X, Crown, MessageSquarePlus, ShieldAlert, Gift, Ticket, Home, RefreshCw } from "lucide-react";
+import { Menu, LogOut, Users, FolderOpen, Sparkles, X, Crown, MessageSquarePlus, ShieldAlert, Gift, Ticket, Home, RefreshCw, HelpCircle } from "lucide-react";
 import axios from "axios";
 import { useAuth, API, isProUser } from "../context/AuthContext";
 import CoilAegisLogo from "./CoilAegisLogo";
+import WelcomeTour, { useWelcomeTour } from "./WelcomeTour";
 
 /**
  * Hard reset the installed PWA: unregister any service worker and nuke caches,
@@ -30,6 +31,7 @@ const AppHeader = () => {
   const [isAdmin, setIsAdmin] = useState(false);
   const navigate = useNavigate();
   const isPro = isProUser(user);
+  const { open: tourOpen, openTour, closeTour } = useWelcomeTour();
 
   useEffect(() => {
     if (!user) return;
@@ -56,9 +58,20 @@ const AppHeader = () => {
             </span>
           )}
         </button>
-        <button onClick={() => setMenuOpen(true)} data-testid="menu-open" className="p-2 -mr-1 hover:bg-white/10 rounded tap-44" aria-label="Open menu">
-          <Menu className="w-5 h-5" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            data-testid="header-help-btn"
+            onClick={openTour}
+            className="p-2 hover:bg-white/10 rounded tap-44 text-white/70 hover:text-white"
+            aria-label="Open tutorial"
+            title="Replay welcome tour"
+          >
+            <HelpCircle className="w-5 h-5" />
+          </button>
+          <button onClick={() => setMenuOpen(true)} data-testid="menu-open" className="p-2 -mr-1 hover:bg-white/10 rounded tap-44" aria-label="Open menu">
+            <Menu className="w-5 h-5" />
+          </button>
+        </div>
       </header>
 
       {menuOpen && (
@@ -112,6 +125,13 @@ const AppHeader = () => {
               )}
               <div className="border-t border-white/10 my-2"></div>
               <button
+                data-testid="menu-replay-tour"
+                onClick={() => { setMenuOpen(false); openTour(); }}
+                className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 rounded text-sm font-medium"
+              >
+                <HelpCircle className="w-4 h-4 text-[#FF6B1A]" /> Replay welcome tour
+              </button>
+              <button
                 data-testid="menu-reset-app"
                 onClick={() => {
                   if (window.confirm("Reset the app? Clears cached files and reloads with the latest version. Your data on the server is unaffected.")) {
@@ -129,6 +149,7 @@ const AppHeader = () => {
           </div>
         </div>
       )}
+      <WelcomeTour open={tourOpen} onClose={closeTour} />
     </>
   );
 };

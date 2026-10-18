@@ -2100,6 +2100,67 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
                 await db.rig_labels.delete_one({"team_id": team_id, "rig_id": rig_id})
         return {"saved": saved}
 
+    # -----------------------------------------------------------------
+    # PHASE 2 — Rig Fleet Status (Running / Standby / Down / Yard)
+    # Supervisor+ can set a per-rig status so management sees fleet state
+    # at a glance in the rig dropdown. Any authenticated user can read.
+    # -----------------------------------------------------------------
+    ALLOWED_RIG_STATUSES = ("running", "standby", "down", "yard")
+
+    class RigStatusItem(BaseModel):
+        status: str                          # 'running' | 'standby' | 'down' | 'yard'
+        note: Optional[str] = None           # optional short reason (down reason, standby waiting on …)
+
+    class RigStatusUpdate(BaseModel):
+        statuses: Dict[str, RigStatusItem]   # { "RIG1": {status: "running", note: ""}, ... }
+
+    @api_router.get("/rigs/status")
+    async def get_rig_status(user: dict = Depends(require_user)):
+        team_id = user.get("team_id")
+        if not team_id:
+            return {"statuses": {}}
+        docs = await db.rig_status.find({"team_id": team_id}, {"_id": 0}).to_list(50)
+        out = {}
+        for d in docs:
+            rig_id = d.get("rig_id")
+            if not rig_id:
+                continue
+            out[rig_id] = {
+                "status": d.get("status") or "yard",
+                "note": d.get("note"),
+                "updated_by": d.get("updated_by"),
+                "updated_at": d.get("updated_at").isoformat() if isinstance(d.get("updated_at"), datetime) else d.get("updated_at"),
+            }
+        return {"statuses": out}
+
+    @api_router.put("/rigs/status")
+    async def put_rig_status(body: RigStatusUpdate, user: dict = Depends(require_user)):
+        require_supervisor(user)
+        team_id = user.get("team_id")
+        if not team_id:
+            raise HTTPException(400, "No team.")
+        allowed_rigs = set([f"RIG{i}" for i in range(1, 26)]) | {"YARD"}
+        now = now_utc()
+        saved = 0
+        for rig_id, item in body.statuses.items():
+            if rig_id not in allowed_rigs:
+                continue
+            st = (item.status or "").lower()
+            if st not in ALLOWED_RIG_STATUSES:
+                continue
+            await db.rig_status.update_one(
+                {"team_id": team_id, "rig_id": rig_id},
+                {"$set": {
+                    "team_id": team_id, "rig_id": rig_id,
+                    "status": st,
+                    "note": (item.note or "").strip()[:120] or None,
+                    "updated_by": user["email"], "updated_at": now,
+                }},
+                upsert=True,
+            )
+            saved += 1
+        return {"saved": saved}
+
     # PUBLIC — no auth required. Validates share token, creates a guest session, sets cookie.
     @api_router.get("/share/{token}")
     async def redeem_share_link(token: str, response: Response):

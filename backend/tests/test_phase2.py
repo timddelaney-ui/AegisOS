@@ -339,3 +339,48 @@ def test_rig_labels_management_can_write_crew_cannot():
     # Cleanup
     with c() as x:
         x.put("/rigs/labels", json={"labels": {"RIG1": "", "YARD": ""}})
+
+
+# -----------------------------------------------------------------
+# Rig Fleet Status (Running / Standby / Down / Yard)
+# -----------------------------------------------------------------
+def test_rig_status_supervisor_can_write_crew_cannot():
+    with c() as x:
+        # Supervisor+ (demo is management) can write
+        r = x.put("/rigs/status", json={"statuses": {
+            "RIG1": {"status": "running", "note": "Pumping on Pad 7"},
+            "RIG2": {"status": "down", "note": "Awaiting BOP cert"},
+            "YARD": {"status": "yard"},
+        }})
+        assert r.status_code == 200, r.text
+        assert r.json()["saved"] == 3
+
+        r = x.get("/rigs/status")
+        d = r.json()["statuses"]
+        assert d["RIG1"]["status"] == "running"
+        assert d["RIG1"]["note"] == "Pumping on Pad 7"
+        assert d["RIG2"]["status"] == "down"
+        assert d["YARD"]["status"] == "yard"
+
+        # Invalid status silently skipped
+        r = x.put("/rigs/status", json={"statuses": {"RIG1": {"status": "exploded"}}})
+        assert r.json()["saved"] == 0
+
+        # Invalid rig_id silently skipped
+        r = x.put("/rigs/status", json={"statuses": {"RIG999": {"status": "running"}}})
+        assert r.json()["saved"] == 0
+
+    # Crew cannot write
+    with c() as x:
+        x.post("/rbac/promote", json={"user_id": "demo_pro_user", "role": "crew"})
+    try:
+        with c() as x:
+            r = x.put("/rigs/status", json={"statuses": {"RIG1": {"status": "running"}}})
+            assert r.status_code == 403
+            # But crew CAN read
+            r = x.get("/rigs/status")
+            assert r.status_code == 200
+    finally:
+        subprocess.run(["mongosh", "--quiet", "--eval",
+            'db=db.getSiblingDB("test_database"); db.users.updateOne({user_id:"demo_pro_user"},{$set:{role:"ops_manager"}})'],
+            check=False)

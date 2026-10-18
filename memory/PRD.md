@@ -157,6 +157,23 @@ join only.
 - Stripe tiers go live (Tier 1 Hand $2.99/mo, Tier 2 Unit $249/yr).
 
 ## Changelog — 2026-02-18
+### Rig Fleet Status badges + Welcome Tour
+- **Rig Status**: new `rig_status` collection (status: running/standby/down/yard
+  + optional note). Supervisor+ can PUT via inline chip-menu in the rig dropdown;
+  management sees fleet state at a glance. Shown as colored chips on every row
+  AND on the active-rig button in the top-bar. Fleet summary strip at top of
+  dropdown counts RUN/STBY/DOWN/YARD. 15s refresh poll. Module-level cache
+  (`rigStatus(id)`) + localStorage mirror so chips survive refresh.
+- **Welcome Tour**: 9-slide onboarding modal (`WelcomeTour.jsx`) that auto-fires
+  on first login (localStorage flag `coilaegis_tour_seen_v1`), re-openable via a
+  `?` button in the header AND a "Replay welcome tour" entry in the hamburger
+  menu. Slides cover: Welcome, Hub, Live Ops + annotations, Stress & Fatigue,
+  Crew & HR workflows, Rig Fleet View, AI assistant modes, Guest Share Links,
+  and a closing "you're ready" slide with pro tips. Progress dots, prev/next,
+  skip, and an "Open Live Ops" button on the final slide.
+- 2 new pytests cover rig status CRUD + RBAC. **12/12 Phase 2 tests passing**.
+
+## Changelog — 2026-02-18
 ### Admin Rig Rename (team-scoped custom labels)
 - Management opens the rig dropdown → "Rename" (pencil) button → bulk editor
   with one row per rig/yard, 60-char max, "reset" chip to clear overrides.
