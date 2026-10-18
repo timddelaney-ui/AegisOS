@@ -258,12 +258,14 @@ const CTDrillingCalculator = () => {
       };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#F3F3F3] to-[#E8ECEF] flex flex-col">
-      <ExcelHeader />
-      <AdvisoryStrip />
+    <div className="min-h-screen bg-gradient-to-b from-[#F3F3F3] to-[#E8ECEF] flex flex-col print:bg-white">
+      <div className="print:hidden">
+        <ExcelHeader />
+        <AdvisoryStrip />
+      </div>
 
       {/* Toolbar */}
-      <div className="bg-white border-b border-[#D4D4D4] px-3 py-2 flex items-center gap-2 sticky top-0 z-10">
+      <div className="bg-white border-b border-[#D4D4D4] px-3 py-2 flex items-center gap-2 sticky top-0 z-10 print:hidden">
         <button
           data-testid="ctd-back-btn"
           onClick={() => navigate("/hub")}
@@ -389,7 +391,7 @@ const CTDrillingCalculator = () => {
           )}
 
           {/* Actions */}
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap print:hidden">
             <ScenarioManager currentVals={vals} unitSystem={unitSystem} onLoad={onLoadScenario} />
             <button
               data-testid="ctd-reset-btn"
@@ -544,6 +546,23 @@ const CTDrillingCalculator = () => {
           };
         }}
       />
+
+      <style>{`
+        @media print {
+          body { background: white !important; }
+          .print\\:hidden { display: none !important; }
+          .print\\:bg-white { background: white !important; }
+          [data-testid="ctd-results-panel"],
+          [data-testid="ctd-depth-plot"],
+          [data-testid="ctd-nitrogen-planner"],
+          [data-testid="ctd-warnings"] {
+            break-inside: avoid;
+            page-break-inside: avoid;
+            box-shadow: none !important;
+          }
+          .shadow-sm, .shadow-md { box-shadow: none !important; }
+        }
+      `}</style>
     </div>
   );
 };

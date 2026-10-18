@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
-import { X, Copy, Check, Loader2, FileText, ClipboardCheck, Package, Wrench, ListChecks, MessageSquare, Paperclip, Mail, Send, Users, Zap } from "lucide-react";
+import { X, Copy, Check, Loader2, FileText, ClipboardCheck, Package, Wrench, ListChecks, Paperclip, Mail, Send, Users, Zap } from "lucide-react";
 import { API } from "../context/AuthContext";
 import { useRig, rigLabel } from "../context/RigContext";
 import AttachmentUploader from "./AttachmentUploader";
@@ -46,12 +46,7 @@ const buildText = (rigLabelStr, s) => {
   }
   lines.push("");
 
-  lines.push(`CHAT NOTES (${s.chat_notes.length})`);
-  if (s.chat_notes.length === 0) lines.push("  — quiet shift");
-  for (const c of s.chat_notes.slice().reverse()) {
-    lines.push(`  • ${fmt(c.created_at)} ${c.sender_name}: ${c.text.replace(/\n/g, " ")}`);
-  }
-  lines.push("");
+  // Crew chat is intentionally omitted — chat stays private to the active crew.
   lines.push("— End of handover —");
   return lines.join("\n");
 };
@@ -421,21 +416,6 @@ const HandoverModal = ({ open, onClose }) => {
                         <span className="font-medium">{it.name}</span>
                         {it.location && <span className="text-[11px] text-[#595959]"> @ {it.location}</span>}
                         {it.note && <div className="text-[11px] text-[#595959] italic">{it.note}</div>}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </Section>
-
-              <Section title="Chat notes" Icon={MessageSquare} accent="#0D6535" count={summary.chat_notes.length}>
-                {summary.chat_notes.length === 0 ? (
-                  <div className="text-[#8A8A8A] italic px-1">Quiet shift.</div>
-                ) : (
-                  <ul className="divide-y divide-[#F0F0F0]">
-                    {summary.chat_notes.slice().reverse().map((c) => (
-                      <li key={c.message_id} className="py-1.5">
-                        <div className="text-[11px]"><span className="font-bold">{c.sender_name}</span> <span className="text-[#8A8A8A]">• {fmt(c.created_at)}</span></div>
-                        <div className="text-[12px] whitespace-pre-wrap text-[#262626]">{c.text}</div>
                       </li>
                     ))}
                   </ul>

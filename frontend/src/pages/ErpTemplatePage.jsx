@@ -201,9 +201,7 @@ const ErpTemplatePage = () => {
       </div>
 
       <div className="flex-1 overflow-y-auto pb-10 print:overflow-visible">
-        <div className="max-w-4xl mx-auto p-3 space-y-3 print:p-6 print:space-y-2" data-testid="erp-template-sheet">
-
-          {/* Printable header strip */}
+        <div className="max-w-4xl mx-auto p-3 space-y-3 print:p-6 print:space-y-2" data-testid="erp-template-sheet">          {/* Printable header strip */}
           <div className="bg-gradient-to-r from-[#8B0000] to-[#C00000] text-white rounded-xl p-3 shadow-sm print:rounded-none print:shadow-none">
             <div className="flex items-center gap-3">
               <AlertOctagon className="w-7 h-7 flex-shrink-0" strokeWidth={2.4} />
@@ -392,6 +390,16 @@ const ErpTemplatePage = () => {
           </div>
         </div>
       )}
+
+      <style>{`
+        @media print {
+          body { background: white !important; margin: 0; }
+          .print\\:hidden { display: none !important; }
+          .print\\:bg-white { background: white !important; }
+          .shadow-sm, .shadow-md, .shadow-xl { box-shadow: none !important; }
+          @page { size: A4; margin: 12mm; }
+        }
+      `}</style>
     </div>
   );
 };

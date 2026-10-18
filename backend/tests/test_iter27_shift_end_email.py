@@ -127,11 +127,12 @@ def test_shift_end_body_structure(json_headers):
             "rig_id": "RIG1", "hours": 24,
         })
         body = r.json()["body_text"]
-        # The three mandatory sections
+        # The two mandatory sections (crew chat intentionally omitted — private)
         assert "TREATMENT / OPERATIONS LOG" in body
-        assert "CREW CHAT" in body
         assert "OPEN TO-DOS" in body
         assert "— End of handover —" in body
+        # Crew chat MUST NOT leak into handover
+        assert "CREW CHAT" not in body
     finally:
         _cleanup_contacts(json_headers)
 

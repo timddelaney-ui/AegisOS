@@ -1939,12 +1939,9 @@ async def crew_handover_summary(rig_id: str, hours: int = 12, user: dict = Depen
         {"_id": 0},
     ).sort("updated_at", -1).to_list(100)
 
-    # Recent chat notes (non-alert, non-skipper) in window
-    chat_notes = await db.crew_messages.find(
-        {"team_id": team_id, "$or": rig_or_legacy, "created_at": {"$gte": cutoff},
-         "is_alert": {"$ne": True}, "is_skipper": {"$ne": True}},
-        {"_id": 0},
-    ).sort("created_at", -1).to_list(30)
+    # Note: crew chat is intentionally OMITTED from handover summaries — chat stays
+    # private to the active crew. Supervisors share status via the structured sections
+    # (completed tasks, inventory flags, open to-dos) instead.
 
     return {
         "rig_id": rig_id,
@@ -1956,7 +1953,7 @@ async def crew_handover_summary(rig_id: str, hours: int = 12, user: dict = Depen
         "inventory_flags": [_serialize(d) for d in inv_flags],
         "parts_open": [_serialize(d) for d in parts_open],
         "todos_open": [_serialize(d) for d in todos_open],
-        "chat_notes": [_serialize(d) for d in chat_notes],
+        "chat_notes": [],  # deprecated — kept for backward compat with older clients
     }
 
 
@@ -2220,26 +2217,8 @@ async def _build_shift_end_body(team_id: str, rig_id: str, hours: int) -> str:
             txt = (e.get("text") or "").strip().replace("\n", " ")
             lines.append(f"  {tstr}  {author}: {txt}")
 
-    # Crew chat (skip own? here include everyone's — supervisor sees context)
-    try:
-        msgs = await db.crew_messages.find(
-            {"team_id": team_id, "rig_id": rig_id, "created_at": {"$gte": cutoff}},
-            {"_id": 0}
-        ).sort("created_at", 1).to_list(500)
-    except Exception:
-        msgs = []
-    lines.append("")
-    lines.append(f"CREW CHAT ({len(msgs)} messages)")
-    if not msgs:
-        lines.append("  — No chat traffic in window.")
-    else:
-        for m in msgs:
-            ts = m.get("created_at")
-            tstr = ts.strftime("%H:%M") if hasattr(ts, "strftime") else str(ts)[:16]
-            who = m.get("sender_name") or m.get("sender_email") or "crew"
-            txt = (m.get("text") or "").strip().replace("\n", " ")
-            if txt:
-                lines.append(f"  {tstr}  {who}: {txt}")
+    # Crew chat is intentionally OMITTED — chat stays private to the active crew.
+    # Supervisors share status via Treatment log + open to-dos below.
 
     # To-dos still open
     try:
