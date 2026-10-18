@@ -156,6 +156,49 @@ join only.
   Engineering Job Audit Dossier PDF.
 - Stripe tiers go live (Tier 1 Hand $2.99/mo, Tier 2 Unit $249/yr).
 
+## Changelog — 2026-02-18 · Real DAQ listeners
+### WITS 0 / Modbus TCP / WITSML REST ingest wired
+- **`daq_listeners.py`** — asyncio listener framework with 3 production
+  protocol drivers:
+  - **WITS 0 TCP**: opens persistent connection, parses `&&...!!` framed
+    records, decodes public WITS tags (0108 depth, 0111 weight,
+    0112 standpipe, 0114 casing, 0127 traction, 0128 axial). Custom
+    channel maps per config.
+  - **Modbus TCP** (via `pymodbus`): polls holding registers at 1 Hz,
+    supports int16/int32/uint16/uint32/float32 types. Register map in
+    config `channel_map` as `"40001:float32"` syntax.
+  - **WITSML REST** (via `aiohttp`): polls a user-supplied JSON endpoint
+    every 2 s, extracts fields via dotted JSON paths. SOAP 1.4 kept on
+    roadmap (needs commercial zeep client).
+- **`DaqOrchestrator`** — spawned on FastAPI startup, scans `daq_configs`
+  for `enabled: True` every 15 s, maintains one asyncio task per config
+  with exponential-backoff reconnection (1 → 2 → 4 → 8 → … → 60 s cap).
+  Writes status (`idle` / `connecting` / `connected` / `error`) + `last_error`
+  + `last_sample_at` back to the config doc.
+- **Samples flow into existing `liveops_samples` collection** so the
+  dashboard, playback scrubber, annotations, CSV/LAS export, and guest
+  share-links all render real rig data identically to the simulator.
+- **New `/api/daq/test` endpoint** — supervisor-only one-shot probe
+  (default 10 s timeout) that opens the socket, reads one sample, closes.
+  Returns `{ok, error, sample}` so users can validate credentials before
+  flipping Enable.
+- **UI**: DAQ page now has a per-row **Test** button; result renders as a
+  green "Sample OK" chip (with sample preview on hover) or red error
+  pill. Updated banner from "Phase 2 scaffold" to "Real DAQ listeners
+  active".
+- **LiveOps dashboard**: when "Connected to unit" is ON, polls
+  `/liveops/stream?limit=1` and uses the real sample if fresh (<5 s old);
+  otherwise falls back to simulator. Subtitle shows `LIVE · WITS0` or
+  `LIVE · MODBUS` instead of just "Connected".
+- Dependencies installed: `pymodbus==3.16.1`. Updated requirements.txt.
+- Mock WITS 0 server at `/app/backend/tools/mock_wits_server.py` for
+  future regression tests.
+- **End-to-end verified**: spawned mock → enabled config → orchestrator
+  reconciled → listener connected → samples ingested with
+  `source: "wits0"`, depth/pressure/weight all plumbed. Verified
+  reconnect backoff after server drop. 15/15 Phase 2 pytests passing
+  (3 new DAQ probe tests).
+
 ## Changelog — 2026-02-18 · Field Beta drop
 ### Thick-wall Von Mises + Injector-skate ovality + Universal Share Links
 - **Von Mises flipped back to thick-wall Lamé** (API RP 5C7). Dual envelope

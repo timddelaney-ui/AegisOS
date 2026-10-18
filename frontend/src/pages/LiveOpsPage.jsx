@@ -207,42 +207,60 @@ export default function LiveOpsPage() {
   };
   useEffect(() => { refreshFatigue(); }, [activeReel?.reel_id]); // eslint-disable-line
 
-  // Simulator / connected feed tick
+  // Simulator / connected feed tick. When `connected` is ON, we poll the server
+  // for the newest sample (populated by a real WITS 0 / Modbus / WITSML listener)
+  // instead of running the local simulator. Falls back to the simulator if the
+  // server has no fresh sample within the last 5 seconds.
   useEffect(() => {
     if (!running) { if (timerRef.current) clearInterval(timerRef.current); timerRef.current = null; return; }
     timerRef.current = setInterval(async () => {
       feedTickRef.current += 1;
       const t = feedTickRef.current;
       const nowMs = Date.now();
+      let realSample = null;
+      if (connected) {
+        try {
+          const r = await axios.get(`${API}/liveops/stream`, { params: { limit: 1 }, withCredentials: true });
+          const srv = r.data?.samples?.[0];
+          if (srv) {
+            const srvTs = Date.parse(srv.created_at || 0);
+            if (nowMs - srvTs < 5000) {
+              realSample = {
+                depth_ft: srv.depth_ft, p_internal_psi: srv.p_internal_psi, p_external_psi: srv.p_external_psi,
+                traction_pressure_psi: srv.traction_pressure_psi, weight_lb: srv.weight_lb,
+                axial_force_lbf: srv.axial_force_lbf, pressure_psi: srv.pressure_psi,
+                ts: srv.created_at, source: srv.source || "wits",
+              };
+            }
+          }
+        } catch { /* fall through to simulator */ }
+      }
       setSamples((prev) => {
         const last = prev[prev.length - 1];
-        const next = { ...nextSimSample(last, t), ts: new Date(nowMs).toISOString(), source: connected ? "wits" : "simulated" };
+        const next = realSample || { ...nextSimSample(last, t), ts: new Date(nowMs).toISOString(), source: connected ? "wits_fallback_sim" : "simulated" };
         const buf = [...prev, next];
         if (buf.length > RING) buf.splice(0, buf.length - RING);
-        setCurrentDepth(Math.round(next.depth_ft));
+        setCurrentDepth(Math.round(next.depth_ft || 0));
         return buf;
       });
-      // feed server-side ring buffer (resilient — queues offline if network drops)
-      try {
-        const last = samples[samples.length - 1];
-        const sample = nextSimSample(last, t);
-        await postSampleResilient({
-          ...sample,
-          reel_id: activeReel?.reel_id,
-          source: connected ? "wits" : "simulated",
-        });
-      } catch { /* already handled by resilient wrapper */ }
-      // Every 3 seconds, advance the fatigue engine with the latest traction pressure
-      if (t % 3 === 0 && activeReel?.reel_id) {
+      // Only post simulator samples to the ring buffer — real DAQ already stored by the server listener.
+      if (!realSample) {
         try {
           const last = samples[samples.length - 1];
           const sample = nextSimSample(last, t);
+          await postSampleResilient({ ...sample, reel_id: activeReel?.reel_id, source: "simulated" });
+        } catch { /* already handled by resilient wrapper */ }
+      }
+      // Every 3 seconds, advance the fatigue engine with the latest traction pressure
+      if (t % 3 === 0 && activeReel?.reel_id) {
+        try {
+          const src = realSample || nextSimSample(samples[samples.length - 1], t);
           const r = await axios.post(`${API}/fatigue/feed`, {
             reel_id: activeReel.reel_id,
-            depth_ft: sample.depth_ft,
-            traction_pressure_psi: sample.traction_pressure_psi,
+            depth_ft: src.depth_ft,
+            traction_pressure_psi: src.traction_pressure_psi,
             cycle_count: 1,
-            source: connected ? "wits" : "simulated",
+            source: realSample ? (realSample.source || "wits") : "simulated",
           }, { withCredentials: true });
           setFatigue(r.data);
         } catch {}
@@ -453,10 +471,18 @@ export default function LiveOpsPage() {
     savePrefs(next);
   };
 
+  // If a real DAQ listener is writing samples, show its source in the subtitle
+  const liveSource = useMemo(() => {
+    const srcCounts = {};
+    for (const s of samples.slice(-30)) srcCounts[s.source || "simulated"] = (srcCounts[s.source || "simulated"] || 0) + 1;
+    const real = ["wits0", "wits", "modbus", "witsml"].find((k) => srcCounts[k]);
+    return real || "simulated";
+  }, [samples]);
+
   const subtitle = mode === "playback"
     ? `PLAYBACK · T${scrubRelativeSec(playbackIdx) >= 0 ? "+" : ""}${scrubRelativeSec(playbackIdx)}s · ${samples.length}s buffered`
     : running
-      ? `${connected ? "Connected · WITS" : "Simulated"} · ${samples.length}/${RING}s · depth ${Math.round(latest.depth_ft || 0)} ft`
+      ? `${liveSource === "simulated" ? "Simulated" : `LIVE · ${liveSource.toUpperCase()}`} · ${samples.length}/${RING}s · depth ${Math.round(latest.depth_ft || 0)} ft`
       : "Idle";
 
   return (

@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { Phase1PageHeader } from "../components/Phase1Header";
 import { useAuth, API } from "../context/AuthContext";
 import { isSupervisorOrHigher } from "../lib/roles";
-import { Plus, Trash2, Wifi, WifiOff, AlertCircle, Lock, Zap } from "lucide-react";
+import { Plus, Trash2, Wifi, WifiOff, AlertCircle, Lock, Zap, Loader2, CheckCircle2, XCircle } from "lucide-react";
 
 const PROTOCOLS = [
   { v: "wits0_tcp", l: "WITS 0 — TCP" },
@@ -58,6 +58,31 @@ export default function DaqConfigPage() {
     catch (e) { toast.error(e.response?.data?.detail || "Failed"); }
   };
 
+  const [testing, setTesting] = useState(null); // config_id currently probing
+  const [testResults, setTestResults] = useState({}); // config_id -> {ok, error, sample}
+  const testConnection = async (cfg) => {
+    setTesting(cfg.config_id);
+    setTestResults((r) => ({ ...r, [cfg.config_id]: null }));
+    try {
+      const r = await axios.post(`${API}/daq/test`, {
+        protocol: cfg.protocol,
+        host: cfg.host,
+        port: cfg.port,
+        witsml_url: cfg.witsml_url,
+        channel_map: cfg.channel_map,
+        modbus_unit_id: cfg.modbus_unit_id,
+        timeout_s: 10,
+      }, { withCredentials: true });
+      setTestResults((rr) => ({ ...rr, [cfg.config_id]: r.data }));
+      if (r.data.ok) toast.success(`Probe OK — received sample from ${cfg.name}`);
+      else toast.error(`Probe failed — ${r.data.error}`);
+    } catch (e) {
+      const err = e.response?.data?.detail || e.message || "Probe failed";
+      setTestResults((rr) => ({ ...rr, [cfg.config_id]: { ok: false, error: err } }));
+      toast.error(err);
+    } finally { setTesting(null); }
+  };
+
   return (
     <div className="min-h-screen bg-[#F3F3F3]">
       <Phase1PageHeader title="DAQ Listeners · Phase 2" subtitle="WITS 0 / Modbus TCP / WITSML — add a profile per CT unit, flip Enable when the field test is ready." />
@@ -65,8 +90,8 @@ export default function DaqConfigPage() {
         <div className="bg-[#DBEAFE] text-[#0056B3] rounded-lg p-2 text-[11px] flex items-start gap-2">
           <Zap className="w-4 h-4 flex-shrink-0 mt-0.5" />
           <div>
-            <p className="font-bold">Phase 2 scaffold</p>
-            <p>Profiles stored and listener status surfaced. The in-process listener skeleton engages once your field DAQ is connected — until then the Live Ops "Connected to unit" button still runs the Phase 1 simulator and your real-DAQ profile shows <code>idle</code>.</p>
+            <p className="font-bold">Real DAQ listeners active</p>
+            <p>WITS 0 TCP, Modbus TCP, and WITSML REST are live. Add a profile, hit <b>Test</b> to verify your endpoint, then <b>Enable</b> to stream real rig data into Live Ops. Falls back to the simulator while a profile is disabled.</p>
           </div>
         </div>
 
@@ -118,9 +143,28 @@ export default function DaqConfigPage() {
               {c.serial_port && <span className="text-[11px] tabular-nums text-[#595959]">{c.serial_port} @ {c.baud}</span>}
               {c.witsml_url && <span className="text-[11px] text-[#595959] truncate max-w-[280px]">{c.witsml_url}</span>}
               {c.last_error && <span className="text-[11px] text-[#C00000]">· {c.last_error}</span>}
-              <div className="ml-auto flex gap-1">
+              <div className="ml-auto flex gap-1 items-center">
+                {testResults[c.config_id] && (
+                  <span
+                    data-testid={`daq-test-result-${c.config_id}`}
+                    className={`text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 ${testResults[c.config_id].ok ? "bg-[#DCFCE7] text-[#065F46]" : "bg-[#F8D7DA] text-[#991B1B]"}`}
+                    title={testResults[c.config_id].ok ? JSON.stringify(testResults[c.config_id].sample || {}) : testResults[c.config_id].error}
+                  >
+                    {testResults[c.config_id].ok
+                      ? <><CheckCircle2 className="w-3 h-3" />Sample OK</>
+                      : <><XCircle className="w-3 h-3" />{(testResults[c.config_id].error || "").slice(0, 40)}</>}
+                  </span>
+                )}
                 {canEdit && (
                   <>
+                    <button
+                      data-testid={`daq-test-${c.config_id}`}
+                      onClick={() => testConnection(c)}
+                      disabled={testing === c.config_id}
+                      className="text-[11px] font-bold px-2 py-1 rounded bg-[#0056B3] text-white hover:bg-[#003D7A] disabled:opacity-50 flex items-center gap-1"
+                    >
+                      {testing === c.config_id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}Test
+                    </button>
                     <button data-testid={`daq-toggle-${c.config_id}`} onClick={() => toggle(c)} className={`text-[11px] font-bold px-2 py-1 rounded ${c.enabled ? "bg-[#C00000] text-white" : "bg-[#FF6B1A] text-white"}`}>
                       {c.enabled ? "Disable" : "Enable"}
                     </button>

@@ -1546,6 +1546,7 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
         witsml_version: Optional[str] = "1.4.1.1"
         rig_id: Optional[str] = None
         channel_map: Optional[Dict[str, str]] = None
+        modbus_unit_id: Optional[int] = 1
         enabled: bool = False
         notes: Optional[str] = None
 
@@ -1616,6 +1617,32 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
         if res.deleted_count == 0:
             raise HTTPException(404, "Config not found.")
         return {"success": True}
+
+    # -----------------------------------------------------------------
+    # DAQ connection test — supervisor+ validates endpoint before enabling
+    # -----------------------------------------------------------------
+    class DaqTestBody(BaseModel):
+        protocol: str
+        host: Optional[str] = None
+        port: Optional[int] = None
+        witsml_url: Optional[str] = None
+        witsml_version: Optional[str] = "2.0"
+        channel_map: Optional[Dict[str, str]] = None
+        modbus_unit_id: Optional[int] = 1
+        timeout_s: Optional[float] = 10.0
+
+    @api_router.post("/daq/test")
+    async def test_daq_connection(body: DaqTestBody, user: dict = Depends(require_user)):
+        require_supervisor(user)
+        from daq_listeners import connection_probe
+        cfg = body.model_dump()
+        if cfg["protocol"] not in SUPPORTED_PROTOCOLS:
+            raise HTTPException(400, f"protocol must be one of {sorted(SUPPORTED_PROTOCOLS)}")
+        try:
+            result = await connection_probe(cfg, timeout_s=cfg.get("timeout_s") or 10.0)
+            return result
+        except Exception as e:
+            raise HTTPException(500, f"Probe failed: {e}")
 
     class DaqStatusPatch(BaseModel):
         """Called by in-process listener (Phase 2) or health check to flip status."""

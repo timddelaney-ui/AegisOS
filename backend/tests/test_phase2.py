@@ -384,3 +384,41 @@ def test_rig_status_supervisor_can_write_crew_cannot():
         subprocess.run(["mongosh", "--quiet", "--eval",
             'db=db.getSiblingDB("test_database"); db.users.updateOne({user_id:"demo_pro_user"},{$set:{role:"ops_manager"}})'],
             check=False)
+
+
+# -----------------------------------------------------------------
+# DAQ listeners — probe endpoint + protocol validation
+# -----------------------------------------------------------------
+def test_daq_test_endpoint_validates_protocol():
+    with c() as x:
+        r = x.post("/daq/test", json={"protocol": "nonsense", "host": "127.0.0.1", "port": 1, "timeout_s": 1})
+        assert r.status_code == 400
+        assert "protocol" in r.json()["detail"].lower()
+
+
+def test_daq_test_endpoint_unreachable_wits_returns_graceful_error():
+    """A real DAQ probe to an unreachable TCP endpoint returns a clean error, not 500."""
+    with c() as x:
+        r = x.post("/daq/test", json={
+            "protocol": "wits0_tcp", "host": "127.0.0.1", "port": 1,  # unused high port
+            "timeout_s": 2,
+        })
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data["ok"] is False
+        assert data["error"]  # some error string
+        assert data["protocol"] == "wits0_tcp"
+
+
+def test_daq_test_endpoint_requires_supervisor():
+    """Crew role is blocked from testing DAQ endpoints."""
+    with c() as x:
+        x.post("/rbac/promote", json={"user_id": "demo_pro_user", "role": "crew"})
+    try:
+        with c() as x:
+            r = x.post("/daq/test", json={"protocol": "wits0_tcp", "host": "127.0.0.1", "port": 1, "timeout_s": 1})
+            assert r.status_code == 403
+    finally:
+        subprocess.run(["mongosh", "--quiet", "--eval",
+            'db=db.getSiblingDB("test_database"); db.users.updateOne({user_id:"demo_pro_user"},{$set:{role:"ops_manager"}})'],
+            check=False)

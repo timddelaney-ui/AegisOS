@@ -3812,3 +3812,49 @@ async def _init_storage_on_boot():
         init_storage()
     except Exception as e:
         logger.warning("Storage boot init deferred: %s", e)
+
+
+# -----------------------------------------------------------------
+# DAQ listener orchestrator — reconciles enabled daq_configs and spawns
+# one asyncio task per listener. See daq_listeners.py for the protocol
+# implementations. Pass-through sample storage uses the same liveops_samples
+# collection as the manual /liveops/feed endpoint, so dashboards & share links
+# render real rig data identically to the simulator.
+# -----------------------------------------------------------------
+_daq_orchestrator = None
+
+
+async def _store_daq_sample(team_id: str, rig_id: str | None, sample: dict):
+    """Called by the DAQ orchestrator every time a listener produces a sample."""
+    try:
+        doc = {
+            **{k: v for k, v in sample.items() if k != "ts"},
+            "team_id": team_id,
+            "rig_id": rig_id,
+            "created_at": datetime.now(timezone.utc),
+            "user_email": "daq@rig.local",
+        }
+        await db.liveops_samples.insert_one(doc)
+    except Exception as e:
+        logger.debug("DAQ sample store failed: %s", e)
+
+
+@app.on_event("startup")
+async def _start_daq_orchestrator():
+    global _daq_orchestrator
+    try:
+        from daq_listeners import DaqOrchestrator
+        _daq_orchestrator = DaqOrchestrator(db, _store_daq_sample)
+        await _daq_orchestrator.start()
+    except Exception as e:
+        logger.warning("DAQ orchestrator did not start: %s", e)
+
+
+@app.on_event("shutdown")
+async def _stop_daq_orchestrator():
+    global _daq_orchestrator
+    if _daq_orchestrator:
+        try:
+            await _daq_orchestrator.stop()
+        except Exception:
+            pass
