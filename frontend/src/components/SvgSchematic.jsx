@@ -50,7 +50,7 @@ const SvgSchematic = ({ sheetKey, results }) => {
     switch (sheetKey) {
       case "Pipe_Stretch": {
         const util = dyn.utilisation || 0;
-        const arrowColor = util > 80 ? "#C00000" : util > 60 ? "#DC7633" : "#0D6535";
+        const arrowColor = util > 80 ? "#C00000" : util > 60 ? "#DC7633" : "#C44A08";
         return (
           <>
             <defs>
@@ -64,7 +64,7 @@ const SvgSchematic = ({ sheetKey, results }) => {
             <text x="45" y="60" fill={arrowColor} fontSize="9" fontWeight="bold">Overpull</text>
             <text x="45" y="72" fill={arrowColor} fontSize="8">{util ? `${util.toFixed(0)}% Fy` : ""}</text>
             <text x="150" y="55" fill="#FFF" fontSize="8" fontWeight="bold" textAnchor="middle">STRETCH</text>
-            {dyn.depth && <text x="200" y="60" fill="#0D6535" fontSize="8" fontWeight="bold">Free @ {dyn.depth.toFixed(0)} ft</text>}
+            {dyn.depth && <text x="200" y="60" fill="#C44A08" fontSize="8" fontWeight="bold">Free @ {dyn.depth.toFixed(0)} ft</text>}
           </>
         );
       }
@@ -106,7 +106,7 @@ const SvgSchematic = ({ sheetKey, results }) => {
             <text x="150" y="102" fill="#FFF" fontSize="6" fontWeight="bold" textAnchor="middle">{sheetKey === "CT_Milling" ? "MILL" : "BIT"}</text>
             <text x="195" y="100" fill={bitColor} fontSize="8" fontWeight="bold">WOB {wob ? `${wob.toFixed(0)} lb` : "—"}</text>
             {dyn.friction && (
-              <text x="10" y="30" fill={dyn.friction > 5000 ? "#C00000" : "#0D6535"} fontSize="8" fontWeight="bold">
+              <text x="10" y="30" fill={dyn.friction > 5000 ? "#C00000" : "#C44A08"} fontSize="8" fontWeight="bold">
                 ΔPf {dyn.friction.toFixed(0)} psi
               </text>
             )}
@@ -129,7 +129,7 @@ const SvgSchematic = ({ sheetKey, results }) => {
       case "Annular_Frac": {
         const bhtp = dyn.pressure || 0;
         const grad = dyn.fracGrad || 0;
-        const gradColor = grad > 1 ? "#C00000" : grad > 0.9 ? "#DC7633" : "#0D6535";
+        const gradColor = grad > 1 ? "#C00000" : grad > 0.9 ? "#DC7633" : "#C44A08";
         return (
           <>
             <defs>
@@ -261,7 +261,7 @@ const SvgSchematic = ({ sheetKey, results }) => {
       {/* Wellbore Casing (colour reflects overall safety state) */}
       <rect x="110" y="10" width="80" height="100" fill="#EAEAEA" stroke={wellboreStroke} strokeWidth="2" />
       {/* CT String */}
-      <rect x="142" y="10" width="16" height="80" fill="#107C41" stroke="#0B5329" strokeWidth="1" />
+      <rect x="142" y="10" width="16" height="80" fill="#FF6B1A" stroke="#0B5329" strokeWidth="1" />
       {renderContent()}
     </svg>
   );

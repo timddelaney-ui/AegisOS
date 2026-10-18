@@ -200,7 +200,7 @@ const HandoverModal = ({ open, onClose }) => {
   return (
     <div className="fixed inset-0 z-[80] bg-black/60 flex items-end sm:items-center justify-center sm:p-6 dialog-sheet" data-testid="handover-modal">
       <div className="bg-[#F7F7F7] w-full max-w-3xl max-h-[92dvh] rounded-t-2xl sm:rounded-lg shadow-2xl flex flex-col overflow-hidden dialog-sheet-panel">
-        <div className="bg-[#107C41] text-white px-4 py-3 flex items-center gap-2 flex-shrink-0">
+        <div className="bg-[#FF6B1A] text-white px-4 py-3 flex items-center gap-2 flex-shrink-0">
           <FileText className="w-5 h-5" strokeWidth={2.5} />
           <div className="flex-1">
             <div className="text-sm font-bold">Handover Summary — {rigLabel(rigId)}</div>
@@ -227,7 +227,7 @@ const HandoverModal = ({ open, onClose }) => {
             data-testid="handover-refresh"
             onClick={load}
             disabled={loading}
-            className="text-[11px] font-semibold text-[#107C41] hover:underline disabled:opacity-50"
+            className="text-[11px] font-semibold text-[#FF6B1A] hover:underline disabled:opacity-50"
           >
             {loading ? "Refreshing…" : "Refresh"}
           </button>
@@ -247,7 +247,7 @@ const HandoverModal = ({ open, onClose }) => {
               data-testid="handover-email-open"
               onClick={() => setEmailOpen((v) => !v)}
               disabled={!summary || loading}
-              className={`text-[12px] font-bold px-3 py-1.5 rounded flex items-center gap-1.5 disabled:opacity-50 ${emailOpen ? "bg-[#0D6535] text-white" : "border border-[#0D6535] text-[#0D6535] hover:bg-[#F0F9F3]"}`}
+              className={`text-[12px] font-bold px-3 py-1.5 rounded flex items-center gap-1.5 disabled:opacity-50 ${emailOpen ? "bg-[#C44A08] text-white" : "border border-[#C44A08] text-[#C44A08] hover:bg-[#FFF7EF]"}`}
             >
               <Mail className="w-3.5 h-3.5" /> <span className="hidden xs:inline sm:inline">Email</span>
             </button>
@@ -255,7 +255,7 @@ const HandoverModal = ({ open, onClose }) => {
               data-testid="handover-copy"
               onClick={copy}
               disabled={!summary || loading}
-              className="text-[12px] font-bold text-white bg-[#107C41] hover:bg-[#0D6535] px-3 py-1.5 rounded flex items-center gap-1.5 disabled:opacity-50"
+              className="text-[12px] font-bold text-white bg-[#FF6B1A] hover:bg-[#C44A08] px-3 py-1.5 rounded flex items-center gap-1.5 disabled:opacity-50"
             >
               {copied ? <><Check className="w-3.5 h-3.5" /> Copied</> : <><Copy className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Copy to Clipboard</span><span className="sm:hidden">Copy</span></>}
             </button>
@@ -263,15 +263,15 @@ const HandoverModal = ({ open, onClose }) => {
         </div>
 
         {emailOpen && (
-          <div className="px-3 py-2.5 bg-[#F0F9F3] border-b border-[#D1E7DD] space-y-2" data-testid="handover-email-panel">
+          <div className="px-3 py-2.5 bg-[#FFF7EF] border-b border-[#D1E7DD] space-y-2" data-testid="handover-email-panel">
             <div className="flex items-center gap-1.5 flex-wrap">
-              <Mail className="w-3.5 h-3.5 text-[#0D6535]" />
-              <span className="text-[11px] font-bold text-[#0D6535] uppercase tracking-wide">Send handover by email</span>
+              <Mail className="w-3.5 h-3.5 text-[#C44A08]" />
+              <span className="text-[11px] font-bold text-[#C44A08] uppercase tracking-wide">Send handover by email</span>
               {savedContacts.length > 0 && (
                 <button
                   data-testid="handover-use-saved-crew"
                   onClick={() => setShowContacts((v) => !v)}
-                  className="ml-auto text-[11px] font-bold text-[#0D6535] inline-flex items-center gap-1 border border-[#0D6535] px-2 py-0.5 rounded hover:bg-[#E6F4EA]"
+                  className="ml-auto text-[11px] font-bold text-[#C44A08] inline-flex items-center gap-1 border border-[#C44A08] px-2 py-0.5 rounded hover:bg-[#FFF1E6]"
                 >
                   <Users className="w-3 h-3" /> Use saved crew ({savedContacts.length})
                 </button>
@@ -283,18 +283,18 @@ const HandoverModal = ({ open, onClose }) => {
                   <label
                     key={c.contact_id}
                     data-testid={`handover-contact-${c.contact_id}`}
-                    className="flex items-center gap-2 py-1 px-1 hover:bg-[#F0F9F3] rounded cursor-pointer"
+                    className="flex items-center gap-2 py-1 px-1 hover:bg-[#FFF7EF] rounded cursor-pointer"
                   >
                     <input
                       type="checkbox"
                       checked={selectedContactIds.has(c.contact_id)}
                       onChange={() => toggleContact(c.contact_id)}
-                      className="w-3.5 h-3.5 accent-[#107C41]"
+                      className="w-3.5 h-3.5 accent-[#FF6B1A]"
                     />
                     <div className="flex-1 min-w-0">
                       <p className="text-[12px] font-semibold text-[#262626] truncate">
                         {c.name}
-                        {c.is_default_recipient && <span className="ml-1.5 text-[9px] text-[#0D6535] font-bold">DEFAULT</span>}
+                        {c.is_default_recipient && <span className="ml-1.5 text-[9px] text-[#C44A08] font-bold">DEFAULT</span>}
                       </p>
                       <p className="text-[10px] text-[#595959] truncate">{c.email}{c.role ? ` · ${c.role}` : ""}</p>
                     </div>
@@ -304,7 +304,7 @@ const HandoverModal = ({ open, onClose }) => {
                   <button
                     data-testid="handover-contacts-apply"
                     onClick={loadSavedCrew}
-                    className="text-[11px] font-bold text-white bg-[#107C41] hover:bg-[#0D6535] px-2 py-0.5 rounded"
+                    className="text-[11px] font-bold text-white bg-[#FF6B1A] hover:bg-[#C44A08] px-2 py-0.5 rounded"
                   >
                     Add {selectedContactIds.size} to recipients
                   </button>
@@ -332,7 +332,7 @@ const HandoverModal = ({ open, onClose }) => {
                 data-testid="handover-email-send"
                 onClick={sendEmail}
                 disabled={sending || !recipients.trim() || !summary}
-                className="text-[12px] font-bold text-white bg-[#0D6535] hover:bg-[#0A4F28] px-3 py-1.5 rounded flex items-center gap-1.5 disabled:opacity-50 tap-44"
+                className="text-[12px] font-bold text-white bg-[#C44A08] hover:bg-[#0A4F28] px-3 py-1.5 rounded flex items-center gap-1.5 disabled:opacity-50 tap-44"
               >
                 {sending ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Sending…</> : <><Send className="w-3.5 h-3.5" /> Send email</>}
               </button>
@@ -353,14 +353,14 @@ const HandoverModal = ({ open, onClose }) => {
 
           {summary && (
             <>
-              <Section title="Completed tasks" Icon={ClipboardCheck} accent="#107C41" count={summary.completed_tasks.length}>
+              <Section title="Completed tasks" Icon={ClipboardCheck} accent="#FF6B1A" count={summary.completed_tasks.length}>
                 {summary.completed_tasks.length === 0 ? (
                   <div className="text-[#8A8A8A] italic px-1">No checklist activity in this window.</div>
                 ) : (
                   <ul className="divide-y divide-[#F0F0F0]">
                     {summary.completed_tasks.map((t) => (
                       <li key={t.event_id} data-testid="handover-task" className="py-1.5 flex flex-wrap gap-x-2">
-                        <span className="text-[10px] font-bold uppercase text-[#0D6535] mr-1">{t.tier}</span>
+                        <span className="text-[10px] font-bold uppercase text-[#C44A08] mr-1">{t.tier}</span>
                         <span className="font-medium text-[#262626]">{t.item_label}</span>
                         <span className="text-[#595959] text-[11px] ml-auto">{t.user_name} • {fmt(t.created_at)}</span>
                       </li>

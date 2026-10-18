@@ -22,27 +22,27 @@ const Paywall = ({ sheetTitle, trialExpired = false }) => {
         </p>
         <div className="bg-[#F8F9FA] border border-[#D4D4D4] rounded p-4 mb-4 text-left">
           <div className="flex items-center gap-2 mb-3">
-            <Sparkles className="w-4 h-4 text-[#107C41]" strokeWidth={2.5} />
+            <Sparkles className="w-4 h-4 text-[#FF6B1A]" strokeWidth={2.5} />
             <span className="text-xs font-bold text-[#856404] uppercase">Rollout Pricing</span>
           </div>
           <div className="grid grid-cols-2 gap-3 text-center">
             <div className="bg-white border border-[#D4D4D4] rounded p-2">
-              <p className="text-2xl font-bold text-[#107C41]">$2.99</p>
+              <p className="text-2xl font-bold text-[#FF6B1A]">$2.99</p>
               <p className="text-[10px] text-[#595959]">per month</p>
             </div>
-            <div className="bg-white border border-[#107C41] rounded p-2 relative">
-              <div className="absolute -top-2 right-1 bg-[#107C41] text-white text-[8px] font-bold px-1 py-[1px] rounded">-30%</div>
-              <p className="text-2xl font-bold text-[#107C41]">$24.99</p>
+            <div className="bg-white border border-[#FF6B1A] rounded p-2 relative">
+              <div className="absolute -top-2 right-1 bg-[#FF6B1A] text-white text-[8px] font-bold px-1 py-[1px] rounded">-30%</div>
+              <p className="text-2xl font-bold text-[#FF6B1A]">$24.99</p>
               <p className="text-[10px] text-[#595959]">per year</p>
             </div>
           </div>
           <ul className="mt-4 space-y-1.5">
             {["All 17 operation sheets", "AI Field Assistant + Training mode", "Emergency SOPs & saved jobs", "Cancel anytime"].map((f) => (
-              <li key={f} className="flex items-center gap-2 text-xs text-[#444]"><Check className="w-3.5 h-3.5 text-[#107C41]" strokeWidth={3} />{f}</li>
+              <li key={f} className="flex items-center gap-2 text-xs text-[#444]"><Check className="w-3.5 h-3.5 text-[#FF6B1A]" strokeWidth={3} />{f}</li>
             ))}
           </ul>
         </div>
-        <button onClick={() => navigate("/pricing")} className="w-full bg-[#107C41] hover:bg-[#0D6535] text-white py-3 rounded font-bold text-sm shadow-md flex items-center justify-center gap-2">
+        <button onClick={() => navigate("/pricing")} className="w-full bg-[#FF6B1A] hover:bg-[#C44A08] text-white py-3 rounded font-bold text-sm shadow-md flex items-center justify-center gap-2">
           <Sparkles className="w-4 h-4" strokeWidth={2.5} /> Upgrade to Pro
         </button>
       </div>

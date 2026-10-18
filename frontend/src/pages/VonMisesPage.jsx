@@ -94,11 +94,11 @@ export default function VonMisesPage() {
             <label className="flex flex-col"><span className="font-bold text-[#595959] text-[10px] uppercase">F axial (lbf)</span>
               <input data-testid="vm-fax" type="number" value={F_axial} onChange={(e) => setF(e.target.value)} className="border rounded px-1.5 py-0.5" />
             </label>
-            <div className={`flex flex-col rounded px-1.5 py-0.5 ${alert ? "bg-[#F8D7DA] animate-pulse" : warn ? "bg-[#FFF3CD]" : "bg-[#F0F9F3]"}`}>
+            <div className={`flex flex-col rounded px-1.5 py-0.5 ${alert ? "bg-[#F8D7DA] animate-pulse" : warn ? "bg-[#FFF3CD]" : "bg-[#FFF7EF]"}`}>
               <span className="font-bold text-[9px] uppercase text-[#595959]">Von Mises</span>
               <span className="font-bold tabular-nums text-[12px]" data-testid="vm-value">{stress?.von_mises?.toFixed(0) || "—"} psi</span>
             </div>
-            <div className={`flex flex-col rounded px-1.5 py-0.5 ${alert ? "bg-[#F8D7DA]" : warn ? "bg-[#FFF3CD]" : "bg-[#F0F9F3]"}`}>
+            <div className={`flex flex-col rounded px-1.5 py-0.5 ${alert ? "bg-[#F8D7DA]" : warn ? "bg-[#FFF3CD]" : "bg-[#FFF7EF]"}`}>
               <span className="font-bold text-[9px] uppercase text-[#595959]">% 80% SMYS</span>
               <span className="font-bold tabular-nums text-[12px]" data-testid="vm-util">{(util * 100).toFixed(1)}%</span>
             </div>
@@ -134,16 +134,16 @@ export default function VonMisesPage() {
             ))}
             {/* envelopes */}
             <path d={envPath(env100)} fill="rgba(214,69,69,0.08)" stroke="#8B0000" strokeDasharray="4 3" strokeWidth="1.5" />
-            <path d={envPath(env80)}  fill="rgba(16,124,65,0.10)" stroke="#107C41" strokeWidth="2.2" />
+            <path d={envPath(env80)}  fill="rgba(16,124,65,0.10)" stroke="#FF6B1A" strokeWidth="2.2" />
             {/* axes */}
             <line x1={toSvg(0, yMin).x} y1={toSvg(0, yMin).y} x2={toSvg(0, yMax).x} y2={toSvg(0, yMax).y} stroke="#262626" strokeWidth="1" />
             <line x1={toSvg(xMin, 0).x} y1={toSvg(xMin, 0).y} x2={toSvg(xMax, 0).x} y2={toSvg(xMax, 0).y} stroke="#262626" strokeWidth="1" />
             {/* operating point */}
-            <circle cx={op.x} cy={op.y} r="7" fill={alert ? "#C00000" : warn ? "#C36600" : "#0D6535"} stroke="#fff" strokeWidth="2" />
+            <circle cx={op.x} cy={op.y} r="7" fill={alert ? "#C00000" : warn ? "#C36600" : "#C44A08"} stroke="#fff" strokeWidth="2" />
             {/* labels */}
             <text x={W / 2} y={H - 4} textAnchor="middle" fontSize="10" fill="#595959">Δp (psi) · burst (+) → ← (−) collapse</text>
             <text x={10} y={H / 2} transform={`rotate(-90 10 ${H / 2})`} textAnchor="middle" fontSize="10" fill="#595959">F axial (lbf) · tension ↑ / compression ↓</text>
-            <text x={W - PAD} y={PAD - 4} textAnchor="end" fontSize="10" fill="#107C41">80% SMYS limit</text>
+            <text x={W - PAD} y={PAD - 4} textAnchor="end" fontSize="10" fill="#FF6B1A">80% SMYS limit</text>
             <text x={W - PAD} y={PAD + 10} textAnchor="end" fontSize="10" fill="#8B0000">100% SMYS yield</text>
           </svg>
         </div>

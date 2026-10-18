@@ -223,7 +223,7 @@ const SheetContent = ({ sheetKey, unitSystem, onUnitChange, initialValues, hasTe
           </button>
         </div>
       )}
-      <div className="bg-[#E6F4EA] border-l-[3px] border-[#107C41] px-2.5 py-2 text-[11px] font-semibold text-[#0D6535] rounded-r flex items-center gap-1.5">
+      <div className="bg-[#FFF1E6] border-l-[3px] border-[#FF6B1A] px-2.5 py-2 text-[11px] font-semibold text-[#C44A08] rounded-r flex items-center gap-1.5">
         <Pin className="w-3 h-3 flex-shrink-0" strokeWidth={2.5} />
         <span>{data.sop}</span>
       </div>
@@ -233,7 +233,7 @@ const SheetContent = ({ sheetKey, unitSystem, onUnitChange, initialValues, hasTe
         <select
           value={unitSystem}
           onChange={(e) => onUnitChange(e.target.value)}
-          className="bg-[#FAFAFA] border border-[#CCC] px-2 py-1 rounded-sm text-xs font-semibold outline-none focus:border-[#107C41] focus:ring-2 focus:ring-[#107C41]/10"
+          className="bg-[#FAFAFA] border border-[#CCC] px-2 py-1 rounded-sm text-xs font-semibold outline-none focus:border-[#FF6B1A] focus:ring-2 focus:ring-[#FF6B1A]/10"
         >
           <option value="imp">Imperial (API / Oilfield)</option>
           <option value="met">Metric (SI / Canada)</option>
@@ -259,7 +259,7 @@ const SheetContent = ({ sheetKey, unitSystem, onUnitChange, initialValues, hasTe
                   value={values[idx] || ""}
                   onChange={(e) => handleInputChange(idx, e.target.value)}
                   data-testid={`sheet-input-${idx}`}
-                  className="w-full bg-[#FAFAFA] border border-[#CCC] px-2 py-1.5 rounded-sm text-[13px] font-semibold text-[#111] outline-none focus:border-[#107C41] focus:bg-white focus:ring-2 focus:ring-[#107C41]/10"
+                  className="w-full bg-[#FAFAFA] border border-[#CCC] px-2 py-1.5 rounded-sm text-[13px] font-semibold text-[#111] outline-none focus:border-[#FF6B1A] focus:bg-white focus:ring-2 focus:ring-[#FF6B1A]/10"
                 />
               </td>
             </tr>
@@ -274,13 +274,13 @@ const SheetContent = ({ sheetKey, unitSystem, onUnitChange, initialValues, hasTe
       <div className="grid grid-cols-2 gap-2">
         <button
           onClick={() => openAI("interpret")}
-          className="bg-white border border-[#107C41] text-[#107C41] hover:bg-[#F0F9F3] py-2 rounded text-[12px] font-bold flex items-center justify-center gap-1.5 shadow-sm"
+          className="bg-white border border-[#FF6B1A] text-[#FF6B1A] hover:bg-[#FFF7EF] py-2 rounded text-[12px] font-bold flex items-center justify-center gap-1.5 shadow-sm"
         >
           <Brain className="w-4 h-4" strokeWidth={2.5} /> Explain Results
         </button>
         <button
           onClick={() => openAI("program")}
-          className="bg-white border border-[#107C41] text-[#107C41] hover:bg-[#F0F9F3] py-2 rounded text-[12px] font-bold flex items-center justify-center gap-1.5 shadow-sm"
+          className="bg-white border border-[#FF6B1A] text-[#FF6B1A] hover:bg-[#FFF7EF] py-2 rounded text-[12px] font-bold flex items-center justify-center gap-1.5 shadow-sm"
         >
           <Sparkles className="w-4 h-4" strokeWidth={2.5} /> Draft Job Program
         </button>
@@ -289,14 +289,14 @@ const SheetContent = ({ sheetKey, unitSystem, onUnitChange, initialValues, hasTe
       <div className="grid grid-cols-4 gap-2">
         <button
           onClick={runMacro}
-          className="col-span-3 bg-[#107C41] hover:bg-[#0D6535] active:bg-[#0D6535] text-white py-3 rounded text-[13px] font-bold uppercase shadow-md transition-colors flex items-center justify-center gap-2"
+          className="col-span-3 bg-[#FF6B1A] hover:bg-[#C44A08] active:bg-[#C44A08] text-white py-3 rounded text-[13px] font-bold uppercase shadow-md transition-colors flex items-center justify-center gap-2"
         >
           <Play className="w-4 h-4 fill-white" strokeWidth={2.5} />
           Execute Macro
         </button>
         <button
           onClick={() => setShowSaveDialog(true)}
-          className="bg-white border border-[#107C41] text-[#107C41] hover:bg-[#F0F9F3] py-3 rounded text-[13px] font-bold uppercase shadow-sm transition-colors flex items-center justify-center gap-1.5"
+          className="bg-white border border-[#FF6B1A] text-[#FF6B1A] hover:bg-[#FFF7EF] py-3 rounded text-[13px] font-bold uppercase shadow-sm transition-colors flex items-center justify-center gap-1.5"
         >
           <Save className="w-4 h-4" strokeWidth={2.5} />
           Save
@@ -318,7 +318,7 @@ const SheetContent = ({ sheetKey, unitSystem, onUnitChange, initialValues, hasTe
       {/* Floating AI trigger */}
       <button
         onClick={() => openAI("assistant")}
-        className="fixed bottom-16 right-4 z-40 bg-[#107C41] hover:bg-[#0D6535] text-white w-12 h-12 rounded-full shadow-lg flex items-center justify-center transition-transform hover:scale-105"
+        className="fixed bottom-16 right-4 z-40 bg-[#FF6B1A] hover:bg-[#C44A08] text-white w-12 h-12 rounded-full shadow-lg flex items-center justify-center transition-transform hover:scale-105"
         title="Ask CT Field AI"
       >
         <Sparkles className="w-5 h-5" strokeWidth={2.5} />

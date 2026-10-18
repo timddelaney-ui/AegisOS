@@ -13,7 +13,7 @@ import { useRig, rigLabel } from "../context/RigContext";
  */
 const POLL_MS = 4000;
 const KIND_CONFIG = {
-  inventory:   { label: "Inventory",       Icon: Package,     statuses: ["OK", "LOW", "OOS"],                accent: "#107C41", quantityLabel: "Qty" },
+  inventory:   { label: "Inventory",       Icon: Package,     statuses: ["OK", "LOW", "OOS"],                accent: "#FF6B1A", quantityLabel: "Qty" },
   consumables: { label: "Consumables",     Icon: Beaker,      statuses: ["OK", "LOW", "OOS"],                accent: "#856404", quantityLabel: "Qty" },
   parts_order: { label: "Parts Orders",    Icon: Wrench,      statuses: ["REQUESTED", "ORDERED", "RECEIVED"], accent: "#C36600", quantityLabel: "Qty" },
   todo:        { label: "To-Do List",      Icon: ListChecks,  statuses: ["OPEN", "IN_PROGRESS", "DONE"],     accent: "#0056B3", quantityLabel: null },
@@ -287,7 +287,7 @@ const TeamItemsList = ({ kind }) => {
               {it.note && <div className="text-[11px] text-[#444] mt-0.5 italic">{it.note}</div>}
               <div className="text-[9px] text-[#8A8A8A] mt-0.5">by {it.created_by} · {new Date(it.created_at).toLocaleDateString()}</div>
             </div>
-            <button data-testid={`itm-edit-${it.item_id}`} onClick={() => startEdit(it)} className="text-[#107C41] hover:bg-[#F0F9F3] rounded p-1 tap-44" aria-label="Edit"><Pencil className="w-3.5 h-3.5" /></button>
+            <button data-testid={`itm-edit-${it.item_id}`} onClick={() => startEdit(it)} className="text-[#FF6B1A] hover:bg-[#FFF7EF] rounded p-1 tap-44" aria-label="Edit"><Pencil className="w-3.5 h-3.5" /></button>
             <button data-testid={`itm-delete-${it.item_id}`} onClick={() => remove(it)} className="text-[#C00000] hover:bg-[#F8D7DA] rounded p-1 tap-44" aria-label="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
           </div>
           );

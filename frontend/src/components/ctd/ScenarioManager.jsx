@@ -72,14 +72,14 @@ const ScenarioManager = ({ currentVals, unitSystem, onLoad }) => {
       <button
         data-testid="ctd-save-scenario-btn"
         onClick={() => setSaveOpen(true)}
-        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-[12px] font-semibold border border-[#D4D4D4] bg-white hover:border-[#107C41] hover:text-[#107C41]"
+        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-[12px] font-semibold border border-[#D4D4D4] bg-white hover:border-[#FF6B1A] hover:text-[#FF6B1A]"
       >
         <Save className="w-3.5 h-3.5" /> Save scenario
       </button>
       <button
         data-testid="ctd-load-scenario-btn"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-[12px] font-semibold border border-[#D4D4D4] bg-white hover:border-[#107C41] hover:text-[#107C41]"
+        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-[12px] font-semibold border border-[#D4D4D4] bg-white hover:border-[#FF6B1A] hover:text-[#FF6B1A]"
       >
         <FolderOpen className="w-3.5 h-3.5" /> Open scenario
       </button>
@@ -99,7 +99,7 @@ const ScenarioManager = ({ currentVals, unitSystem, onLoad }) => {
                 value={wellName}
                 onChange={(e) => setWellName(e.target.value)}
                 placeholder="e.g. 4-32-45-06W5 · UBD drill-out"
-                className="w-full px-2.5 py-2 border border-[#CCC] rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#107C41]/40"
+                className="w-full px-2.5 py-2 border border-[#CCC] rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#FF6B1A]/40"
                 autoFocus
               />
             </label>
@@ -138,7 +138,7 @@ const ScenarioManager = ({ currentVals, unitSystem, onLoad }) => {
                 data-testid="ctd-save-confirm-btn"
                 onClick={save}
                 disabled={busy || !wellName.trim()}
-                className="px-3 py-1.5 bg-[#107C41] hover:bg-[#0D6535] text-white rounded text-[12px] font-bold disabled:opacity-50"
+                className="px-3 py-1.5 bg-[#FF6B1A] hover:bg-[#C44A08] text-white rounded text-[12px] font-bold disabled:opacity-50"
               >
                 {busy ? "Saving…" : "Save"}
               </button>
@@ -170,13 +170,13 @@ const ScenarioManager = ({ currentVals, unitSystem, onLoad }) => {
                       key={s.scenario_id}
                       data-testid={`ctd-scenario-row-${s.scenario_id}`}
                       onClick={() => load(s)}
-                      className="w-full text-left p-3 rounded-lg border border-[#D4D4D4] hover:border-[#107C41] hover:bg-[#F0F9F3] transition-all group"
+                      className="w-full text-left p-3 rounded-lg border border-[#D4D4D4] hover:border-[#FF6B1A] hover:bg-[#FFF7EF] transition-all group"
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             <p className="text-sm font-bold text-[#262626] truncate">{s.well_name}</p>
-                            <span className={`text-[10px] font-bold uppercase px-1.5 py-[1px] rounded ${s.mode === "underbalanced" ? "bg-[#FDE8E8] text-[#C00000]" : "bg-[#E6F4EA] text-[#0D6535]"}`}>
+                            <span className={`text-[10px] font-bold uppercase px-1.5 py-[1px] rounded ${s.mode === "underbalanced" ? "bg-[#FDE8E8] text-[#C00000]" : "bg-[#FFF1E6] text-[#C44A08]"}`}>
                               {s.mode === "underbalanced" ? "UBD" : "BAL"}
                             </span>
                             {s.visibility === "team" && (

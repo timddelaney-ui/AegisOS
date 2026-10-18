@@ -35,7 +35,7 @@ const JobsPage = ({ onLoadJob }) => {
 
   return (
     <div className="min-h-screen bg-[#F3F3F3] flex flex-col">
-      <header className="bg-[#107C41] text-white h-12 flex items-center px-3 shadow-md flex-shrink-0">
+      <header className="bg-[#FF6B1A] text-white h-12 flex items-center px-3 shadow-md flex-shrink-0">
         <button onClick={() => navigate("/app")} className="flex items-center gap-1.5 text-sm font-semibold">
           <ArrowLeft className="w-4 h-4" /> Back
         </button>
@@ -45,13 +45,13 @@ const JobsPage = ({ onLoadJob }) => {
       <div className="flex-1 p-4 overflow-auto">
         <div className="max-w-2xl mx-auto">
           {loading ? (
-            <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-[#107C41]" /></div>
+            <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-[#FF6B1A]" /></div>
           ) : jobs.length === 0 ? (
             <div className="bg-white border border-[#D4D4D4] rounded-lg p-8 text-center">
-              <FileSpreadsheet className="w-10 h-10 text-[#107C41] mx-auto mb-2" strokeWidth={1.5} />
+              <FileSpreadsheet className="w-10 h-10 text-[#FF6B1A] mx-auto mb-2" strokeWidth={1.5} />
               <h2 className="text-base font-bold text-[#262626] mb-1">No saved jobs yet</h2>
               <p className="text-sm text-[#595959] mb-4">Fill in a sheet, then tap Save to keep it here for next shift.</p>
-              <button onClick={() => navigate("/app")} className="bg-[#107C41] hover:bg-[#0D6535] text-white px-4 py-2 rounded text-sm font-semibold">Open Workbook</button>
+              <button onClick={() => navigate("/app")} className="bg-[#FF6B1A] hover:bg-[#C44A08] text-white px-4 py-2 rounded text-sm font-semibold">Open Workbook</button>
             </div>
           ) : (
             <div className="space-y-2">
@@ -59,10 +59,10 @@ const JobsPage = ({ onLoadJob }) => {
                 <div
                   key={job.job_id}
                   onClick={() => openJob(job)}
-                  className="bg-white border border-[#D4D4D4] rounded p-3 hover:border-[#107C41] cursor-pointer transition-colors flex items-center gap-3 shadow-sm"
+                  className="bg-white border border-[#D4D4D4] rounded p-3 hover:border-[#FF6B1A] cursor-pointer transition-colors flex items-center gap-3 shadow-sm"
                 >
-                  <div className="w-10 h-10 rounded bg-[#E6F4EA] flex items-center justify-center flex-shrink-0">
-                    <FileSpreadsheet className="w-5 h-5 text-[#107C41]" strokeWidth={2} />
+                  <div className="w-10 h-10 rounded bg-[#FFF1E6] flex items-center justify-center flex-shrink-0">
+                    <FileSpreadsheet className="w-5 h-5 text-[#FF6B1A]" strokeWidth={2} />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-[#262626] truncate">{job.title}</p>

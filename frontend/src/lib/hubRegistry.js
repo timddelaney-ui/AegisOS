@@ -11,7 +11,7 @@ export const HUB_TILES = {
   "live-ops": {
     label: "Live Ops",
     Icon: Zap,
-    accent: "bg-[#F0F9F3] text-[#0D6535]",
+    accent: "bg-[#FFF7EF] text-[#C44A08]",
     path: "/live-ops",
     badge: "LIVE",
     subtitle: "Split-screen Von Mises + Fatigue + Weight + Pressure + chart. Click any panel to go full-screen.",
@@ -25,7 +25,7 @@ export const HUB_TILES = {
     roleGate: "crew",
   },
   workbook: {
-    label: "Workbook (17 Sheets)", Icon: FileSpreadsheet, accent: "bg-[#E6F4EA] text-[#107C41]",
+    label: "Workbook (17 Sheets)", Icon: FileSpreadsheet, accent: "bg-[#FFF1E6] text-[#FF6B1A]",
     path: "/app", subtitle: "The classic calculation workbook — hydraulics, N2, fishing, and 14 more.",
   },
   "ctd-calculator": {
@@ -41,7 +41,7 @@ export const HUB_TILES = {
     path: "/stress", subtitle: "API RP 5C7 live operating envelope. Visual alert when operating point crosses 80% SMYS.",
   },
   fatigue: {
-    label: "Reel Fatigue Heatmap", Icon: Activity, accent: "bg-[#F0F9F3] text-[#0D6535]",
+    label: "Reel Fatigue Heatmap", Icon: Activity, accent: "bg-[#FFF7EF] text-[#C44A08]",
     path: "/fatigue", subtitle: "Palmgren-Miner damage per station. Green → red at 80% derate.",
   },
   wellbore: {
@@ -78,7 +78,7 @@ export const HUB_TILES = {
     path: "/erp-template", subtitle: "1-page emergency response cover sheet — crew, muster, hospital. Fill, save, print.",
   },
   "crew-contacts": {
-    label: "Crew Email Contacts", Icon: Mail, accent: "bg-[#E6F4EA] text-[#0D6535]",
+    label: "Crew Email Contacts", Icon: Mail, accent: "bg-[#FFF1E6] text-[#C44A08]",
     path: "/crew-contacts", subtitle: "Address book for shift-end handover emails. Mark defaults for one-click send.",
   },
   equipment: {
@@ -90,11 +90,11 @@ export const HUB_TILES = {
     path: "/schedule", subtitle: "Assign day/night shifts with 14/14, 20/10 rotations. Print or save as PDF.",
   },
   treatment: {
-    label: "Treatment Log", Icon: ClipboardList, accent: "bg-[#F0F9F3] text-[#0D6535]",
+    label: "Treatment Log", Icon: ClipboardList, accent: "bg-[#FFF7EF] text-[#C44A08]",
     path: "/treatment", subtitle: "Timestamped job log everyone on the rig sees in real time. Perfect for handovers.",
   },
   "team-hub": {
-    label: "Team Hub (chat · inventory · to-dos)", Icon: Users, accent: "bg-[#E6F4EA] text-[#0D6535]",
+    label: "Team Hub (chat · inventory · to-dos)", Icon: Users, accent: "bg-[#FFF1E6] text-[#C44A08]",
     path: "/team-hub", subtitle: "Rig-scoped crew chat, inventory, parts, consumables, and to-dos.",
   },
   emergency: {

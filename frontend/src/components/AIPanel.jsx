@@ -58,7 +58,7 @@ const AIMessage = ({ content }) => {
     <div className="bg-white border border-[#D4D4D4] text-[#262626] mr-6 shadow-sm rounded overflow-hidden" data-testid="ai-message-bubble">
       {action && (
         <div className="px-2.5 py-2">
-          <div className="text-[10px] font-bold text-[#107C41] tracking-wider mb-1">ACTION NOW</div>
+          <div className="text-[10px] font-bold text-[#FF6B1A] tracking-wider mb-1">ACTION NOW</div>
           <div className="text-[12px] leading-relaxed whitespace-pre-wrap">{action}</div>
         </div>
       )}
@@ -70,7 +70,7 @@ const AIMessage = ({ content }) => {
           ? "hover:bg-[#DBEAFE] text-[#0056B3] bg-[#F0F6FF]"
           : tone === "erp"
             ? "hover:bg-[#FEE2E2] text-[#8B0000] bg-[#FFF2F2]"
-            : "hover:bg-[#F0F9F3] text-[#595959] bg-[#FAFAFA]";
+            : "hover:bg-[#FFF7EF] text-[#595959] bg-[#FAFAFA]";
         return (
           <div key={i} className="border-t border-[#EFEFEF]">
             <button
@@ -171,7 +171,7 @@ const AIPanel = ({ open, onClose, contextBuilder, initialMode = "assistant" }) =
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="bg-[#107C41] text-white px-3 py-2.5 rounded-t-lg flex items-center justify-between flex-shrink-0">
+        <div className="bg-[#FF6B1A] text-white px-3 py-2.5 rounded-t-lg flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-2">
             <Sparkles className="w-4 h-4" strokeWidth={2.5} />
             <span className="text-sm font-bold">CT Field AI</span>
@@ -187,7 +187,7 @@ const AIPanel = ({ open, onClose, contextBuilder, initialMode = "assistant" }) =
               key={id}
               onClick={() => setMode(id)}
               className={`flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-semibold whitespace-nowrap ${
-                mode === id ? "bg-[#107C41] text-white" : "bg-[#F0F9F3] text-[#0D6535] hover:bg-[#E6F4EA]"
+                mode === id ? "bg-[#FF6B1A] text-white" : "bg-[#FFF7EF] text-[#C44A08] hover:bg-[#FFF1E6]"
               }`}
             >
               <Icon className="w-3 h-3" strokeWidth={2.5} />
@@ -198,7 +198,7 @@ const AIPanel = ({ open, onClose, contextBuilder, initialMode = "assistant" }) =
 
         {/* Mode blurb */}
         <div className="px-3 py-2 bg-[#F8F9FA] border-b border-[#EFEFEF] flex items-start gap-2 flex-shrink-0">
-          <currentMode.Icon className="w-3.5 h-3.5 text-[#107C41] mt-0.5 flex-shrink-0" strokeWidth={2.5} />
+          <currentMode.Icon className="w-3.5 h-3.5 text-[#FF6B1A] mt-0.5 flex-shrink-0" strokeWidth={2.5} />
           <p className="text-[11px] text-[#595959] leading-snug">{currentMode.blurb}</p>
         </div>
 
@@ -211,7 +211,7 @@ const AIPanel = ({ open, onClose, contextBuilder, initialMode = "assistant" }) =
                 <button
                   key={q}
                   onClick={() => send(q)}
-                  className="w-full text-left text-[12px] bg-white border border-[#D4D4D4] hover:border-[#107C41] hover:bg-[#F0F9F3] rounded px-2.5 py-1.5 text-[#333]"
+                  className="w-full text-left text-[12px] bg-white border border-[#D4D4D4] hover:border-[#FF6B1A] hover:bg-[#FFF7EF] rounded px-2.5 py-1.5 text-[#333]"
                 >
                   {q}
                 </button>
@@ -230,7 +230,7 @@ const AIPanel = ({ open, onClose, contextBuilder, initialMode = "assistant" }) =
                 key={key}
                 className={`px-2.5 py-2 rounded text-[12px] leading-relaxed whitespace-pre-wrap ${
                   m.role === "user"
-                    ? "bg-[#107C41] text-white ml-6 self-end"
+                    ? "bg-[#FF6B1A] text-white ml-6 self-end"
                     : "bg-[#F8D7DA] border border-[#F5C6CB] text-[#721C24] mr-6"
                 }`}
               >
@@ -240,7 +240,7 @@ const AIPanel = ({ open, onClose, contextBuilder, initialMode = "assistant" }) =
           })}
           {sending && (
             <div className="bg-white border border-[#D4D4D4] mr-6 rounded px-2.5 py-2 flex items-center gap-2 text-[12px] text-[#595959]">
-              <Loader2 className="w-3.5 h-3.5 animate-spin text-[#107C41]" /> Thinking…
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-[#FF6B1A]" /> Thinking…
             </div>
           )}
         </div>
@@ -253,13 +253,13 @@ const AIPanel = ({ open, onClose, contextBuilder, initialMode = "assistant" }) =
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && send()}
             placeholder="Ask the AI anything about this operation…"
-            className="flex-1 bg-[#FAFAFA] border border-[#CCC] px-2.5 py-2 rounded text-sm outline-none focus:border-[#107C41] focus:ring-2 focus:ring-[#107C41]/10"
+            className="flex-1 bg-[#FAFAFA] border border-[#CCC] px-2.5 py-2 rounded text-sm outline-none focus:border-[#FF6B1A] focus:ring-2 focus:ring-[#FF6B1A]/10"
             disabled={sending}
           />
           <button
             onClick={() => send()}
             disabled={sending || !input.trim()}
-            className="bg-[#107C41] hover:bg-[#0D6535] text-white px-3 rounded disabled:opacity-50 flex items-center justify-center"
+            className="bg-[#FF6B1A] hover:bg-[#C44A08] text-white px-3 rounded disabled:opacity-50 flex items-center justify-center"
           >
             <Send className="w-4 h-4" />
           </button>

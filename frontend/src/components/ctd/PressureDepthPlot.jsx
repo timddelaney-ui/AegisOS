@@ -71,7 +71,7 @@ const PressureDepthPlot = ({
     return (
       <div className="bg-white border border-[#D4D4D4] rounded-xl p-4 shadow-sm" data-testid="ctd-depth-plot-empty">
         <div className="flex items-center gap-2 mb-2">
-          <LineChart className="w-4 h-4 text-[#107C41]" />
+          <LineChart className="w-4 h-4 text-[#FF6B1A]" />
           <h3 className="text-[13px] font-bold text-[#262626]">Operating window — Pressure vs TVD</h3>
         </div>
         <p className="text-[12px] text-[#595959]">Enter TVD and pore / frac gradients to see the operating-window plot.</p>
@@ -95,7 +95,7 @@ const PressureDepthPlot = ({
   const bhpAtTVD = data.bhp_bottom;
   const poreAtTVD = data.pore[data.pore.length - 1];
   const fracAtTVD = data.frac[data.frac.length - 1];
-  let dotColor = "#107C41"; // in window
+  let dotColor = "#FF6B1A"; // in window
   let dotLabel = "In window";
   if (bhpAtTVD != null) {
     if (bhpAtTVD > fracAtTVD) { dotColor = "#C00000"; dotLabel = "Above frac — loss risk"; }
@@ -107,7 +107,7 @@ const PressureDepthPlot = ({
       <div className="flex items-start justify-between mb-2 gap-2">
         <div>
           <h3 className="text-[13px] font-bold text-[#262626] flex items-center gap-1.5">
-            <LineChart className="w-4 h-4 text-[#107C41]" />
+            <LineChart className="w-4 h-4 text-[#FF6B1A]" />
             Operating window — Pressure vs TVD
           </h3>
           <p className="text-[11px] text-[#595959]">Green band = safe window (pore ≤ BHP ≤ frac). {isUBD ? "UBD: BHP should sit left of pore line." : "Balanced: BHP inside green band."}</p>
@@ -130,7 +130,7 @@ const PressureDepthPlot = ({
           ))}
 
           {/* Safe window band (pore → frac) */}
-          <path d={bandPath} fill="#107C41" fillOpacity="0.12" />
+          <path d={bandPath} fill="#FF6B1A" fillOpacity="0.12" />
 
           {/* Pore line */}
           <path d={data.path_pore} fill="none" stroke="#C36600" strokeWidth="2.5" strokeDasharray="4,3" />
@@ -196,7 +196,7 @@ const PressureDepthPlot = ({
           BHP trajectory
         </span>
         <span className="inline-flex items-center gap-1 text-[11px] text-[#262626]">
-          <span className="inline-block w-3 h-3 bg-[#107C41]/20 border border-[#107C41]/40 rounded-sm" />
+          <span className="inline-block w-3 h-3 bg-[#FF6B1A]/20 border border-[#FF6B1A]/40 rounded-sm" />
           Safe window
         </span>
       </div>

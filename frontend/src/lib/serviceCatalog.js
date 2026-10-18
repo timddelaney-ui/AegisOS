@@ -1,8 +1,8 @@
 // Maps each workbook sheet to one or more services. A sheet appears in a service view
 // if that service is in its `services` array. "all" view shows every sheet.
 export const SERVICES = [
-  { id: "all",              label: "All Services",     short: "All",     accent: "#0D6535" },
-  { id: "coil_tubing",      label: "Coil Tubing",      short: "Coil",    accent: "#107C41" },
+  { id: "all",              label: "All Services",     short: "All",     accent: "#C44A08" },
+  { id: "coil_tubing",      label: "Coil Tubing",      short: "Coil",    accent: "#FF6B1A" },
   { id: "stand_alone_frac", label: "Stand-Alone Frac", short: "Frac",    accent: "#C36600" },
   { id: "coil_tools",       label: "Coil Tools",       short: "Tools",   accent: "#0056B3" },
 ];

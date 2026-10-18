@@ -87,7 +87,7 @@ export default function CertificationsPage() {
               <input placeholder="Cert #" value={form.cert_number} onChange={(e) => setForm({ ...form, cert_number: e.target.value })} className="border rounded px-2 py-1" />
               <input data-testid="cert-issue" placeholder="Issue YYYY-MM-DD" value={form.issue_date} onChange={(e) => setForm({ ...form, issue_date: e.target.value })} className="border rounded px-2 py-1" />
               <input data-testid="cert-expiry" placeholder="Expiry YYYY-MM-DD" value={form.expiry_date} onChange={(e) => setForm({ ...form, expiry_date: e.target.value })} className="border rounded px-2 py-1" />
-              <button data-testid="cert-add" onClick={addCert} className="bg-[#107C41] text-white px-2 py-1 font-bold rounded">Add</button>
+              <button data-testid="cert-add" onClick={addCert} className="bg-[#FF6B1A] text-white px-2 py-1 font-bold rounded">Add</button>
             </div>
           </div>
         )}

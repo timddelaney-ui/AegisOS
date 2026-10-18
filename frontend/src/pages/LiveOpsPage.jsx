@@ -5,10 +5,13 @@ import { Phase1PageHeader } from "../components/Phase1Header";
 import { useAuth, API } from "../context/AuthContext";
 import { useActiveReel } from "../context/ActiveReelContext";
 import { MiniVonMises, MiniFatigue, LiveGauge, StripChart } from "../components/LiveOpsPanels";
-import { Play, Pause, Wifi, WifiOff, Maximize2, X, Zap, Settings, Rewind, FastForward, StepBack, StepForward, History, Download } from "lucide-react";
+import { Play, Pause, Wifi, WifiOff, Maximize2, X, Zap, Settings, Rewind, FastForward, StepBack, StepForward, History, Download, StickyNote, Cpu } from "lucide-react";
 import { postSampleResilient, drainOfflineQueue, offlineQueueLength, startOfflineDrain } from "../lib/offlineQueue";
 import { samplesToCSV, samplesToLAS, downloadBlob } from "../lib/playbackExport";
 import ShareLinksButton from "../components/ShareLinksButton";
+import { AnnotationPins, DropAnnotationModal, ViewAnnotationModal } from "../components/AnnotationLayer";
+import { evaluateRules, resetRuleCooldowns } from "../lib/rigAnnotationRules";
+import { isSupervisorOrHigher, isManagement } from "../lib/roles";
 
 const RING = 600;             // seconds of history (10 min @ 1 Hz)
 const TICK_MS = 1000;         // 1 Hz
@@ -44,8 +47,8 @@ function buildDossierHtml(d) {
   return `<!DOCTYPE html><html><head><title>Engineering Audit Dossier</title>
     <style>
       body{font:12px/1.4 -apple-system,Segoe UI,Roboto,sans-serif;color:#111;padding:24px;max-width:900px;margin:auto}
-      h1{font-size:20px;border-bottom:2px solid #107C41;padding-bottom:6px}
-      h2{font-size:14px;margin-top:20px;color:#107C41;text-transform:uppercase;letter-spacing:0.5px}
+      h1{font-size:20px;border-bottom:2px solid #FF6B1A;padding-bottom:6px}
+      h2{font-size:14px;margin-top:20px;color:#FF6B1A;text-transform:uppercase;letter-spacing:0.5px}
       table{width:100%;border-collapse:collapse;font-size:11px;margin-top:6px}
       th,td{border:1px solid #D4D4D4;padding:4px 6px;text-align:left}
       th{background:#F3F4F6}
@@ -120,6 +123,53 @@ export default function LiveOpsPage() {
   const feedTickRef = useRef(0);
   const playbackTimerRef = useRef(null);
 
+  // -------- Annotations (manual + rig-computer) --------
+  const canAnnotate = isSupervisorOrHigher(user);
+  const canDeleteAny = isManagement(user);
+  const [annotations, setAnnotations] = useState([]);
+  const [rigRules, setRigRules] = useState([]);
+  const [rigAutoEnabled, setRigAutoEnabled] = useState(false);  // off by default — awaits user approval before firing against live data
+  const [dropOpen, setDropOpen] = useState(false);
+  const [viewAnnot, setViewAnnot] = useState(null);
+  const annotPollRef = useRef(null);
+  const pendingIngestRef = useRef([]);  // batched rig-computer annotations
+
+  const refreshAnnotations = async () => {
+    try {
+      const r = await axios.get(`${API}/liveops/annotations`, { params: { limit: 500 }, withCredentials: true });
+      setAnnotations(r.data?.annotations || []);
+    } catch { /* silent */ }
+  };
+
+  useEffect(() => {
+    refreshAnnotations();
+    axios.get(`${API}/liveops/annotations/rules`, { withCredentials: true })
+      .then((r) => setRigRules(r.data?.rules || []))
+      .catch(() => {});
+    annotPollRef.current = setInterval(refreshAnnotations, 15000);
+    return () => { if (annotPollRef.current) clearInterval(annotPollRef.current); };
+  }, []);
+
+  // Flush any rig-computer annotations we've queued up (every 5 s while feed runs).
+  useEffect(() => {
+    if (!rigAutoEnabled) return;
+    const t = setInterval(async () => {
+      const batch = pendingIngestRef.current.splice(0, pendingIngestRef.current.length);
+      if (!batch.length) return;
+      try {
+        await axios.post(`${API}/liveops/annotations/ingest`, {
+          items: batch,
+          source: connected ? "wits0" : "simulated",
+        }, { withCredentials: true });
+        await refreshAnnotations();
+      } catch (e) {
+        // Re-queue on failure (bounded to 100)
+        pendingIngestRef.current = [...batch, ...pendingIngestRef.current].slice(0, 100);
+      }
+    }, 5000);
+    return () => clearInterval(t);
+  }, [rigAutoEnabled, connected]);
+
   useEffect(() => { startOfflineDrain(); }, []);
 
   const downloadDossier = async () => {
@@ -169,15 +219,23 @@ export default function LiveOpsPage() {
     timerRef.current = setInterval(async () => {
       feedTickRef.current += 1;
       const t = feedTickRef.current;
+      const nowMs = Date.now();
+      let evalSample = null;
       setSamples((prev) => {
         const last = prev[prev.length - 1];
-        const next = { ...nextSimSample(last, t), ts: new Date().toISOString(), source: connected ? "wits" : "simulated" };
+        const next = { ...nextSimSample(last, t), ts: new Date(nowMs).toISOString(), source: connected ? "wits" : "simulated" };
+        evalSample = next;
         const buf = [...prev, next];
         if (buf.length > RING) buf.splice(0, buf.length - RING);
         // live reel depth → update global context
         setCurrentDepth(Math.round(next.depth_ft));
         return buf;
       });
+      // Rig-computer rule evaluator (Phase 2 pathway — off by default; user approves).
+      if (rigAutoEnabled && evalSample && rigRules.length) {
+        const fired = evaluateRules(evalSample, rigRules, nowMs);
+        if (fired.length) pendingIngestRef.current.push(...fired);
+      }
       // feed server-side ring buffer (resilient — queues offline if network drops)
       try {
         const last = samples[samples.length - 1];
@@ -206,7 +264,7 @@ export default function LiveOpsPage() {
     }, TICK_MS);
     return () => { if (timerRef.current) clearInterval(timerRef.current); timerRef.current = null; };
     // eslint-disable-next-line
-  }, [running, connected, activeReel?.reel_id]);
+  }, [running, connected, activeReel?.reel_id, rigAutoEnabled, rigRules.length]);
 
   // Mode-aware "current sample": in playback, we read from the scrubber;
   // in live, we read the newest.
@@ -281,6 +339,54 @@ export default function LiveOpsPage() {
     setPlaybackPlaying(false);
   };
 
+  // ---- Annotation CRUD handlers ----
+  const dropNoteTimestamp = () => {
+    // In playback mode, drop at the scrubber position; in live, at "now".
+    if (mode === "playback" && samples[playbackIdx]?.ts) {
+      return Date.parse(samples[playbackIdx].ts);
+    }
+    return Date.now();
+  };
+
+  const submitDrop = async ({ note, severity, timestamp_ms, depth_ft }) => {
+    try {
+      await axios.post(`${API}/liveops/annotations`, {
+        timestamp_ms, note, severity, depth_ft,
+      }, { withCredentials: true });
+      toast.success("Note dropped on timeline");
+      await refreshAnnotations();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Failed to drop note");
+    }
+  };
+
+  const editAnnotation = async (patch) => {
+    if (!viewAnnot) return;
+    try {
+      await axios.patch(`${API}/liveops/annotations/${viewAnnot.annot_id}`, patch, { withCredentials: true });
+      toast.success("Note updated");
+      await refreshAnnotations();
+      setViewAnnot(null);
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Failed to update");
+    }
+  };
+
+  const deleteAnnotation = async () => {
+    if (!viewAnnot) return;
+    try {
+      await axios.delete(`${API}/liveops/annotations/${viewAnnot.annot_id}`, { withCredentials: true });
+      toast.success("Note deleted");
+      await refreshAnnotations();
+      setViewAnnot(null);
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Failed to delete");
+    }
+  };
+
+  const canEditView = viewAnnot && viewAnnot.source === "manual" && (viewAnnot.author_user_id === user?.user_id || canDeleteAny);
+  const canDeleteView = viewAnnot && (viewAnnot.source === "manual" ? (viewAnnot.author_user_id === user?.user_id || canDeleteAny) : canDeleteAny);
+
   const scrubRelativeSec = (idx) => (idx - (samples.length - 1)); // negative = seconds ago
 
   const renderPanel = (id, large = false) => {
@@ -337,7 +443,7 @@ export default function LiveOpsPage() {
           <button
             data-testid="liveops-run-btn"
             onClick={() => setRunning(!running)}
-            className={`flex items-center gap-1 px-3 py-1 rounded font-bold text-xs ${running ? "bg-[#C00000]" : "bg-[#107C41]"}`}>
+            className={`flex items-center gap-1 px-3 py-1 rounded font-bold text-xs ${running ? "bg-[#C00000]" : "bg-[#FF6B1A]"}`}>
             {running ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
             {running ? "Pause feed" : "Start feed"}
           </button>
@@ -362,6 +468,24 @@ export default function LiveOpsPage() {
             <Download className="w-3.5 h-3.5" />Dossier
           </button>
           <ShareLinksButton />
+          {canAnnotate && (
+            <button
+              data-testid="liveops-drop-note-btn"
+              onClick={() => setDropOpen(true)}
+              className="flex items-center gap-1 px-3 py-1 rounded font-bold text-xs bg-amber-500 text-black hover:bg-amber-400">
+              <StickyNote className="w-3.5 h-3.5" />Drop note
+            </button>
+          )}
+          {canAnnotate && (
+            <button
+              data-testid="liveops-rig-auto-btn"
+              onClick={() => { resetRuleCooldowns(); setRigAutoEnabled((v) => !v); }}
+              title="Let the rig computer drop annotations automatically when threshold rules fire"
+              className={`flex items-center gap-1 px-3 py-1 rounded font-bold text-xs ${rigAutoEnabled ? "bg-[#0056B3] text-white" : "bg-white/10 border border-white/20"}`}>
+              <Cpu className="w-3.5 h-3.5" />
+              Rig auto {rigAutoEnabled ? "ON" : "OFF"}
+            </button>
+          )}
           <button
             data-testid="liveops-customize-btn"
             onClick={() => setShowPrefs(!showPrefs)}
@@ -415,15 +539,24 @@ export default function LiveOpsPage() {
                 </button>
               ))}
             </div>
-            <input
-              data-testid="playback-scrubber"
-              type="range"
-              min={0}
-              max={Math.max(0, samples.length - 1)}
-              value={playbackIdx}
-              onChange={(e) => { setPlaybackIdx(Number(e.target.value)); setPlaybackPlaying(false); }}
-              className="flex-1 min-w-[160px] h-1.5 accent-amber-400"
-            />
+            <div className="relative flex-1 min-w-[160px]">
+              <div className="absolute inset-x-0 top-0 pointer-events-none" style={{ zIndex: 5 }}>
+                <AnnotationPins
+                  annotations={annotations}
+                  samples={samples}
+                  onPinClick={(p) => setViewAnnot(p)}
+                />
+              </div>
+              <input
+                data-testid="playback-scrubber"
+                type="range"
+                min={0}
+                max={Math.max(0, samples.length - 1)}
+                value={playbackIdx}
+                onChange={(e) => { setPlaybackIdx(Number(e.target.value)); setPlaybackPlaying(false); }}
+                className="w-full h-1.5 accent-amber-400"
+              />
+            </div>
             <span className="text-[11px] tabular-nums text-amber-200 font-bold">
               T{scrubRelativeSec(playbackIdx) >= 0 ? "+" : ""}{scrubRelativeSec(playbackIdx)}s
             </span>
@@ -447,8 +580,12 @@ export default function LiveOpsPage() {
               onClick={() => {
                 const win = chartSamples.length ? chartSamples : samples;
                 if (win.length === 0) return toast.error("No samples in window");
-                downloadBlob(`liveops_playback_${Date.now()}.csv`, samplesToCSV(win), "text/csv");
-                toast.success(`Exported ${win.length} samples as CSV`);
+                downloadBlob(`liveops_playback_${Date.now()}.csv`, samplesToCSV(win, annotations), "text/csv");
+                const inWin = annotations.filter((a) => {
+                  const lo = Date.parse(win[0]?.ts || 0), hi = Date.parse(win[win.length-1]?.ts || 0);
+                  return a.timestamp_ms >= Math.min(lo,hi) && a.timestamp_ms <= Math.max(lo,hi);
+                }).length;
+                toast.success(`Exported ${win.length} samples · ${inWin} notes as CSV`);
               }}
               className="text-[10px] font-bold text-amber-300 hover:text-white px-2 py-1 rounded border border-amber-500/50">
               CSV
@@ -462,8 +599,12 @@ export default function LiveOpsPage() {
                   reel_name: activeReel?.name,
                   generated_by: user?.email,
                   well: "Live Ops Playback",
-                }), "text/plain");
-                toast.success(`Exported ${win.length} samples as LAS 2.0`);
+                }, annotations), "text/plain");
+                const inWin = annotations.filter((a) => {
+                  const lo = Date.parse(win[0]?.ts || 0), hi = Date.parse(win[win.length-1]?.ts || 0);
+                  return a.timestamp_ms >= Math.min(lo,hi) && a.timestamp_ms <= Math.max(lo,hi);
+                }).length;
+                toast.success(`Exported ${win.length} samples · ${inWin} notes as LAS 2.0`);
               }}
               className="text-[10px] font-bold text-amber-300 hover:text-white px-2 py-1 rounded border border-amber-500/50">
               LAS
@@ -478,7 +619,7 @@ export default function LiveOpsPage() {
               {PANELS.map((p) => {
                 const on = layout.includes(p.id);
                 return (
-                  <div key={p.id} className={`flex items-center gap-1 rounded px-2 py-1 ${on ? "bg-[#107C41]/30 border border-[#107C41]/50" : "bg-white/5 border border-white/10"}`}>
+                  <div key={p.id} className={`flex items-center gap-1 rounded px-2 py-1 ${on ? "bg-[#FF6B1A]/30 border border-[#FF6B1A]/50" : "bg-white/5 border border-white/10"}`}>
                     <input data-testid={`toggle-${p.id}`} type="checkbox" checked={on} onChange={() => togglePanel(p.id)} />
                     <span className="font-bold">{p.label}</span>
                     {on && (
@@ -542,6 +683,27 @@ export default function LiveOpsPage() {
             {renderPanel(enlarged, true)}
           </div>
         </div>
+      )}
+
+      {/* Annotation drop modal */}
+      <DropAnnotationModal
+        open={dropOpen}
+        onClose={() => setDropOpen(false)}
+        onSubmit={submitDrop}
+        timestampMs={dropNoteTimestamp()}
+        snapshot={latest}
+      />
+
+      {/* Annotation view / edit modal */}
+      {viewAnnot && (
+        <ViewAnnotationModal
+          annotation={viewAnnot}
+          canEdit={canEditView}
+          canDelete={canDeleteView}
+          onClose={() => setViewAnnot(null)}
+          onEdit={editAnnotation}
+          onDelete={deleteAnnotation}
+        />
       )}
     </div>
   );

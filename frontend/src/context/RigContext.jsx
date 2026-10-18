@@ -7,7 +7,7 @@ const LAST_SEEN_KEY = "ctp_rig_last_seen_v1"; // { [rigId]: { chat: iso, checkli
 
 // 25 numbered rigs + Yard. Colours cycle across a curated field-safe palette
 // so each rig looks distinct at a glance.
-const PALETTE = ["#107C41", "#0056B3", "#C36600", "#7C3AED", "#DB2777", "#059669", "#B91C1C", "#0891B2", "#4338CA", "#CA8A04"];
+const PALETTE = ["#FF6B1A", "#0056B3", "#C36600", "#7C3AED", "#DB2777", "#059669", "#B91C1C", "#0891B2", "#4338CA", "#CA8A04"];
 export const RIGS = [
   ...Array.from({ length: 25 }, (_, i) => ({
     id: `RIG${i + 1}`,

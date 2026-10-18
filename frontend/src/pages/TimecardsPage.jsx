@@ -165,7 +165,7 @@ export default function TimecardsPage() {
         {/* Shift Composer — one date, many activities at different rates */}
         <div className="bg-white border border-[#D4D4D4] rounded-lg p-2.5">
           <div className="flex items-center gap-2 mb-2">
-            <Layers className="w-4 h-4 text-[#107C41]" />
+            <Layers className="w-4 h-4 text-[#FF6B1A]" />
             <h3 className="font-bold text-sm">Add Shift — multiple activities at different rates</h3>
             <span className="ml-auto text-[11px] text-[#595959]">Shop/Travel/Field/Moving-Equipment all pay different rates. Enter hours per activity.</span>
           </div>
@@ -221,9 +221,9 @@ export default function TimecardsPage() {
           </div>
 
           <div className="flex items-center gap-2 mt-2">
-            <button data-testid="shift-add-row" onClick={addActivity} className="text-[11px] text-[#107C41] font-bold flex items-center gap-1 border border-[#107C41] rounded px-2 py-1"><Plus className="w-3 h-3" />Add activity</button>
+            <button data-testid="shift-add-row" onClick={addActivity} className="text-[11px] text-[#FF6B1A] font-bold flex items-center gap-1 border border-[#FF6B1A] rounded px-2 py-1"><Plus className="w-3 h-3" />Add activity</button>
             <button data-testid="shift-reset" onClick={resetShift} className="text-[11px] text-[#595959] border rounded px-2 py-1">Reset</button>
-            <button data-testid="shift-submit" onClick={submitShift} className="ml-auto bg-[#107C41] text-white px-3 py-1 text-xs font-bold rounded">Save shift ({activities.filter((a) => Number(a.hours) > 0).length} line{activities.filter((a) => Number(a.hours) > 0).length !== 1 ? "s" : ""})</button>
+            <button data-testid="shift-submit" onClick={submitShift} className="ml-auto bg-[#FF6B1A] text-white px-3 py-1 text-xs font-bold rounded">Save shift ({activities.filter((a) => Number(a.hours) > 0).length} line{activities.filter((a) => Number(a.hours) > 0).length !== 1 ? "s" : ""})</button>
           </div>
         </div>
 
@@ -243,7 +243,7 @@ export default function TimecardsPage() {
                   {payCodes.map((p) => <option key={p.code} value={p.code}>{p.label}{p.is_per_diem ? " (days)" : ""}</option>)}
                 </select>
                 <input data-testid="tc-desc" placeholder="Description" value={quick.description} onChange={(e) => setQuick({ ...quick, description: e.target.value })} className="border rounded px-2 py-1 sm:col-span-2" />
-                <button data-testid="tc-add" onClick={addQuick} className="bg-[#107C41] text-white font-bold rounded px-2 py-1">Add</button>
+                <button data-testid="tc-add" onClick={addQuick} className="bg-[#FF6B1A] text-white font-bold rounded px-2 py-1">Add</button>
               </div>
             </div>
           )}
@@ -265,7 +265,7 @@ export default function TimecardsPage() {
           )}
           <div className="ml-auto flex gap-1 flex-wrap">
             <button data-testid="tc-submit" onClick={() => act("/timecards/submit", "Submitted")} className="bg-[#0056B3] text-white px-2 py-1 font-bold rounded flex items-center gap-1"><Send className="w-3 h-3" />Submit</button>
-            {canApproveSup && <button data-testid="tc-approve-sup" onClick={() => act("/timecards/approve-supervisor", "Supervisor approved")} className="bg-[#107C41] text-white px-2 py-1 font-bold rounded flex items-center gap-1"><CheckCircle2 className="w-3 h-3" />Sup. Approve</button>}
+            {canApproveSup && <button data-testid="tc-approve-sup" onClick={() => act("/timecards/approve-supervisor", "Supervisor approved")} className="bg-[#FF6B1A] text-white px-2 py-1 font-bold rounded flex items-center gap-1"><CheckCircle2 className="w-3 h-3" />Sup. Approve</button>}
             {canApprovePayroll && <button data-testid="tc-approve-payroll" onClick={() => act("/timecards/approve-payroll", "Payroll approved")} className="bg-[#065F46] text-white px-2 py-1 font-bold rounded flex items-center gap-1"><CheckCircle2 className="w-3 h-3" />Payroll Approve</button>}
             {canApproveSup && <button data-testid="tc-reject" onClick={() => act("/timecards/reject", "Rejected")} className="bg-[#C00000] text-white px-2 py-1 font-bold rounded flex items-center gap-1"><XCircle className="w-3 h-3" />Reject</button>}
             {canApproveSup && <button data-testid="tc-export" onClick={() => exportCsv()} className="bg-[#262626] text-white px-2 py-1 font-bold rounded flex items-center gap-1"><Download className="w-3 h-3" />CSV</button>}

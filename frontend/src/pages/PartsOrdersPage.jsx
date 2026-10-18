@@ -76,7 +76,7 @@ export default function PartsOrdersPage() {
             <input type="number" placeholder="Qty" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} className="border rounded px-2 py-1" />
             <input placeholder="Needed by YYYY-MM-DD" value={form.needed_by} onChange={(e) => setForm({ ...form, needed_by: e.target.value })} className="border rounded px-2 py-1" />
           </div>
-          <button data-testid="po-submit" onClick={submit} className="mt-2 bg-[#107C41] text-white px-3 py-1 text-xs font-bold rounded">
+          <button data-testid="po-submit" onClick={submit} className="mt-2 bg-[#FF6B1A] text-white px-3 py-1 text-xs font-bold rounded">
             {canApprove ? "Submit (auto-approved)" : "Submit for Supervisor Approval"}
           </button>
         </div>
@@ -96,7 +96,7 @@ export default function PartsOrdersPage() {
               </p>
               {canApprove && o.status === "pending_supervisor" && (
                 <div className="flex gap-2 mt-2">
-                  <button data-testid={`po-approve-${o.po_id}`} onClick={() => approve(o.po_id)} className="bg-[#107C41] text-white text-xs font-bold px-2 py-1 rounded flex items-center gap-1"><Check className="w-3.5 h-3.5" />Approve</button>
+                  <button data-testid={`po-approve-${o.po_id}`} onClick={() => approve(o.po_id)} className="bg-[#FF6B1A] text-white text-xs font-bold px-2 py-1 rounded flex items-center gap-1"><Check className="w-3.5 h-3.5" />Approve</button>
                   <button data-testid={`po-reject-${o.po_id}`} onClick={() => reject(o.po_id)} className="bg-[#C00000] text-white text-xs font-bold px-2 py-1 rounded flex items-center gap-1"><X className="w-3.5 h-3.5" />Reject</button>
                 </div>
               )}

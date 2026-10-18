@@ -63,7 +63,7 @@ const AdminInvites = () => {
 
   return (
     <div className="min-h-screen bg-[#F3F3F3] flex flex-col">
-      <header className="bg-[#107C41] text-white h-12 flex items-center px-3 shadow-md flex-shrink-0">
+      <header className="bg-[#FF6B1A] text-white h-12 flex items-center px-3 shadow-md flex-shrink-0">
         <button onClick={() => navigate("/app")} className="flex items-center gap-1.5 text-sm font-semibold">
           <ArrowLeft className="w-4 h-4" /> Back
         </button>
@@ -72,7 +72,7 @@ const AdminInvites = () => {
       <div className="flex-1 p-4 overflow-auto">
         <div className="max-w-3xl mx-auto">
           {loading ? (
-            <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-[#107C41]" /></div>
+            <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-[#FF6B1A]" /></div>
           ) : !isAdmin ? (
             <div className="bg-white border border-[#D4D4D4] rounded-lg p-6 text-center">
               <ShieldAlert className="w-10 h-10 text-[#C00000] mx-auto mb-2" />
@@ -82,24 +82,24 @@ const AdminInvites = () => {
           ) : (
             <>
               <div className="bg-white border border-[#D4D4D4] rounded p-3 mb-3 flex items-center gap-2">
-                <LinkIcon className="w-4 h-4 text-[#107C41]" />
+                <LinkIcon className="w-4 h-4 text-[#FF6B1A]" />
                 <span className="text-xs text-[#595959] flex-1">Share app: </span>
-                <code className="text-[11px] font-mono text-[#0D6535] truncate">{appOrigin}</code>
-                <button onClick={() => copy(appOrigin, "origin")} className="flex items-center gap-1 border border-[#D4D4D4] px-2 py-1 rounded text-xs font-semibold hover:border-[#107C41]">
-                  {copied === "origin" ? <><Check className="w-3 h-3 text-[#107C41]" /> Copied</> : <><Copy className="w-3 h-3" /> Copy</>}
+                <code className="text-[11px] font-mono text-[#C44A08] truncate">{appOrigin}</code>
+                <button onClick={() => copy(appOrigin, "origin")} className="flex items-center gap-1 border border-[#D4D4D4] px-2 py-1 rounded text-xs font-semibold hover:border-[#FF6B1A]">
+                  {copied === "origin" ? <><Check className="w-3 h-3 text-[#FF6B1A]" /> Copied</> : <><Copy className="w-3 h-3" /> Copy</>}
                 </button>
               </div>
 
               <div className="flex justify-between items-center mb-3">
                 <p className="text-xs text-[#595959]">{invites.length} code{invites.length !== 1 ? "s" : ""} generated</p>
-                <button onClick={() => setShowNew(true)} className="bg-[#107C41] hover:bg-[#0D6535] text-white px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1.5">
+                <button onClick={() => setShowNew(true)} className="bg-[#FF6B1A] hover:bg-[#C44A08] text-white px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1.5">
                   <Plus className="w-4 h-4" /> New Invite
                 </button>
               </div>
 
               {invites.length === 0 ? (
                 <div className="bg-white border border-[#D4D4D4] rounded p-6 text-center">
-                  <Gift className="w-10 h-10 text-[#107C41] mx-auto mb-2" strokeWidth={1.5} />
+                  <Gift className="w-10 h-10 text-[#FF6B1A] mx-auto mb-2" strokeWidth={1.5} />
                   <p className="text-sm text-[#595959]">No invite codes yet. Generate one to hand out exclusive trial access.</p>
                 </div>
               ) : (
@@ -112,17 +112,17 @@ const AdminInvites = () => {
                     return (
                       <div key={inv.code} className="bg-white border border-[#D4D4D4] rounded p-3">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <code className="font-mono text-base font-bold text-[#107C41] tracking-wider">{inv.code}</code>
+                          <code className="font-mono text-base font-bold text-[#FF6B1A] tracking-wider">{inv.code}</code>
                           <span className={`text-[10px] font-bold px-1.5 py-[2px] rounded uppercase ${statusColor}`}>{status}</span>
                           <span className="text-[10px] text-[#595959]">{used}/{max} used · {inv.grant_days}d grant</span>
                           {inv.grant_role && (
-                            <span className={`text-[10px] font-bold px-1.5 py-[2px] rounded uppercase ${inv.grant_role === "ops_manager" ? "bg-[#0D6535] text-white" : "bg-[#0056B3] text-white"}`}>
+                            <span className={`text-[10px] font-bold px-1.5 py-[2px] rounded uppercase ${inv.grant_role === "ops_manager" ? "bg-[#C44A08] text-white" : "bg-[#0056B3] text-white"}`}>
                               {inv.grant_role === "ops_manager" ? "OPS MGR" : "FIELD MGR"}
                             </span>
                           )}
                           <div className="ml-auto flex gap-1">
-                            <button onClick={() => copy(inv.code, inv.code)} className="border border-[#D4D4D4] px-2 py-1 rounded text-xs font-semibold hover:border-[#107C41] flex items-center gap-1">
-                              {copied === inv.code ? <Check className="w-3 h-3 text-[#107C41]" /> : <Copy className="w-3 h-3" />}
+                            <button onClick={() => copy(inv.code, inv.code)} className="border border-[#D4D4D4] px-2 py-1 rounded text-xs font-semibold hover:border-[#FF6B1A] flex items-center gap-1">
+                              {copied === inv.code ? <Check className="w-3 h-3 text-[#FF6B1A]" /> : <Copy className="w-3 h-3" />}
                             </button>
                             {inv.is_active && (
                               <button onClick={() => revoke(inv.code)} className="border border-[#F5C6CB] text-[#C00000] px-2 py-1 rounded text-xs hover:bg-[#FFF5F5]">
@@ -149,9 +149,9 @@ const AdminInvites = () => {
               {showNew && (
                 <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setShowNew(false)}>
                   <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-4" onClick={(e) => e.stopPropagation()}>
-                    <h3 className="text-base font-bold mb-3 flex items-center gap-2"><Plus className="w-4 h-4 text-[#107C41]" /> New Invite Code</h3>
+                    <h3 className="text-base font-bold mb-3 flex items-center gap-2"><Plus className="w-4 h-4 text-[#FF6B1A]" /> New Invite Code</h3>
                     <label className="text-xs font-semibold block mb-1">Recipient / note (only you see)</label>
-                    <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Jake @ Precision — pilot user" className="w-full mb-3 bg-[#FAFAFA] border border-[#CCC] px-3 py-2 rounded text-sm outline-none focus:border-[#107C41]" />
+                    <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Jake @ Precision — pilot user" className="w-full mb-3 bg-[#FAFAFA] border border-[#CCC] px-3 py-2 rounded text-sm outline-none focus:border-[#FF6B1A]" />
                     <div className="grid grid-cols-2 gap-3 mb-3">
                       <div>
                         <label className="text-xs font-semibold block mb-1">Grant days</label>
@@ -176,7 +176,7 @@ const AdminInvites = () => {
                     </select>
                     <div className="flex justify-end gap-2">
                       <button onClick={() => setShowNew(false)} className="border border-[#D4D4D4] px-4 py-2 rounded text-sm font-semibold">Cancel</button>
-                      <button onClick={create} disabled={creating} className="bg-[#107C41] hover:bg-[#0D6535] text-white px-4 py-2 rounded text-sm font-semibold flex items-center gap-2">
+                      <button onClick={create} disabled={creating} className="bg-[#FF6B1A] hover:bg-[#C44A08] text-white px-4 py-2 rounded text-sm font-semibold flex items-center gap-2">
                         {creating && <Loader2 className="w-4 h-4 animate-spin" />} Generate
                       </button>
                     </div>

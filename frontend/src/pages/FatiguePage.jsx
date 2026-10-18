@@ -89,7 +89,7 @@ export default function FatiguePage() {
             <input data-testid="fatigue-pressure" type="number" value={pressure} onChange={(e) => setPressure(e.target.value)} className="border rounded px-2 py-1" />
           </label>
           <div className="flex flex-col justify-center gap-2">
-            <button data-testid="fatigue-feed-btn" onClick={() => feed()} className="bg-[#107C41] text-white px-3 py-1.5 text-xs font-bold rounded flex items-center justify-center gap-1"><Zap className="w-3.5 h-3.5" />Advance 1 cycle</button>
+            <button data-testid="fatigue-feed-btn" onClick={() => feed()} className="bg-[#FF6B1A] text-white px-3 py-1.5 text-xs font-bold rounded flex items-center justify-center gap-1"><Zap className="w-3.5 h-3.5" />Advance 1 cycle</button>
           </div>
           <div className="flex flex-col justify-center gap-1">
             <button data-testid="fatigue-sim-btn" onClick={() => setSimOn(!simOn)} className={`${simOn ? "bg-[#C00000]" : "bg-[#0056B3]"} text-white px-3 py-1.5 text-xs font-bold rounded flex items-center justify-center gap-1`}>

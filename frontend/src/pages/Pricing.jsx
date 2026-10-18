@@ -38,7 +38,7 @@ const Pricing = () => {
 
   return (
     <div className="min-h-screen bg-[#F3F3F3] flex flex-col">
-      <header className="bg-[#107C41] text-white h-12 flex items-center px-3 shadow-md flex-shrink-0">
+      <header className="bg-[#FF6B1A] text-white h-12 flex items-center px-3 shadow-md flex-shrink-0">
         <button onClick={() => navigate("/app")} className="flex items-center gap-1.5 text-sm font-semibold">
           <ArrowLeft className="w-4 h-4" /> Back
         </button>
@@ -52,7 +52,7 @@ const Pricing = () => {
               <Star className="w-3.5 h-3.5 fill-[#856404]" />
               ROLLOUT PRICING — LOCK IN NOW
             </div>
-            <h2 className="text-2xl md:text-3xl font-bold text-[#262626] mb-2">Unlock CT Workbook Pro</h2>
+            <h2 className="text-2xl md:text-3xl font-bold text-[#262626] mb-2">Unlock CoilAegis Pro</h2>
             <p className="text-sm text-[#595959]">Cheaper than a coffee. Full access to every sheet, saved jobs, crew sharing, AI assistant, and Emergency SOPs.</p>
           </div>
 
@@ -60,35 +60,35 @@ const Pricing = () => {
             <div className="bg-white border border-[#D4D4D4] rounded-lg p-6 shadow-sm">
               <div className="flex items-baseline justify-between mb-1"><h3 className="text-lg font-bold text-[#262626]">Monthly</h3></div>
               <div className="mb-4">
-                <span className="text-4xl font-bold text-[#107C41]">$2.99</span>
+                <span className="text-4xl font-bold text-[#FF6B1A]">$2.99</span>
                 <span className="text-sm text-[#595959] ml-1">/ month USD</span>
               </div>
               <p className="text-xs text-[#595959] mb-4">Cancel anytime. No commitment.</p>
               <button
                 onClick={() => subscribe("ct_pro_monthly")}
                 disabled={loadingPlan !== null}
-                className="w-full bg-white border-2 border-[#107C41] text-[#107C41] hover:bg-[#F0F9F3] py-2.5 rounded font-bold text-sm transition-colors flex items-center justify-center gap-2"
+                className="w-full bg-white border-2 border-[#FF6B1A] text-[#FF6B1A] hover:bg-[#FFF7EF] py-2.5 rounded font-bold text-sm transition-colors flex items-center justify-center gap-2"
               >
                 {loadingPlan === "ct_pro_monthly" ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
                 Start Monthly
               </button>
             </div>
 
-            <div className="bg-white border-2 border-[#107C41] rounded-lg p-6 shadow-md relative">
-              <div className="absolute -top-3 right-4 bg-[#107C41] text-white text-[10px] font-bold px-2 py-1 rounded flex items-center gap-1">
+            <div className="bg-white border-2 border-[#FF6B1A] rounded-lg p-6 shadow-md relative">
+              <div className="absolute -top-3 right-4 bg-[#FF6B1A] text-white text-[10px] font-bold px-2 py-1 rounded flex items-center gap-1">
                 <Sparkles className="w-2.5 h-2.5" /> SAVE 30%
               </div>
               <div className="flex items-baseline justify-between mb-1"><h3 className="text-lg font-bold text-[#262626]">Yearly</h3></div>
               <div className="mb-1">
-                <span className="text-4xl font-bold text-[#107C41]">$24.99</span>
+                <span className="text-4xl font-bold text-[#FF6B1A]">$24.99</span>
                 <span className="text-sm text-[#595959] ml-1">/ year USD</span>
               </div>
-              <p className="text-[11px] text-[#0D6535] font-semibold mb-3">Just $2.08/month — save $11/year</p>
+              <p className="text-[11px] text-[#C44A08] font-semibold mb-3">Just $2.08/month — save $11/year</p>
               <p className="text-xs text-[#595959] mb-4">One payment. Full year of access.</p>
               <button
                 onClick={() => subscribe("ct_pro_yearly")}
                 disabled={loadingPlan !== null}
-                className="w-full bg-[#107C41] hover:bg-[#0D6535] text-white py-2.5 rounded font-bold text-sm shadow-md transition-colors flex items-center justify-center gap-2"
+                className="w-full bg-[#FF6B1A] hover:bg-[#C44A08] text-white py-2.5 rounded font-bold text-sm shadow-md transition-colors flex items-center justify-center gap-2"
               >
                 {loadingPlan === "ct_pro_yearly" ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
                 Start Yearly
@@ -101,7 +101,7 @@ const Pricing = () => {
             <ul className="grid md:grid-cols-2 gap-2">
               {features.map((f) => (
                 <li key={f} className="flex items-start gap-2 text-sm text-[#444]">
-                  <Check className="w-4 h-4 text-[#107C41] mt-0.5 flex-shrink-0" strokeWidth={3} />
+                  <Check className="w-4 h-4 text-[#FF6B1A] mt-0.5 flex-shrink-0" strokeWidth={3} />
                   <span>{f}</span>
                 </li>
               ))}

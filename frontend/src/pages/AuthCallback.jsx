@@ -44,12 +44,12 @@ const AuthCallback = () => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#F3F3F3]">
       <div className="bg-white p-8 rounded shadow border border-[#D4D4D4] flex flex-col items-center gap-3 max-w-sm">
-        <FileSpreadsheet className="w-10 h-10 text-[#107C41]" strokeWidth={2} />
+        <FileSpreadsheet className="w-10 h-10 text-[#FF6B1A]" strokeWidth={2} />
         {error ? (
           <p className="text-sm text-[#C00000] font-medium">{error}</p>
         ) : (
           <>
-            <Loader2 className="w-6 h-6 text-[#107C41] animate-spin" />
+            <Loader2 className="w-6 h-6 text-[#FF6B1A] animate-spin" />
             <p className="text-sm text-[#444] font-medium">Signing you in…</p>
           </>
         )}

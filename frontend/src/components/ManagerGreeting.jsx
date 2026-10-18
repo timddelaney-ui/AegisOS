@@ -52,7 +52,7 @@ const ManagerGreeting = () => {
 
   if (!visible || !isManager) return null;
 
-  const accent = role === "ops_manager" ? "#0D6535" : "#0056B3";
+  const accent = role === "ops_manager" ? "#C44A08" : "#0056B3";
   const roleTag = role === "ops_manager" ? "OPS MANAGER" : "FIELD MANAGER";
 
   return (

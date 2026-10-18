@@ -67,7 +67,7 @@ export const AttachmentThumb = ({ attachment, canDelete = false, onDelete }) => 
         <div className="flex items-center justify-between text-[9px] text-[#595959]">
           <span>{humanSize(attachment.size)} · {attachment.uploader_name}</span>
           <div className="flex items-center gap-1">
-            {isImage && <a href={url} download={attachment.filename} onClick={(e) => { e.preventDefault(); window.open(url, "_blank"); }} className="hover:text-[#0D6535]" title="Open"><Download className="w-3 h-3" /></a>}
+            {isImage && <a href={url} download={attachment.filename} onClick={(e) => { e.preventDefault(); window.open(url, "_blank"); }} className="hover:text-[#C44A08]" title="Open"><Download className="w-3 h-3" /></a>}
             {canDelete && (
               <button data-testid={`attachment-del-${attachment.attachment_id}`} onClick={() => onDelete(attachment)} className="hover:text-[#C00000]" title="Delete">
                 <Trash2 className="w-3 h-3" />
@@ -164,7 +164,7 @@ const AttachmentUploader = ({ context, contextRef, onUploaded, hideList = false,
           onClick={pick}
           disabled={uploading}
           data-testid={`attachment-pick-${context}`}
-          className={`flex items-center gap-1 rounded font-semibold ${compact ? "text-[10px] px-1.5 py-1 text-[#0D6535] hover:bg-[#F0F9F3]" : "text-[11px] px-2.5 py-1.5 bg-[#0D6535] hover:bg-[#0A4F28] text-white"} disabled:opacity-50`}
+          className={`flex items-center gap-1 rounded font-semibold ${compact ? "text-[10px] px-1.5 py-1 text-[#C44A08] hover:bg-[#FFF7EF]" : "text-[11px] px-2.5 py-1.5 bg-[#C44A08] hover:bg-[#0A4F28] text-white"} disabled:opacity-50`}
         >
           {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Paperclip className="w-3.5 h-3.5" strokeWidth={2.5} />}
           {label || (compact ? "Attach" : "Attach photo or PDF")}

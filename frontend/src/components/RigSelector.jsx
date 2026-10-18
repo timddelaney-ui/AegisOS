@@ -103,14 +103,14 @@ const RigSelector = () => {
                   key={r.id}
                   data-testid={`rig-menu-item-${r.id}`}
                   onClick={() => { setRigId(r.id); setOpen(false); setQuery(""); }}
-                  className={`w-full flex items-center gap-2 px-2.5 py-2 text-[12px] font-semibold hover:bg-[#F0F9F3] ${isActive ? "bg-[#F0F9F3]" : ""}`}
+                  className={`w-full flex items-center gap-2 px-2.5 py-2 text-[12px] font-semibold hover:bg-[#FFF7EF] ${isActive ? "bg-[#FFF7EF]" : ""}`}
                 >
                   <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: r.accent }} />
                   <span className="flex-1 text-left">{r.label}</span>
                   {anyUnread && (
                     <span data-testid={`rig-menu-unread-${r.id}`} className="w-1.5 h-1.5 rounded-full bg-[#DC2626]" title="New activity" />
                   )}
-                  {isActive && <Check className="w-3.5 h-3.5 text-[#107C41]" strokeWidth={3} />}
+                  {isActive && <Check className="w-3.5 h-3.5 text-[#FF6B1A]" strokeWidth={3} />}
                 </button>
               );
             })}

@@ -1,10 +1,12 @@
-# CT Field Workbook — PRD
+# CoilAegis — PRD
 
 ## Original Problem Statement
-B2B SaaS for coiled tubing field operations. Phase 1 is now a real-time analytics,
-triaxial-stress, fatigue, 3D wellbore, and crew-ops suite built strictly from
-published open-domain standards (API RP 5C7, API 5CT, AER D037, CSA Z662,
-Palmgren-Miner, Manson-Coffin, grade spec sheets for SMYS).
+B2B SaaS for coiled tubing field operations (rebranded from "CT Field Workbook"
+to **CoilAegis** on 2026-02-18 — graphite + blaze-orange industrial aesthetic,
+shield + coil-spiral mark). Phase 1 is now a real-time analytics, triaxial-stress,
+fatigue, 3D wellbore, and crew-ops suite built strictly from published open-domain
+standards (API RP 5C7, API 5CT, AER D037, CSA Z662, Palmgren-Miner, Manson-Coffin,
+grade spec sheets for SMYS).
 
 ## Audience
 - **Crew** — tap-and-go doghouse UI, timecard entry, parts order submission, task
@@ -153,6 +155,38 @@ join only.
 - Module 7: 1 Hz engineering recorder, strip charts, LAS/WITSML export,
   Engineering Job Audit Dossier PDF.
 - Stripe tiers go live (Tier 1 Hand $2.99/mo, Tier 2 Unit $249/yr).
+
+## Changelog — 2026-02-18
+### Playback Annotations (manual + rig-computer)
+- Supervisor+ can drop timestamped notes directly on the Live Ops playback
+  timeline (severity: info | warn | critical) via the new "Drop note" button.
+- Rig-computer ingest pathway (`/api/liveops/annotations/ingest`) accepts
+  batched auto-generated notes from a DAQ listener. Phase-2 scaffold for
+  real WITS 0 / Modbus / WITSML threshold-rule listeners.
+- Client-side rule evaluator (`src/lib/rigAnnotationRules.js`) runs the user-
+  tunable thresholds against every live sample. "Rig auto ON" toggle lets
+  users approve autogen before firing against company telemetry.
+- Pins render over the scrubber (red/amber/blue by severity), click to view
+  with Edit/Delete actions. Rig-sourced notes are immutable (manual only
+  editable).
+- CSV + LAS 2.0 exports now include an `~ANNOTATIONS` block (CSV) or
+  `# ANN |` comment lines in `~Other Information` (LAS) with ISO
+  timestamp, source, severity, author, channel, value, depth and note.
+- 5 new pytests in `tests/test_phase2.py` cover manual CRUD, rig ingest,
+  immutability, rules CRUD, guest read-only enforcement. 24 of 24 Phase 1 +
+  Phase 2 tests pass sequentially.
+
+### Full rebrand — CT Field Workbook → CoilAegis
+- Name: `CT_Field_Operations.xlsx` → **CoilAegis** everywhere user-facing.
+- Logo: new inline SVG shield + coil-spiral mark (`CoilAegisLogo.jsx`); PNG
+  icons replaced with vector `/public/coilaegis-icon-{192,512,maskable}.svg`.
+- Palette: Office green `#107C41` → **Blaze orange `#FF6B1A`** across the
+  app via sed pass; dark surface `#0D1A24` + `#111827` cards; mobile-
+  spreadsheet chrome deleted (`.xlsx` filename, "MOBILE SPREADSHEET" badge,
+  `FileSpreadsheet` brand icon).
+- Login page fully re-styled with dark industrial hero + grid backdrop.
+- Hub greeting now a dark hero band under the branded top-bar.
+- manifest.json + index.html meta/title/description/theme-color refreshed.
 ### Phase 3
 - Multi-tenant isolation, corporate SOPs, branded PDF.
 - Expanded RBAC: Field Hand, Tool Push, Ops Coordinator, HSE Manager, Fleet

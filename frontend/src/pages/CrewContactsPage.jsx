@@ -91,7 +91,7 @@ const CrewContactsPage = () => {
         <button
           data-testid="cc-back-btn"
           onClick={() => navigate("/hub")}
-          className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#595959] hover:text-[#107C41]"
+          className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#595959] hover:text-[#FF6B1A]"
         >
           <ArrowLeft className="w-4 h-4" /> Hub
         </button>
@@ -103,7 +103,7 @@ const CrewContactsPage = () => {
           <button
             data-testid="cc-add-btn"
             onClick={openCreate}
-            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-[#107C41] text-white text-[11px] font-bold hover:bg-[#0D6535]"
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-[#FF6B1A] text-white text-[11px] font-bold hover:bg-[#C44A08]"
           >
             <Plus className="w-3.5 h-3.5" strokeWidth={2.6} /> <span className="hidden sm:inline">Add contact</span>
           </button>
@@ -142,14 +142,14 @@ const CrewContactsPage = () => {
                   data-testid={`cc-row-${c.contact_id}`}
                   className="bg-white border border-[#D4D4D4] rounded-xl p-3 flex items-center gap-3 shadow-sm"
                 >
-                  <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0 ${c.is_default_recipient ? "bg-[#107C41] text-white" : "bg-[#F0F0F0] text-[#595959]"}`}>
+                  <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0 ${c.is_default_recipient ? "bg-[#FF6B1A] text-white" : "bg-[#F0F0F0] text-[#595959]"}`}>
                     {c.name.slice(0, 1).toUpperCase()}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <p className="text-[13px] font-bold text-[#262626] truncate">{c.name}</p>
                       {c.is_default_recipient && (
-                        <span className="inline-flex items-center gap-0.5 text-[9px] font-bold bg-[#E6F4EA] text-[#0D6535] px-1.5 py-[1px] rounded-full">
+                        <span className="inline-flex items-center gap-0.5 text-[9px] font-bold bg-[#FFF1E6] text-[#C44A08] px-1.5 py-[1px] rounded-full">
                           <Check className="w-2.5 h-2.5" /> DEFAULT
                         </span>
                       )}
@@ -163,15 +163,15 @@ const CrewContactsPage = () => {
                     <button
                       data-testid={`cc-toggle-${c.contact_id}`}
                       onClick={() => toggleDefault(c)}
-                      className="p-1.5 rounded text-[#595959] hover:text-[#107C41] hover:bg-[#F0F9F3]"
+                      className="p-1.5 rounded text-[#595959] hover:text-[#FF6B1A] hover:bg-[#FFF7EF]"
                       title={c.is_default_recipient ? "Unset default" : "Set as default recipient"}
                     >
-                      {c.is_default_recipient ? <Star className="w-3.5 h-3.5 text-[#107C41] fill-[#107C41]" /> : <StarOff className="w-3.5 h-3.5" />}
+                      {c.is_default_recipient ? <Star className="w-3.5 h-3.5 text-[#FF6B1A] fill-[#FF6B1A]" /> : <StarOff className="w-3.5 h-3.5" />}
                     </button>
                     <button
                       data-testid={`cc-edit-${c.contact_id}`}
                       onClick={() => openEdit(c)}
-                      className="p-1.5 rounded text-[#595959] hover:text-[#107C41] hover:bg-[#F0F9F3]"
+                      className="p-1.5 rounded text-[#595959] hover:text-[#FF6B1A] hover:bg-[#FFF7EF]"
                     >
                       <Pencil className="w-3.5 h-3.5" />
                     </button>
@@ -205,7 +205,7 @@ const CrewContactsPage = () => {
                   value={form.name}
                   onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                   placeholder="e.g. John Smith"
-                  className="w-full px-2.5 py-2 border border-[#CCC] rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#107C41]/40"
+                  className="w-full px-2.5 py-2 border border-[#CCC] rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#FF6B1A]/40"
                   autoFocus
                 />
               </label>
@@ -238,7 +238,7 @@ const CrewContactsPage = () => {
                   type="checkbox"
                   checked={form.is_default_recipient}
                   onChange={(e) => setForm((f) => ({ ...f, is_default_recipient: e.target.checked }))}
-                  className="w-4 h-4 accent-[#107C41]"
+                  className="w-4 h-4 accent-[#FF6B1A]"
                 />
                 <span className="text-[12px] text-[#262626]">
                   <strong>Default recipient</strong> — receives every shift-end handover automatically.
@@ -251,7 +251,7 @@ const CrewContactsPage = () => {
                 data-testid="cc-form-save"
                 onClick={save}
                 disabled={busy || !form.name.trim() || !form.email.trim()}
-                className="px-3 py-1.5 bg-[#107C41] hover:bg-[#0D6535] text-white rounded text-[12px] font-bold disabled:opacity-50"
+                className="px-3 py-1.5 bg-[#FF6B1A] hover:bg-[#C44A08] text-white rounded text-[12px] font-bold disabled:opacity-50"
               >
                 {busy ? "Saving…" : "Save"}
               </button>

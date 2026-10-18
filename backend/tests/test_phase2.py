@@ -143,3 +143,143 @@ def test_share_link_create_redeem_revoke():
         subprocess.run(["mongosh", "--quiet", "--eval",
             'db=db.getSiblingDB("test_database"); db.users.updateOne({user_id:"demo_pro_user"},{$set:{role:"ops_manager"}})'],
             check=False)
+
+
+# -----------------------------------------------------------------
+# Playback Annotations (manual + rig-computer)
+# -----------------------------------------------------------------
+def test_annotation_manual_crud():
+    ts = 1_700_000_000_000
+    with c() as x:
+        # Create
+        r = x.post("/liveops/annotations", json={
+            "timestamp_ms": ts,
+            "note": "pressure spike here = pump failure",
+            "severity": "critical",
+            "depth_ft": 4200.5,
+            "channel": "p_internal_psi",
+            "value": 9200.0,
+        })
+        assert r.status_code == 200, r.text
+        annot = r.json()
+        aid = annot["annot_id"]
+        assert annot["source"] == "manual"
+        assert annot["severity"] == "critical"
+        assert annot["author_user_id"] == "demo_pro_user"
+
+        # List includes it
+        r = x.get("/liveops/annotations", params={"from_ms": ts - 1, "to_ms": ts + 1})
+        assert r.status_code == 200
+        ids = [a["annot_id"] for a in r.json()["annotations"]]
+        assert aid in ids
+
+        # Edit
+        r = x.patch(f"/liveops/annotations/{aid}", json={"note": "updated note", "severity": "warn"})
+        assert r.status_code == 200
+        assert r.json()["note"] == "updated note"
+        assert r.json()["severity"] == "warn"
+
+        # Delete
+        r = x.delete(f"/liveops/annotations/{aid}")
+        assert r.status_code == 200
+
+
+def test_annotation_rig_ingest_batch_and_immutable():
+    ts = 1_700_000_100_000
+    with c() as x:
+        r = x.post("/liveops/annotations/ingest", json={
+            "source": "wits0",
+            "items": [
+                {"timestamp_ms": ts, "note": "P>9000 breached", "severity": "critical",
+                 "rule_id": "p_hard_cap", "channel": "p_internal_psi", "value": 9120.0, "depth_ft": 4100.0},
+                {"timestamp_ms": ts + 500, "note": "Weight overpull", "severity": "critical",
+                 "rule_id": "w_overpull", "channel": "weight_lb", "value": 27500.0},
+            ],
+        })
+        assert r.status_code == 200, r.text
+        payload = r.json()
+        assert payload["inserted"] == 2
+        rig_ids = [a["annot_id"] for a in payload["items"]]
+        assert all(a["source"] == "wits0" for a in payload["items"])
+
+        # Rig-sourced is immutable
+        r = x.patch(f"/liveops/annotations/{rig_ids[0]}", json={"note": "nope"})
+        assert r.status_code == 403
+
+        # Management can delete rig-sourced
+        r = x.delete(f"/liveops/annotations/{rig_ids[0]}")
+        assert r.status_code == 200
+        r = x.delete(f"/liveops/annotations/{rig_ids[1]}")
+        assert r.status_code == 200
+
+
+def test_annotation_invalid_severity_rejected():
+    with c() as x:
+        r = x.post("/liveops/annotations", json={
+            "timestamp_ms": 1_700_000_200_000,
+            "note": "x", "severity": "bogus",
+        })
+        assert r.status_code == 400
+
+
+def test_annotation_rules_defaults_then_upsert():
+    with c() as x:
+        r = x.get("/liveops/annotations/rules")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["defaults"] is True
+        assert len(data["rules"]) >= 3
+
+        # Upsert a tuned set
+        r = x.put("/liveops/annotations/rules", json=[
+            {"rule_id": "p_hard_cap", "channel": "p_internal_psi", "op": ">",
+             "threshold": 9500, "severity": "critical", "note": "Pressure hard cap", "enabled": True},
+        ])
+        assert r.status_code == 200
+        assert r.json()["saved"] == 1
+
+        r = x.get("/liveops/annotations/rules")
+        data = r.json()
+        assert data["defaults"] is False
+        assert data["rules"][0]["threshold"] == 9500
+
+        # Clear so defaults return next read
+        r = x.put("/liveops/annotations/rules", json=[])
+        assert r.status_code == 200
+
+
+def test_annotation_guest_can_read_not_write():
+    """Guest share link user is view-only on annotations."""
+    with c() as x:
+        link = x.post("/share-links", json={"label": "pytest-annot", "days": 1}).json()
+        link_id = link["link_id"]
+        token = link["token"]
+    try:
+        with httpx.Client(base_url=API, timeout=20) as pub:
+            r = pub.get(f"/share/{token}")
+            assert r.status_code == 200
+            # Grab cookie
+            raw = r.headers.get("set-cookie", "")
+            sess = None
+            for part in raw.split(","):
+                if "session_token=" in part:
+                    sess = part.split("session_token=")[1].split(";")[0]
+                    break
+            assert sess
+            h = {"Cookie": f"session_token={sess}"}
+            # Guest can list (view-only)
+            r = pub.get("/liveops/annotations", headers=h)
+            assert r.status_code == 200
+            # Guest cannot drop a manual note (requires supervisor+)
+            r = pub.post("/liveops/annotations",
+                         json={"timestamp_ms": 1_700_000_300_000, "note": "x", "severity": "info"},
+                         headers=h)
+            assert r.status_code == 403
+            # Guest cannot ingest rig notes (requires crew+)
+            r = pub.post("/liveops/annotations/ingest",
+                         json={"source": "wits0", "items": [{"timestamp_ms": 1, "note": "x"}]},
+                         headers=h)
+            assert r.status_code == 403
+    finally:
+        with c() as x:
+            x.delete(f"/share-links/{link_id}")

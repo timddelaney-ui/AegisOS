@@ -64,7 +64,7 @@ export default function ShareLinksButton() {
               <div className="grid grid-cols-5 gap-2 text-xs">
                 <input data-testid="share-label" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Label (e.g. Acme Energy)" className="border rounded px-2 py-1 col-span-3" />
                 <input data-testid="share-days" type="number" min="1" max="30" value={days} onChange={(e) => setDays(e.target.value)} className="border rounded px-2 py-1" />
-                <button data-testid="share-create" onClick={create} className="bg-[#107C41] text-white px-2 py-1 font-bold rounded flex items-center gap-1 justify-center"><Plus className="w-3 h-3" />Create</button>
+                <button data-testid="share-create" onClick={create} className="bg-[#FF6B1A] text-white px-2 py-1 font-bold rounded flex items-center gap-1 justify-center"><Plus className="w-3 h-3" />Create</button>
               </div>
               <p className="text-[10px] text-[#9CA3AF]">days (1–30)</p>
             </div>

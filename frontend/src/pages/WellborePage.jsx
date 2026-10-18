@@ -13,7 +13,7 @@ import { Upload, Play } from "lucide-react";
 // Color-code a station by DLS (deg per 100 ft)
 const dlsColor = (dls) => {
   if (dls == null) return "#0056B3";
-  if (dls < 3) return "#107C41";
+  if (dls < 3) return "#FF6B1A";
   if (dls < 6) return "#CA8A04";
   if (dls < 10) return "#C36600";
   return "#C00000";
@@ -138,7 +138,7 @@ export default function WellborePage() {
             {surveys.map((s) => (
               <button key={s.survey_id} data-testid={`select-survey-${s.survey_id}`}
                 onClick={() => activate(s.survey_id)}
-                className={`text-xs px-2 py-1 rounded font-bold ${s.survey_id === activeId ? "bg-[#107C41] text-white" : "bg-white border border-[#D4D4D4]"}`}>
+                className={`text-xs px-2 py-1 rounded font-bold ${s.survey_id === activeId ? "bg-[#FF6B1A] text-white" : "bg-white border border-[#D4D4D4]"}`}>
                 {s.well_name} {s.survey_id === activeId && "·"} {s.stations?.length} stn
               </button>
             ))}

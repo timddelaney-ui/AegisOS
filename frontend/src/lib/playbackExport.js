@@ -1,5 +1,6 @@
 // Playback window export — CSV + LAS 2.0 (ASCII well-log standard).
 // Client-side: no server round-trip, works offline.
+// Supports timeline annotations (manual + rig-computer) embedded in both formats.
 
 const COLS = [
   { key: "ts",                      label: "TIME",     unit: "ISO",   mnem: "TIME" },
@@ -18,7 +19,24 @@ const fmt = (v) => {
   return String(v);
 };
 
-export function samplesToCSV(samples) {
+// CSV-safe quoting: wrap in quotes and double-up any inner quotes.
+const q = (v) => {
+  if (v === null || v === undefined) return "";
+  const s = String(v).replace(/"/g, '""');
+  return `"${s}"`;
+};
+
+// Filter annotations to the window spanned by `samples`.
+function annotationsInWindow(annotations, samples) {
+  if (!annotations?.length || !samples?.length) return [];
+  const firstTs = Date.parse(samples[0].ts || samples[0].created_at || Date.now());
+  const lastTs = Date.parse(samples[samples.length - 1].ts || samples[samples.length - 1].created_at || Date.now());
+  const lo = Math.min(firstTs, lastTs);
+  const hi = Math.max(firstTs, lastTs);
+  return annotations.filter((a) => a.timestamp_ms >= lo && a.timestamp_ms <= hi);
+}
+
+export function samplesToCSV(samples, annotations = []) {
   const header = COLS.map((c) => `${c.label}_${c.unit}`).join(",");
   const rows = samples.map((s) =>
     COLS.map((c) => {
@@ -26,12 +44,31 @@ export function samplesToCSV(samples) {
       return fmt(s[c.key]);
     }).join(",")
   );
-  return [header, ...rows].join("\n");
+  const inWindow = annotationsInWindow(annotations, samples);
+  const annotBlock = [];
+  if (inWindow.length) {
+    annotBlock.push("");
+    annotBlock.push("# ANNOTATIONS");
+    annotBlock.push(["TIMESTAMP_ISO", "SOURCE", "SEVERITY", "AUTHOR", "CHANNEL", "VALUE", "DEPTH_FT", "NOTE"].join(","));
+    inWindow.forEach((a) => {
+      annotBlock.push([
+        q(new Date(a.timestamp_ms).toISOString()),
+        q(a.source || "manual"),
+        q(a.severity || "info"),
+        q(a.author_name || ""),
+        q(a.channel || ""),
+        fmt(a.value),
+        fmt(a.depth_ft),
+        q(a.note || ""),
+      ].join(","));
+    });
+  }
+  return [header, ...rows, ...annotBlock].join("\n");
 }
 
 // LAS 2.0 — Canadian Well Logging Society public spec.
 // Header + ~A ascii data section. Null value = -999.25
-export function samplesToLAS(samples, meta = {}) {
+export function samplesToLAS(samples, meta = {}, annotations = []) {
   const nullv = -999.25;
   const first = samples[0] || {};
   const last = samples[samples.length - 1] || {};
@@ -62,8 +99,27 @@ export function samplesToLAS(samples, meta = {}) {
   lines.push("~Parameter Information");
   if (meta.reel_name) lines.push(`REEL.                ${meta.reel_name} : ACTIVE REEL`);
   if (meta.generated_by) lines.push(`USER.                ${meta.generated_by} : EXPORTED BY`);
+
+  const inWindow = annotationsInWindow(annotations, samples);
   lines.push("~Other Information");
-  lines.push(`Exported from CT Field Workbook playback export · ${samples.length} samples`);
+  lines.push(`Exported from CoilAegis playback export · ${samples.length} samples · ${inWindow.length} annotations`);
+  if (inWindow.length) {
+    lines.push("# BEGIN ANNOTATIONS (ISO | source | severity | author | channel | value | depth_ft | note)");
+    inWindow.forEach((a) => {
+      const parts = [
+        new Date(a.timestamp_ms).toISOString(),
+        a.source || "manual",
+        a.severity || "info",
+        (a.author_name || "").replace(/\|/g, "/"),
+        a.channel || "-",
+        a.value == null ? "-" : Number(a.value).toFixed(2),
+        a.depth_ft == null ? "-" : Number(a.depth_ft).toFixed(2),
+        (a.note || "").replace(/\|/g, "/").replace(/[\r\n]+/g, " "),
+      ];
+      lines.push(`# ANN | ${parts.join(" | ")}`);
+    });
+    lines.push("# END ANNOTATIONS");
+  }
   lines.push("~ASCII");
   samples.forEach((s) => {
     const row = COLS.filter((c) => c.key !== "ts").map((c) => {

@@ -100,14 +100,14 @@ const EmergencyCard = ({ protocol }) => {
           </div>
 
           <div>
-            <h4 className="text-[10px] font-bold uppercase text-[#0D6535] mb-1.5 flex items-center gap-1">
+            <h4 className="text-[10px] font-bold uppercase text-[#C44A08] mb-1.5 flex items-center gap-1">
               <Users className="w-3 h-3" strokeWidth={2.5} />
               Operator Actions · OH&amp;S / Safe Work Practice
             </h4>
             <ul className="space-y-1 pl-0">
               {protocol.operator.map((step) => (
                 <li key={step} className="flex gap-2 text-[12px] text-[#333] leading-relaxed">
-                  <span className="flex-shrink-0 w-1 h-1 rounded-full bg-[#0D6535] mt-2" />
+                  <span className="flex-shrink-0 w-1 h-1 rounded-full bg-[#C44A08] mt-2" />
                   <span>{step}</span>
                 </li>
               ))}
@@ -159,7 +159,7 @@ const EmergencySheet = () => {
         placeholder="Search scenarios, references, categories…"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        className="w-full bg-white border border-[#D4D4D4] rounded px-3 py-2 text-sm outline-none focus:border-[#107C41] focus:ring-2 focus:ring-[#107C41]/10"
+        className="w-full bg-white border border-[#D4D4D4] rounded px-3 py-2 text-sm outline-none focus:border-[#FF6B1A] focus:ring-2 focus:ring-[#FF6B1A]/10"
       />
 
       {/* Category pills */}
@@ -172,8 +172,8 @@ const EmergencySheet = () => {
               onClick={() => setCategory(cat)}
               className={`px-3 py-1 rounded-full text-[11px] font-semibold border transition-colors ${
                 isActive
-                  ? "bg-[#107C41] text-white border-[#107C41]"
-                  : "bg-white text-[#444] border-[#D4D4D4] hover:border-[#107C41]"
+                  ? "bg-[#FF6B1A] text-white border-[#FF6B1A]"
+                  : "bg-white text-[#444] border-[#D4D4D4] hover:border-[#FF6B1A]"
               }`}
             >
               {cat}

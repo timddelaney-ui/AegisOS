@@ -22,7 +22,7 @@ const ALL_PATTERNS = [...PATTERNS_ONE_OFF, ...PATTERNS_ROTATING];
 
 // Per-crew-member colour so managers can see at a glance who's on what rig.
 const CREW_PALETTE = [
-  "#0D6535", "#0056B3", "#7C3AED", "#C36600", "#DB2777",
+  "#C44A08", "#0056B3", "#7C3AED", "#C36600", "#DB2777",
   "#059669", "#B91C1C", "#0891B2", "#4338CA", "#CA8A04",
   "#0F766E", "#9333EA", "#EA580C", "#65A30D", "#BE185D",
   "#0369A1", "#7C2D12", "#4D7C0F", "#6D28D9", "#B45309",
@@ -132,7 +132,7 @@ const SingleShiftForm = ({ rigId, onSaved, onCancel }) => {
         <button onClick={onCancel} className="text-xs text-[#595959] px-3 py-1.5">Cancel</button>
         <button data-testid="schedule-save" disabled={saving || !f.crew_member_name?.trim()}
           onClick={submit}
-          className="text-xs font-bold text-white bg-[#0D6535] hover:bg-[#0A4F28] px-4 py-1.5 rounded disabled:opacity-50 inline-flex items-center gap-1">
+          className="text-xs font-bold text-white bg-[#C44A08] hover:bg-[#0A4F28] px-4 py-1.5 rounded disabled:opacity-50 inline-flex items-center gap-1">
           {saving ? <><Loader2 className="w-3 h-3 animate-spin" /> Saving…</> : "Save shift"}
         </button>
       </div>
@@ -233,10 +233,10 @@ const CrewBuilderModal = ({ open, rigId, editing, onClose, onSaved }) => {
 
   return (
     <div className="fixed inset-0 bg-black/60 z-[95] flex items-end sm:items-center justify-center sm:p-2 print:hidden dialog-sheet" data-testid="crew-builder-modal">
-      <div className="bg-white w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-t-2xl sm:rounded-lg shadow-2xl border-t-4 border-[#0D6535] dialog-sheet-panel">
-        <div className="sticky top-0 bg-[#F0F9F3] px-3 py-2 flex items-center gap-2 border-b border-[#D1E7DD] z-10">
-          <Users className="w-4 h-4 text-[#0D6535]" />
-          <h2 className="text-sm font-bold text-[#0D6535] flex-1">{editing ? `Edit ${editing.name}` : "New crew"}</h2>
+      <div className="bg-white w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-t-2xl sm:rounded-lg shadow-2xl border-t-4 border-[#C44A08] dialog-sheet-panel">
+        <div className="sticky top-0 bg-[#FFF7EF] px-3 py-2 flex items-center gap-2 border-b border-[#D1E7DD] z-10">
+          <Users className="w-4 h-4 text-[#C44A08]" />
+          <h2 className="text-sm font-bold text-[#C44A08] flex-1">{editing ? `Edit ${editing.name}` : "New crew"}</h2>
           <button onClick={onClose} className="p-1 hover:bg-white rounded" data-testid="crew-builder-close"><X className="w-4 h-4" /></button>
         </div>
 
@@ -295,9 +295,9 @@ const CrewBuilderModal = ({ open, rigId, editing, onClose, onSaved }) => {
           {/* Members */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <div className="text-[11px] font-bold text-[#0D6535] uppercase tracking-wide">Personnel on duty</div>
+              <div className="text-[11px] font-bold text-[#C44A08] uppercase tracking-wide">Personnel on duty</div>
               <button onClick={addMember} data-testid="crew-add-member"
-                className="text-[11px] font-bold text-[#0D6535] border border-[#0D6535] px-2 py-0.5 rounded flex items-center gap-1 hover:bg-[#F0F9F3]">
+                className="text-[11px] font-bold text-[#C44A08] border border-[#C44A08] px-2 py-0.5 rounded flex items-center gap-1 hover:bg-[#FFF7EF]">
                 <UserPlus className="w-3 h-3" /> Add member
               </button>
             </div>
@@ -360,7 +360,7 @@ const CrewBuilderModal = ({ open, rigId, editing, onClose, onSaved }) => {
         <div className="sticky bottom-0 bg-[#F9FAFB] border-t border-[#E5E7EB] px-3 py-2 flex gap-2 justify-end">
           <button onClick={onClose} className="text-xs text-[#595959] px-3 py-1.5">Cancel</button>
           <button data-testid="crew-save" disabled={saving} onClick={submit}
-            className="text-xs font-bold text-white bg-[#0D6535] hover:bg-[#0A4F28] px-4 py-1.5 rounded disabled:opacity-50 inline-flex items-center gap-1">
+            className="text-xs font-bold text-white bg-[#C44A08] hover:bg-[#0A4F28] px-4 py-1.5 rounded disabled:opacity-50 inline-flex items-center gap-1">
             {saving ? <><Loader2 className="w-3 h-3 animate-spin" /> Saving…</> : (<><Save className="w-3 h-3" /> {editing ? "Save changes" : "Create crew"}</>)}
           </button>
         </div>
@@ -464,7 +464,7 @@ const CrewSchedulePage = () => {
 
   return (
     <div className="min-h-screen bg-[#F3F3F3] flex flex-col print:bg-white">
-      <header className="bg-[#0D6535] text-white h-12 flex items-center px-3 shadow-md flex-shrink-0 print:hidden">
+      <header className="bg-[#C44A08] text-white h-12 flex items-center px-3 shadow-md flex-shrink-0 print:hidden">
         <button onClick={() => navigate("/hub")} data-testid="schedule-back" className="flex items-center gap-1.5 text-sm font-semibold"><ArrowLeft className="w-4 h-4" /> Back</button>
         <h1 className="text-sm font-semibold ml-4 flex items-center gap-2"><Calendar className="w-4 h-4" /> Crew Schedule · {rigLabel(rigId)}</h1>
       </header>
@@ -475,11 +475,11 @@ const CrewSchedulePage = () => {
           {/* ── Crew Manager ────────────────────────────────── */}
           <div className="bg-white border border-[#D4D4D4] rounded-lg print:hidden" data-testid="crew-manager">
             <div className="px-3 py-2 border-b border-[#E5E7EB] flex items-center gap-2">
-              <Users className="w-4 h-4 text-[#0D6535]" />
-              <div className="text-[13px] font-bold text-[#0D6535] flex-1">Crews on {rigLabel(rigId)}</div>
+              <Users className="w-4 h-4 text-[#C44A08]" />
+              <div className="text-[13px] font-bold text-[#C44A08] flex-1">Crews on {rigLabel(rigId)}</div>
               <button data-testid="crew-new"
                 onClick={() => { setEditingCrew(null); setBuilderOpen(true); }}
-                className="text-[11px] font-bold text-white bg-[#0D6535] hover:bg-[#0A4F28] px-2 py-1 rounded flex items-center gap-1">
+                className="text-[11px] font-bold text-white bg-[#C44A08] hover:bg-[#0A4F28] px-2 py-1 rounded flex items-center gap-1">
                 <Plus className="w-3.5 h-3.5" /> New crew
               </button>
             </div>
@@ -502,7 +502,7 @@ const CrewSchedulePage = () => {
                           </div>
                         </div>
                         <button onClick={() => { setEditingCrew(c); setBuilderOpen(true); }} data-testid={`crew-edit-${c.crew_id}`}
-                          className="p-1 text-[#0D6535] hover:bg-[#F0F9F3] rounded" title="Edit crew">
+                          className="p-1 text-[#C44A08] hover:bg-[#FFF7EF] rounded" title="Edit crew">
                           <Pencil className="w-3.5 h-3.5" />
                         </button>
                         <button onClick={() => deleteCrew(c)} data-testid={`crew-delete-${c.crew_id}`}
@@ -515,7 +515,7 @@ const CrewSchedulePage = () => {
                           <span className="text-[10px] italic text-[#B45309]">No members yet — click <Pencil className="w-2.5 h-2.5 inline" /> to add.</span>
                         )}
                         {(c.members || []).map((m, idx) => (
-                          <span key={`${c.crew_id}-${idx}`} className="inline-flex items-center gap-1 text-[10px] bg-[#F0F9F3] border border-[#D1E7DD] rounded-full px-1.5 py-0.5">
+                          <span key={`${c.crew_id}-${idx}`} className="inline-flex items-center gap-1 text-[10px] bg-[#FFF7EF] border border-[#D1E7DD] rounded-full px-1.5 py-0.5">
                             <span className="w-3.5 h-3.5 rounded-full text-white flex items-center justify-center text-[7px] font-bold" style={{ background: crewColor(m.name) }}>{crewInitials(m.name)}</span>
                             <span className="font-semibold text-[#262626]">{m.name}</span>
                             <span className="text-[#8A8A8A]">· {m.role}</span>
@@ -531,19 +531,19 @@ const CrewSchedulePage = () => {
 
           {/* ── Schedule nav bar ───────────────────────────────── */}
           <div className="bg-white border border-[#D4D4D4] rounded-lg p-3 flex items-center gap-2 flex-wrap print:hidden">
-            <button data-testid="schedule-prev" onClick={() => setAnchor(isoDate(addDays(anchor, -14)))} className="p-2 rounded hover:bg-[#F0F9F3] tap-44" aria-label="Previous"><ChevronLeft className="w-4 h-4" /></button>
+            <button data-testid="schedule-prev" onClick={() => setAnchor(isoDate(addDays(anchor, -14)))} className="p-2 rounded hover:bg-[#FFF7EF] tap-44" aria-label="Previous"><ChevronLeft className="w-4 h-4" /></button>
             <div className="text-[12px] sm:text-[13px] font-bold">{new Date(days[0]).toLocaleDateString(undefined, { month: "short", day: "numeric" })} – {new Date(days[days.length-1]).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</div>
-            <button data-testid="schedule-next" onClick={() => setAnchor(isoDate(addDays(anchor, 14)))} className="p-2 rounded hover:bg-[#F0F9F3] tap-44" aria-label="Next"><ChevronRight className="w-4 h-4" /></button>
-            <button data-testid="schedule-today" onClick={() => setAnchor(isoDate(new Date()))} className="text-[11px] font-semibold text-[#0D6535] hover:underline px-2 py-2 tap-44">Today</button>
+            <button data-testid="schedule-next" onClick={() => setAnchor(isoDate(addDays(anchor, 14)))} className="p-2 rounded hover:bg-[#FFF7EF] tap-44" aria-label="Next"><ChevronRight className="w-4 h-4" /></button>
+            <button data-testid="schedule-today" onClick={() => setAnchor(isoDate(new Date()))} className="text-[11px] font-semibold text-[#C44A08] hover:underline px-2 py-2 tap-44">Today</button>
             <div className="ml-auto flex gap-1.5 flex-wrap">
-              <div className="inline-flex rounded border border-[#0D6535] overflow-hidden" data-testid="schedule-view-toggle">
+              <div className="inline-flex rounded border border-[#C44A08] overflow-hidden" data-testid="schedule-view-toggle">
                 <button onClick={() => setViewMode("list")} data-testid="schedule-view-list"
-                  className={`text-[11px] font-bold px-2 py-1.5 ${viewMode === "list" ? "bg-[#0D6535] text-white" : "text-[#0D6535] hover:bg-[#F0F9F3]"}`}>List</button>
+                  className={`text-[11px] font-bold px-2 py-1.5 ${viewMode === "list" ? "bg-[#C44A08] text-white" : "text-[#C44A08] hover:bg-[#FFF7EF]"}`}>List</button>
                 <button onClick={() => setViewMode("grid")} data-testid="schedule-view-grid"
-                  className={`text-[11px] font-bold px-2 py-1.5 ${viewMode === "grid" ? "bg-[#0D6535] text-white" : "text-[#0D6535] hover:bg-[#F0F9F3]"}`}>Grid</button>
+                  className={`text-[11px] font-bold px-2 py-1.5 ${viewMode === "grid" ? "bg-[#C44A08] text-white" : "text-[#C44A08] hover:bg-[#FFF7EF]"}`}>Grid</button>
               </div>
-              <button data-testid="schedule-print" onClick={printSchedule} className="text-[11px] font-bold text-[#0D6535] border border-[#0D6535] px-2 py-1.5 rounded flex items-center gap-1 tap-44"><Printer className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Print / PDF</span><span className="sm:hidden">PDF</span></button>
-              <button data-testid="schedule-add-open" onClick={() => setShowAdd((v) => !v)} className="text-[11px] font-bold text-[#0D6535] border border-[#0D6535] px-2 py-1.5 rounded flex items-center gap-1 tap-44"><Plus className="w-3.5 h-3.5" /> <span className="hidden sm:inline">One-off shift</span><span className="sm:hidden">Shift</span></button>
+              <button data-testid="schedule-print" onClick={printSchedule} className="text-[11px] font-bold text-[#C44A08] border border-[#C44A08] px-2 py-1.5 rounded flex items-center gap-1 tap-44"><Printer className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Print / PDF</span><span className="sm:hidden">PDF</span></button>
+              <button data-testid="schedule-add-open" onClick={() => setShowAdd((v) => !v)} className="text-[11px] font-bold text-[#C44A08] border border-[#C44A08] px-2 py-1.5 rounded flex items-center gap-1 tap-44"><Plus className="w-3.5 h-3.5" /> <span className="hidden sm:inline">One-off shift</span><span className="sm:hidden">Shift</span></button>
             </div>
           </div>
 
@@ -612,7 +612,7 @@ const CrewSchedulePage = () => {
           {viewMode === "grid" && (
           <div className="bg-white border border-[#D4D4D4] rounded-lg overflow-hidden print:border-0" id="schedule-print-area">
             <div className="px-3 py-2 border-b border-[#E5E7EB] flex items-center justify-between print:border-0">
-              <div className="text-[13px] font-bold text-[#0D6535]">{rigLabel(rigId)} · 14-day crew schedule</div>
+              <div className="text-[13px] font-bold text-[#C44A08]">{rigLabel(rigId)} · 14-day crew schedule</div>
               <div className="text-[10px] text-[#595959]">{new Date(days[0]).toLocaleDateString()} – {new Date(days[days.length-1]).toLocaleDateString()}</div>
             </div>
             <div className="overflow-x-auto">

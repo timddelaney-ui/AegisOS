@@ -37,7 +37,7 @@ const DEFAULT_LIB = {
 
 const TIER_CONFIG = {
   safety: { label: "Safety Meetings / FLHA",  Icon: ShieldAlert,   accent: "#C00000" },
-  ops:    { label: "Daily Operations",        Icon: ClipboardList, accent: "#107C41" },
+  ops:    { label: "Daily Operations",        Icon: ClipboardList, accent: "#FF6B1A" },
   pm:     { label: "Weekly / Monthly PMs",    Icon: Wrench,        accent: "#0056B3" },
 };
 
@@ -155,7 +155,7 @@ const ChecklistTier = ({ kind, expanded, onToggle }) => {
                     </div>
                   </div>
                   {it.checked && (
-                    <button data-testid={`checklist-att-toggle-${it.id}`} onClick={() => setOpenAttFor((cur) => cur === it.id ? null : it.id)} className="text-[#0D6535] hover:bg-[#F0F9F3] rounded p-1" title="Attach evidence">
+                    <button data-testid={`checklist-att-toggle-${it.id}`} onClick={() => setOpenAttFor((cur) => cur === it.id ? null : it.id)} className="text-[#C44A08] hover:bg-[#FFF7EF] rounded p-1" title="Attach evidence">
                       <Paperclip className="w-3.5 h-3.5" />
                     </button>
                   )}
@@ -192,7 +192,7 @@ const ChecklistTier = ({ kind, expanded, onToggle }) => {
             </button>
           </div>
           {addOpen && (
-            <div className="px-3 py-2 bg-[#F0F9F3] border-t border-[#E5E7EB] flex gap-2" data-testid={`checklist-add-form-${kind}`}>
+            <div className="px-3 py-2 bg-[#FFF7EF] border-t border-[#E5E7EB] flex gap-2" data-testid={`checklist-add-form-${kind}`}>
               <input
                 data-testid={`checklist-new-label-${kind}`}
                 placeholder="Custom checklist item"

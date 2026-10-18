@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>CoilAegis</title>
+  <!-- Shield -->
+  <path d="M256 24 L472 80 V240 C472 352 384 452 256 488 C128 452 40 352 40 240 V80 Z"
+        fill="#0D1A24" stroke="#FF6B1A" stroke-width="18" stroke-linejoin="round"/>
+  <!-- Coil spiral -->
+  <g transform="translate(256 268)" fill="none" stroke="#FF6B1A" stroke-width="20" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="0" cy="0" r="128" opacity="0.22"/>
+    <path d="M 10 0
+             a 10 10 0 1 1 -0.1 0
+             M 30 10
+             a 32 32 0 1 1 -16 55
+             M -22 86
+             a 68 68 0 1 1 80 -72
+             M 108 -6
+             a 110 110 0 1 1 -112 108" />
+    <line x1="0" y1="118" x2="0" y2="176" stroke-width="26"/>
+  </g>
+</svg>

@@ -148,7 +148,7 @@ const Workbook = () => {
           </span>
           <button
             onClick={() => (window.location.href = "/pricing")}
-            className="text-[#0D6535] font-bold hover:underline"
+            className="text-[#C44A08] font-bold hover:underline"
           >
             Upgrade →
           </button>
@@ -206,7 +206,7 @@ const ProtectedRoute = ({ children }) => {
   if (loading) {
     return (
       <div className="min-h-screen bg-[#F3F3F3] flex items-center justify-center">
-        <Loader2 className="w-6 h-6 text-[#107C41] animate-spin" />
+        <Loader2 className="w-6 h-6 text-[#FF6B1A] animate-spin" />
       </div>
     );
   }
@@ -294,7 +294,7 @@ const LandingRedirect = () => {
   if (loading) {
     return (
       <div className="min-h-screen bg-[#F3F3F3] flex items-center justify-center">
-        <Loader2 className="w-6 h-6 text-[#107C41] animate-spin" />
+        <Loader2 className="w-6 h-6 text-[#FF6B1A] animate-spin" />
       </div>
     );
   }

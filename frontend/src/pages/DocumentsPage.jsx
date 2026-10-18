@@ -12,7 +12,7 @@ import ExcelHeader from "../components/ExcelHeader";
 const CATEGORIES = [
   { id: "sop", label: "SOPs", Icon: Shield, tint: "bg-[#DBEAFE] text-[#0056B3]" },
   { id: "maintenance", label: "Maintenance Checklists", Icon: Wrench, tint: "bg-[#FCE7C0] text-[#C36600]" },
-  { id: "daily_checklist", label: "Daily Checklists", Icon: CalendarCheck, tint: "bg-[#E6F4EA] text-[#0D6535]" },
+  { id: "daily_checklist", label: "Daily Checklists", Icon: CalendarCheck, tint: "bg-[#FFF1E6] text-[#C44A08]" },
   { id: "pre_job_checklist", label: "Pre-Job Checklists", Icon: FileCheck2, tint: "bg-[#FDE8E8] text-[#C00000]" },
   { id: "reference", label: "Reference / Manuals", Icon: BookOpen, tint: "bg-[#E0E7FF] text-[#5A67D8]" },
   { id: "regulation", label: "Regulations", Icon: FileText, tint: "bg-[#F3E5F5] text-[#6A1B9A]" },
@@ -153,7 +153,7 @@ const DocumentsPage = () => {
         <button
           data-testid="docs-back-btn"
           onClick={() => navigate("/hub")}
-          className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#595959] hover:text-[#107C41]"
+          className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#595959] hover:text-[#FF6B1A]"
         >
           <ArrowLeft className="w-4 h-4" /> Hub
         </button>
@@ -166,7 +166,7 @@ const DocumentsPage = () => {
           <button
             data-testid="docs-upload-btn"
             onClick={() => setUploadOpen(true)}
-            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-[#107C41] text-white text-[11px] font-bold hover:bg-[#0D6535]"
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-[#FF6B1A] text-white text-[11px] font-bold hover:bg-[#C44A08]"
           >
             <Upload className="w-3.5 h-3.5" strokeWidth={2.6} />
             <span className="hidden sm:inline">Upload</span>
@@ -197,7 +197,7 @@ const DocumentsPage = () => {
             <button
               data-testid="docs-filter-all"
               onClick={() => setFilter("all")}
-              className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border ${filter === "all" ? "bg-[#107C41] text-white border-[#107C41]" : "bg-white border-[#D4D4D4] text-[#595959] hover:border-[#107C41]"}`}
+              className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border ${filter === "all" ? "bg-[#FF6B1A] text-white border-[#FF6B1A]" : "bg-white border-[#D4D4D4] text-[#595959] hover:border-[#FF6B1A]"}`}
             >
               All ({docs.length})
             </button>
@@ -206,7 +206,7 @@ const DocumentsPage = () => {
                 key={c.id}
                 data-testid={`docs-filter-${c.id}`}
                 onClick={() => setFilter(c.id)}
-                className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border ${filter === c.id ? "bg-[#107C41] text-white border-[#107C41]" : "bg-white border-[#D4D4D4] text-[#595959] hover:border-[#107C41]"}`}
+                className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border ${filter === c.id ? "bg-[#FF6B1A] text-white border-[#FF6B1A]" : "bg-white border-[#D4D4D4] text-[#595959] hover:border-[#FF6B1A]"}`}
               >
                 {c.label} ({byCat[c.id] || 0})
               </button>
@@ -221,7 +221,7 @@ const DocumentsPage = () => {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search by name, description, tag…"
-              className="w-full pl-7 pr-3 py-1.5 border border-[#CCC] rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#107C41]/40"
+              className="w-full pl-7 pr-3 py-1.5 border border-[#CCC] rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#FF6B1A]/40"
             />
           </div>
 
@@ -249,7 +249,7 @@ const DocumentsPage = () => {
                   <div
                     key={d.doc_id}
                     data-testid={`docs-row-${d.doc_id}`}
-                    className="bg-white border border-[#D4D4D4] rounded-xl p-3 flex items-start gap-3 shadow-sm hover:border-[#107C41]/60 transition-colors"
+                    className="bg-white border border-[#D4D4D4] rounded-xl p-3 flex items-start gap-3 shadow-sm hover:border-[#FF6B1A]/60 transition-colors"
                   >
                     <div className={`w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0 ${cat.tint}`}>
                       <Icon className="w-4 h-4" strokeWidth={2.5} />
@@ -280,7 +280,7 @@ const DocumentsPage = () => {
                           <button
                             data-testid={`docs-edit-${d.doc_id}`}
                             onClick={() => openEdit(d)}
-                            className="p-1 rounded text-[#595959] hover:text-[#107C41] hover:bg-[#F0F9F3]"
+                            className="p-1 rounded text-[#595959] hover:text-[#FF6B1A] hover:bg-[#FFF7EF]"
                             title="Edit"
                           >
                             <Pencil className="w-3.5 h-3.5" />
@@ -321,7 +321,7 @@ const DocumentsPage = () => {
                   type="file"
                   accept=".pdf,.png,.jpg,.jpeg,.webp"
                   onChange={onPick}
-                  className="w-full text-[12px] mt-1 file:mr-2 file:py-1 file:px-2 file:rounded file:border file:border-[#D4D4D4] file:bg-[#F0F9F3] file:text-[#0D6535] file:font-bold file:text-[11px]"
+                  className="w-full text-[12px] mt-1 file:mr-2 file:py-1 file:px-2 file:rounded file:border file:border-[#D4D4D4] file:bg-[#FFF7EF] file:text-[#C44A08] file:font-bold file:text-[11px]"
                 />
                 {upFile && (
                   <span className="inline-flex items-center gap-1 text-[11px] text-[#595959] mt-1">
@@ -336,7 +336,7 @@ const DocumentsPage = () => {
                   value={upName}
                   onChange={(e) => setUpName(e.target.value)}
                   placeholder="e.g. CT UBD Drill-Out SOP rev-7"
-                  className="w-full px-2.5 py-2 border border-[#CCC] rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#107C41]/40"
+                  className="w-full px-2.5 py-2 border border-[#CCC] rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#FF6B1A]/40"
                 />
               </label>
               <label className="block">
@@ -378,7 +378,7 @@ const DocumentsPage = () => {
                 data-testid="docs-upload-confirm"
                 onClick={doUpload}
                 disabled={uploading || !upFile || !upName.trim()}
-                className="px-3 py-1.5 bg-[#107C41] hover:bg-[#0D6535] text-white rounded text-[12px] font-bold disabled:opacity-50"
+                className="px-3 py-1.5 bg-[#FF6B1A] hover:bg-[#C44A08] text-white rounded text-[12px] font-bold disabled:opacity-50"
               >
                 {uploading ? "Uploading…" : "Upload"}
               </button>
@@ -432,7 +432,7 @@ const DocumentsPage = () => {
               <button
                 data-testid="docs-edit-save"
                 onClick={saveEdit}
-                className="px-3 py-1.5 bg-[#107C41] hover:bg-[#0D6535] text-white rounded text-[12px] font-bold"
+                className="px-3 py-1.5 bg-[#FF6B1A] hover:bg-[#C44A08] text-white rounded text-[12px] font-bold"
               >
                 Save
               </button>

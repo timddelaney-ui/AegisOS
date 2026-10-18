@@ -67,13 +67,13 @@ export default function TasksPage() {
                 {members.map((m) => <option key={m.user_id} value={m.user_id}>{m.name || m.email}</option>)}
               </select>
             </div>
-            <button data-testid="task-add" onClick={addTask} className="mt-2 bg-[#107C41] text-white px-3 py-1 text-xs font-bold rounded">Add</button>
+            <button data-testid="task-add" onClick={addTask} className="mt-2 bg-[#FF6B1A] text-white px-3 py-1 text-xs font-bold rounded">Add</button>
           </div>
         )}
 
         <div className="flex gap-2 text-xs">
           {["open", "done", "all"].map((f) => (
-            <button key={f} data-testid={`task-filter-${f}`} onClick={() => setFilter(f)} className={`px-2 py-1 rounded font-bold uppercase ${filter === f ? "bg-[#107C41] text-white" : "bg-white border border-[#D4D4D4]"}`}>{f}</button>
+            <button key={f} data-testid={`task-filter-${f}`} onClick={() => setFilter(f)} className={`px-2 py-1 rounded font-bold uppercase ${filter === f ? "bg-[#FF6B1A] text-white" : "bg-white border border-[#D4D4D4]"}`}>{f}</button>
           ))}
         </div>
 
@@ -81,7 +81,7 @@ export default function TasksPage() {
           {tasks.length === 0 && <p className="text-sm text-[#595959] text-center py-8"><ClipboardList className="w-6 h-6 mx-auto mb-2 text-[#9CA3AF]" />No tasks yet.</p>}
           {tasks.map((t) => (
             <div key={t.task_id} data-testid={`task-row-${t.task_id}`} className={`border rounded-lg p-2 flex items-center gap-2 ${t.status === "done" ? "bg-[#F3F4F6]" : "bg-white"} border-[#D4D4D4]`}>
-              <button data-testid={`task-toggle-${t.task_id}`} onClick={() => toggle(t)} className={`w-6 h-6 rounded-md border-2 flex items-center justify-center ${t.status === "done" ? "bg-[#107C41] border-[#107C41] text-white" : "border-[#D4D4D4]"}`}>
+              <button data-testid={`task-toggle-${t.task_id}`} onClick={() => toggle(t)} className={`w-6 h-6 rounded-md border-2 flex items-center justify-center ${t.status === "done" ? "bg-[#FF6B1A] border-[#FF6B1A] text-white" : "border-[#D4D4D4]"}`}>
                 {t.status === "done" && <Check className="w-4 h-4" />}
               </button>
               <div className="flex-1 min-w-0">

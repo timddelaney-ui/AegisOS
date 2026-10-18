@@ -98,7 +98,7 @@ const NitrogenPlanner = ({ q_N2_scfm_imp, q_liq_bpm_imp, unitSystem, isUBD }) =>
             key={p.name}
             data-testid={`ctd-np-preset-${p.name.replace(/\s+/g, "-").toLowerCase()}`}
             onClick={() => addStage(p.name, p.hours)}
-            className="text-[10px] px-1.5 py-0.5 rounded border border-[#D4D4D4] bg-[#FAFAFA] hover:border-[#107C41] hover:bg-[#F0F9F3]"
+            className="text-[10px] px-1.5 py-0.5 rounded border border-[#D4D4D4] bg-[#FAFAFA] hover:border-[#FF6B1A] hover:bg-[#FFF7EF]"
           >
             + {p.name} ({p.hours}h)
           </button>
@@ -146,14 +146,14 @@ const NitrogenPlanner = ({ q_N2_scfm_imp, q_liq_bpm_imp, unitSystem, isUBD }) =>
       <button
         onClick={() => addStage()}
         data-testid="ctd-np-add-btn"
-        className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#107C41] hover:text-[#0D6535] mb-3"
+        className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#FF6B1A] hover:text-[#C44A08] mb-3"
       >
         <Plus className="w-3 h-3" /> Add custom stage
       </button>
 
       {/* Totals block */}
       <div className="border-t border-[#E4E4E4] pt-2.5 grid grid-cols-2 sm:grid-cols-4 gap-2" data-testid="ctd-np-totals">
-        <div className="bg-[#F0F9F3] border border-[#C7E8D4] rounded p-2">
+        <div className="bg-[#FFF7EF] border border-[#C7E8D4] rounded p-2">
           <p className="text-[10px] font-semibold text-[#595959] uppercase">Total time</p>
           <p className="text-sm font-bold text-[#262626] tabular-nums">{totals.total_hrs.toFixed(1)} h</p>
         </div>
@@ -164,10 +164,10 @@ const NitrogenPlanner = ({ q_N2_scfm_imp, q_liq_bpm_imp, unitSystem, isUBD }) =>
             <Package className="inline w-2.5 h-2.5" /> {totals.tankers.toFixed(1)} tanker{Math.abs(totals.tankers - 1) < 0.01 ? "" : "s"}
           </p>
         </div>
-        <div className="bg-[#E6F4EA] border border-[#C7E8D4] rounded p-2">
-          <p className="text-[10px] font-semibold text-[#0D6535] uppercase">Total liquid</p>
-          <p className="text-sm font-bold text-[#0D6535] tabular-nums leading-tight">{fmtLiq(totals.total_liq_bbl)}</p>
-          <p className="text-[10px] text-[#0D6535] mt-0.5">
+        <div className="bg-[#FFF1E6] border border-[#C7E8D4] rounded p-2">
+          <p className="text-[10px] font-semibold text-[#C44A08] uppercase">Total liquid</p>
+          <p className="text-sm font-bold text-[#C44A08] tabular-nums leading-tight">{fmtLiq(totals.total_liq_bbl)}</p>
+          <p className="text-[10px] text-[#C44A08] mt-0.5">
             <Package className="inline w-2.5 h-2.5" /> {totals.liquid_tanks.toFixed(1)} × 500-bbl tank
           </p>
         </div>

@@ -11,7 +11,7 @@ import HandoverModal from "../components/HandoverModal";
 import { useRig, rigLabel } from "../context/RigContext";
 
 const HUB_TABS = [
-  { id: "chat",        label: "Crew Chat",   Icon: MessageSquare, badge: "chat",      color: "#0D6535", sub: "Team messages, Skipper AI, safety alerts" },
+  { id: "chat",        label: "Crew Chat",   Icon: MessageSquare, badge: "chat",      color: "#C44A08", sub: "Team messages, Skipper AI, safety alerts" },
   { id: "rig",         label: "Rig Checks",  Icon: ListChecks,    badge: "checklist", color: "#C00000", sub: "Safety / Ops / PM check-offs" },
   { id: "inventory",   label: "Inventory",   Icon: Package,       color: "#856404",   sub: "Stock levels, locations" },
   { id: "consumables", label: "Consumables", Icon: Beaker,        color: "#7C3AED",   sub: "Fluids, additives, chemistry" },
@@ -87,7 +87,7 @@ const TeamPage = () => {
 
   return (
     <div className="min-h-screen bg-[#F3F3F3] flex flex-col">
-      <header className="bg-[#107C41] text-white h-12 flex items-center px-3 shadow-md flex-shrink-0">
+      <header className="bg-[#FF6B1A] text-white h-12 flex items-center px-3 shadow-md flex-shrink-0">
         <button onClick={() => navigate("/app")} className="flex items-center gap-1.5 text-sm font-semibold">
           <ArrowLeft className="w-4 h-4" /> Back
         </button>
@@ -98,12 +98,12 @@ const TeamPage = () => {
       <div className="flex-1 p-4 pb-10 overflow-auto">
         <div className="max-w-xl mx-auto">
           {loading ? (
-            <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-[#107C41]" /></div>
+            <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-[#FF6B1A]" /></div>
           ) : team ? (
             <>
             <div className="bg-white border border-[#D4D4D4] rounded-lg shadow-sm p-5">
               <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded bg-[#107C41] flex items-center justify-center">
+                <div className="w-10 h-10 rounded bg-[#FF6B1A] flex items-center justify-center">
                   <Users className="w-5 h-5 text-white" strokeWidth={2.5} />
                 </div>
                 <div>
@@ -115,9 +115,9 @@ const TeamPage = () => {
               <div className="bg-[#F8F9FA] border border-[#D4D4D4] rounded p-3 mb-4">
                 <p className="text-[11px] text-[#595959] font-semibold uppercase mb-1">Invite Code</p>
                 <div className="flex items-center justify-between gap-2">
-                  <code className="text-lg font-mono font-bold text-[#107C41] tracking-wider">{team.invite_code}</code>
-                  <button onClick={copyCode} className="flex items-center gap-1 bg-white border border-[#D4D4D4] hover:border-[#107C41] px-2.5 py-1.5 rounded text-xs font-semibold text-[#444]">
-                    {copied ? <><Check className="w-3.5 h-3.5 text-[#107C41]" /> Copied</> : <><Copy className="w-3.5 h-3.5" /> Copy</>}
+                  <code className="text-lg font-mono font-bold text-[#FF6B1A] tracking-wider">{team.invite_code}</code>
+                  <button onClick={copyCode} className="flex items-center gap-1 bg-white border border-[#D4D4D4] hover:border-[#FF6B1A] px-2.5 py-1.5 rounded text-xs font-semibold text-[#444]">
+                    {copied ? <><Check className="w-3.5 h-3.5 text-[#FF6B1A]" /> Copied</> : <><Copy className="w-3.5 h-3.5" /> Copy</>}
                   </button>
                 </div>
                 <p className="text-[11px] text-[#595959] mt-2">Share this code with crew members so they can join.</p>
@@ -152,7 +152,7 @@ const TeamPage = () => {
                 <button
                   data-testid="open-handover"
                   onClick={() => setHandoverOpen(true)}
-                  className="text-[11px] font-bold text-white bg-[#0D6535] hover:bg-[#0A4F28] px-2.5 py-1 rounded flex items-center gap-1.5"
+                  className="text-[11px] font-bold text-white bg-[#C44A08] hover:bg-[#0A4F28] px-2.5 py-1 rounded flex items-center gap-1.5"
                 >
                   <FileText className="w-3.5 h-3.5" strokeWidth={2.5} />
                   Generate Handover
@@ -172,11 +172,11 @@ const TeamPage = () => {
                           setHubTab(t.id);
                           if (t.badge) markSeen(rigId, t.badge);
                         }}
-                        className="relative group bg-white border border-[#D4D4D4] hover:border-[#107C41] hover:shadow-md hover:-translate-y-0.5 transition-all rounded-xl p-3 sm:p-4 text-left overflow-hidden"
-                        style={{ borderTop: `3px solid ${t.color || "#107C41"}` }}
+                        className="relative group bg-white border border-[#D4D4D4] hover:border-[#FF6B1A] hover:shadow-md hover:-translate-y-0.5 transition-all rounded-xl p-3 sm:p-4 text-left overflow-hidden"
+                        style={{ borderTop: `3px solid ${t.color || "#FF6B1A"}` }}
                       >
                         <div className="flex items-start gap-2">
-                          <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: `${t.color || "#107C41"}18`, color: t.color || "#107C41" }}>
+                          <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: `${t.color || "#FF6B1A"}18`, color: t.color || "#FF6B1A" }}>
                             <Icon className="w-5 h-5" strokeWidth={2.5} />
                           </div>
                           <div className="min-w-0 flex-1">
@@ -199,7 +199,7 @@ const TeamPage = () => {
                     <button
                       data-testid="team-hub-back-to-tiles"
                       onClick={() => setHubTab(null)}
-                      className="text-[12px] font-semibold text-[#0D6535] hover:underline flex items-center gap-1"
+                      className="text-[12px] font-semibold text-[#C44A08] hover:underline flex items-center gap-1"
                     >
                       ← All Hub sections
                     </button>
@@ -217,8 +217,8 @@ const TeamPage = () => {
                               if (t.badge) markSeen(rigId, t.badge);
                             }}
                             title={t.label}
-                            className={`relative w-8 h-8 rounded flex items-center justify-center transition-colors ${active ? "text-white" : "text-[#595959] hover:bg-[#F0F9F3]"}`}
-                            style={active ? { background: t.color || "#107C41" } : {}}
+                            className={`relative w-8 h-8 rounded flex items-center justify-center transition-colors ${active ? "text-white" : "text-[#595959] hover:bg-[#FFF7EF]"}`}
+                            style={active ? { background: t.color || "#FF6B1A" } : {}}
                           >
                             <Icon className="w-4 h-4" strokeWidth={2.5} />
                             {showDot && <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-[#DC2626]" />}
@@ -240,14 +240,14 @@ const TeamPage = () => {
           ) : mode === "choose" ? (
             <div className="space-y-3">
               <div className="bg-white border border-[#D4D4D4] rounded-lg p-5 text-center">
-                <Users className="w-10 h-10 text-[#107C41] mx-auto mb-2" strokeWidth={2} />
+                <Users className="w-10 h-10 text-[#FF6B1A] mx-auto mb-2" strokeWidth={2} />
                 <h2 className="text-lg font-bold text-[#262626] mb-1">Work with your crew</h2>
                 <p className="text-sm text-[#595959] mb-4">Create a team to share jobs with tool pushes, supervisors, and operators.</p>
                 <div className="flex flex-col gap-2">
-                  <button onClick={() => setMode("create")} className="w-full bg-[#107C41] hover:bg-[#0D6535] text-white py-2.5 rounded font-semibold text-sm flex items-center justify-center gap-2">
+                  <button onClick={() => setMode("create")} className="w-full bg-[#FF6B1A] hover:bg-[#C44A08] text-white py-2.5 rounded font-semibold text-sm flex items-center justify-center gap-2">
                     <Plus className="w-4 h-4" /> Create a Team
                   </button>
-                  <button onClick={() => setMode("join")} className="w-full bg-white border border-[#D4D4D4] hover:border-[#107C41] text-[#262626] py-2.5 rounded font-semibold text-sm">
+                  <button onClick={() => setMode("join")} className="w-full bg-white border border-[#D4D4D4] hover:border-[#FF6B1A] text-[#262626] py-2.5 rounded font-semibold text-sm">
                     Join with Invite Code
                   </button>
                 </div>
@@ -262,12 +262,12 @@ const TeamPage = () => {
                 value={teamName}
                 onChange={(e) => setTeamName(e.target.value)}
                 placeholder="e.g. Precision CT Crew A"
-                className="w-full bg-[#FAFAFA] border border-[#CCC] px-3 py-2 rounded text-sm outline-none focus:border-[#107C41] focus:ring-2 focus:ring-[#107C41]/10"
+                className="w-full bg-[#FAFAFA] border border-[#CCC] px-3 py-2 rounded text-sm outline-none focus:border-[#FF6B1A] focus:ring-2 focus:ring-[#FF6B1A]/10"
               />
               {error && <p className="text-xs text-[#C00000] mt-2">{error}</p>}
               <div className="flex gap-2 mt-4">
                 <button onClick={() => setMode("choose")} className="flex-1 border border-[#D4D4D4] text-[#444] py-2 rounded text-sm font-semibold">Cancel</button>
-                <button onClick={createTeam} disabled={submitting} className="flex-1 bg-[#107C41] hover:bg-[#0D6535] text-white py-2 rounded text-sm font-semibold flex items-center justify-center gap-2">
+                <button onClick={createTeam} disabled={submitting} className="flex-1 bg-[#FF6B1A] hover:bg-[#C44A08] text-white py-2 rounded text-sm font-semibold flex items-center justify-center gap-2">
                   {submitting && <Loader2 className="w-4 h-4 animate-spin" />} Create
                 </button>
               </div>
@@ -282,12 +282,12 @@ const TeamPage = () => {
                 onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
                 placeholder="ABC12XYZ"
                 maxLength={12}
-                className="w-full bg-[#FAFAFA] border border-[#CCC] px-3 py-2 rounded text-sm font-mono tracking-wider uppercase outline-none focus:border-[#107C41] focus:ring-2 focus:ring-[#107C41]/10"
+                className="w-full bg-[#FAFAFA] border border-[#CCC] px-3 py-2 rounded text-sm font-mono tracking-wider uppercase outline-none focus:border-[#FF6B1A] focus:ring-2 focus:ring-[#FF6B1A]/10"
               />
               {error && <p className="text-xs text-[#C00000] mt-2">{error}</p>}
               <div className="flex gap-2 mt-4">
                 <button onClick={() => setMode("choose")} className="flex-1 border border-[#D4D4D4] text-[#444] py-2 rounded text-sm font-semibold">Cancel</button>
-                <button onClick={joinTeam} disabled={submitting} className="flex-1 bg-[#107C41] hover:bg-[#0D6535] text-white py-2 rounded text-sm font-semibold flex items-center justify-center gap-2">
+                <button onClick={joinTeam} disabled={submitting} className="flex-1 bg-[#FF6B1A] hover:bg-[#C44A08] text-white py-2 rounded text-sm font-semibold flex items-center justify-center gap-2">
                   {submitting && <Loader2 className="w-4 h-4 animate-spin" />} Join
                 </button>
               </div>

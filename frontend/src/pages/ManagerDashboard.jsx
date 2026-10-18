@@ -104,7 +104,7 @@ const ManagerDashboard = () => {
 
   return (
     <div className="min-h-screen bg-[#F3F3F3] flex flex-col">
-      <header className="bg-[#0D6535] text-white h-12 flex items-center px-3 shadow-md flex-shrink-0">
+      <header className="bg-[#C44A08] text-white h-12 flex items-center px-3 shadow-md flex-shrink-0">
         <button onClick={() => navigate("/hub")} data-testid="manager-back" className="flex items-center gap-1.5 text-sm font-semibold">
           <ArrowLeft className="w-4 h-4" /> Back
         </button>
@@ -134,7 +134,7 @@ const ManagerDashboard = () => {
               onClick={load}
               data-testid="manager-refresh"
               disabled={loading}
-              className="text-[11px] font-semibold text-[#0D6535] hover:underline disabled:opacity-50"
+              className="text-[11px] font-semibold text-[#C44A08] hover:underline disabled:opacity-50"
             >
               {loading ? "Refreshing…" : "Refresh"}
             </button>
@@ -143,7 +143,7 @@ const ManagerDashboard = () => {
                 data-testid="manager-copy-report"
                 onClick={copyReport}
                 disabled={!data || loading}
-                className="text-[12px] font-bold text-white bg-[#0D6535] hover:bg-[#0A4F28] px-3 py-1.5 rounded flex items-center gap-1.5 disabled:opacity-50"
+                className="text-[12px] font-bold text-white bg-[#C44A08] hover:bg-[#0A4F28] px-3 py-1.5 rounded flex items-center gap-1.5 disabled:opacity-50"
               >
                 {copied ? <><Check className="w-3.5 h-3.5" /> Copied</> : <><Copy className="w-3.5 h-3.5" /> Copy Report</>}
               </button>
@@ -160,7 +160,7 @@ const ManagerDashboard = () => {
           {data && (
             <>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-                <StatCard label="Teams" value={data.totals.teams_seen} Icon={Users} accent="#0D6535" />
+                <StatCard label="Teams" value={data.totals.teams_seen} Icon={Users} accent="#C44A08" />
                 <StatCard label="Rigs Active" value={data.totals.rigs_seen} Icon={Radio} accent="#0056B3" />
                 <StatCard label="Safety Cert" value={data.totals.safety_events} Icon={ShieldCheck} accent="#C00000" />
                 <StatCard label="Maintenance" value={data.totals.maintenance_events} Icon={Wrench} accent="#856404" />

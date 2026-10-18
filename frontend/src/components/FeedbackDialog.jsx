@@ -72,14 +72,14 @@ const FeedbackDialog = ({ open: propOpen, onClose: propOnClose, page: propPage }
       <div className="bg-white rounded-t-2xl sm:rounded-lg shadow-xl max-w-md w-full dialog-sheet-panel" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-[#D4D4D4]">
           <h3 className="text-base font-bold text-[#262626] flex items-center gap-2">
-            <MessageSquarePlus className="w-4 h-4 text-[#107C41]" /> Send Feedback
+            <MessageSquarePlus className="w-4 h-4 text-[#FF6B1A]" /> Send Feedback
           </h3>
           <button data-testid="feedback-close" onClick={close} className="text-[#595959] hover:text-[#262626]"><X className="w-5 h-5" /></button>
         </div>
         {sent ? (
           <div className="p-8 text-center">
-            <div className="w-12 h-12 rounded-full bg-[#E6F4EA] flex items-center justify-center mx-auto mb-3">
-              <Send className="w-6 h-6 text-[#107C41]" strokeWidth={2.5} />
+            <div className="w-12 h-12 rounded-full bg-[#FFF1E6] flex items-center justify-center mx-auto mb-3">
+              <Send className="w-6 h-6 text-[#FF6B1A]" strokeWidth={2.5} />
             </div>
             <p className="text-sm font-semibold text-[#262626]">Thanks! Feedback logged.</p>
             <p className="text-xs text-[#595959] mt-1">The team reviews every submission.</p>
@@ -93,7 +93,7 @@ const FeedbackDialog = ({ open: propOpen, onClose: propOnClose, page: propPage }
                   data-testid="feedback-category"
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
-                  className="w-full bg-[#FAFAFA] border border-[#CCC] px-3 py-2 rounded text-sm outline-none focus:border-[#107C41]"
+                  className="w-full bg-[#FAFAFA] border border-[#CCC] px-3 py-2 rounded text-sm outline-none focus:border-[#FF6B1A]"
                 >
                   {CATEGORIES.map((c) => (
                     <option key={c.id} value={c.id}>{c.label}</option>
@@ -106,7 +106,7 @@ const FeedbackDialog = ({ open: propOpen, onClose: propOnClose, page: propPage }
                   data-testid="feedback-subject"
                   type="text" value={subject} onChange={(e) => setSubject(e.target.value)}
                   placeholder="Short summary"
-                  className="w-full bg-[#FAFAFA] border border-[#CCC] px-3 py-2 rounded text-sm outline-none focus:border-[#107C41]"
+                  className="w-full bg-[#FAFAFA] border border-[#CCC] px-3 py-2 rounded text-sm outline-none focus:border-[#FF6B1A]"
                   maxLength={200}
                 />
               </div>
@@ -117,7 +117,7 @@ const FeedbackDialog = ({ open: propOpen, onClose: propOnClose, page: propPage }
                   value={message} onChange={(e) => setMessage(e.target.value)}
                   rows={5}
                   placeholder="What happened, what you'd like to see, or an idea to make the app better…"
-                  className="w-full bg-[#FAFAFA] border border-[#CCC] px-3 py-2 rounded text-sm outline-none focus:border-[#107C41] resize-none"
+                  className="w-full bg-[#FAFAFA] border border-[#CCC] px-3 py-2 rounded text-sm outline-none focus:border-[#FF6B1A] resize-none"
                   maxLength={5000}
                 />
               </div>
@@ -129,7 +129,7 @@ const FeedbackDialog = ({ open: propOpen, onClose: propOnClose, page: propPage }
                 data-testid="feedback-submit"
                 onClick={submit}
                 disabled={sending || !subject.trim() || !message.trim()}
-                className="bg-[#107C41] hover:bg-[#0D6535] text-white px-4 py-2 rounded text-sm font-semibold flex items-center gap-2 disabled:opacity-50"
+                className="bg-[#FF6B1A] hover:bg-[#C44A08] text-white px-4 py-2 rounded text-sm font-semibold flex items-center gap-2 disabled:opacity-50"
               >
                 {sending && <Loader2 className="w-4 h-4 animate-spin" />} Send
               </button>

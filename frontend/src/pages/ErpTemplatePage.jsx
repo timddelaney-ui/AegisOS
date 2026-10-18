@@ -38,7 +38,7 @@ const Field = ({ label, children, span = 1, hint, required }) => (
 const Input = (props) => (
   <input
     {...props}
-    className={`px-2.5 py-1.5 border border-[#CCC] rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#107C41]/40 focus:border-[#107C41] bg-white ${props.className || ""}`}
+    className={`px-2.5 py-1.5 border border-[#CCC] rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#FF6B1A]/40 focus:border-[#FF6B1A] bg-white ${props.className || ""}`}
   />
 );
 
@@ -158,7 +158,7 @@ const ErpTemplatePage = () => {
         <button
           data-testid="erp-back-btn"
           onClick={() => navigate("/hub")}
-          className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#595959] hover:text-[#107C41]"
+          className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#595959] hover:text-[#FF6B1A]"
         >
           <ArrowLeft className="w-4 h-4" /> Hub
         </button>
@@ -169,7 +169,7 @@ const ErpTemplatePage = () => {
         <button
           data-testid="erp-list-btn"
           onClick={openList}
-          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-[#D4D4D4] bg-white hover:border-[#107C41] text-[11px] font-semibold"
+          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-[#D4D4D4] bg-white hover:border-[#FF6B1A] text-[11px] font-semibold"
         >
           <FolderOpen className="w-3.5 h-3.5" /> Open
         </button>
@@ -177,7 +177,7 @@ const ErpTemplatePage = () => {
           data-testid="erp-save-btn"
           onClick={save}
           disabled={saving}
-          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-[#107C41] text-white text-[11px] font-bold hover:bg-[#0D6535] disabled:opacity-50"
+          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-[#FF6B1A] text-white text-[11px] font-bold hover:bg-[#C44A08] disabled:opacity-50"
         >
           <Save className="w-3.5 h-3.5" strokeWidth={2.6} />
           {saving ? "…" : "Save"}
@@ -185,7 +185,7 @@ const ErpTemplatePage = () => {
         <button
           data-testid="erp-print-btn"
           onClick={() => window.print()}
-          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-[#D4D4D4] bg-white hover:border-[#107C41] text-[11px] font-semibold"
+          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-[#D4D4D4] bg-white hover:border-[#FF6B1A] text-[11px] font-semibold"
         >
           <Printer className="w-3.5 h-3.5" /> Print
         </button>
@@ -245,7 +245,7 @@ const ErpTemplatePage = () => {
             </Field>
           </Section>
 
-          <Section title="Key personnel" Icon={Shield} color="bg-[#E6F4EA] text-[#0D6535]">
+          <Section title="Key personnel" Icon={Shield} color="bg-[#FFF1E6] text-[#C44A08]">
             <Field label="Supervisor / Tool push"><Input data-testid="erp-sup-name" value={vals.supervisor_name} onChange={set("supervisor_name")} /></Field>
             <Field label="Supervisor phone"><Input data-testid="erp-sup-phone" value={vals.supervisor_phone} onChange={set("supervisor_phone")} /></Field>
             <Field label="Licensee company man"><Input data-testid="erp-cm-name" value={vals.company_man_name} onChange={set("company_man_name")} /></Field>
@@ -318,7 +318,7 @@ const ErpTemplatePage = () => {
               <button
                 data-testid="erp-add-contact"
                 onClick={addContact}
-                className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#107C41] hover:text-[#0D6535]"
+                className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#FF6B1A] hover:text-[#C44A08]"
               >
                 <Plus className="w-3 h-3" /> Add contact
               </button>
@@ -328,8 +328,8 @@ const ErpTemplatePage = () => {
           <div className="bg-white border border-[#D4D4D4] rounded-xl p-3.5 shadow-sm print:shadow-none print:break-inside-avoid">
             <h3 className="text-[12px] font-bold uppercase tracking-wide text-[#262626] mb-2">Notes / scenario detail</h3>
             {linkedScenario && (
-              <div className="bg-[#F0F9F3] border border-[#C7E8D4] rounded px-2 py-1.5 mb-2">
-                <p className="text-[11px] text-[#0D6535]">
+              <div className="bg-[#FFF7EF] border border-[#C7E8D4] rounded px-2 py-1.5 mb-2">
+                <p className="text-[11px] text-[#C44A08]">
                   <strong>Linked scenario:</strong> {linkedScenario.well_name} ·
                   mode: {linkedScenario.mode}
                 </p>
@@ -375,7 +375,7 @@ const ErpTemplatePage = () => {
                       key={t.template_id}
                       data-testid={`erp-list-row-${t.template_id}`}
                       onClick={() => { setListOpen(false); setExistingId(t.template_id); navigate(`/erp-template/${t.template_id}`); }}
-                      className="w-full text-left p-3 rounded-lg border border-[#D4D4D4] hover:border-[#107C41] hover:bg-[#F0F9F3]"
+                      className="w-full text-left p-3 rounded-lg border border-[#D4D4D4] hover:border-[#FF6B1A] hover:bg-[#FFF7EF]"
                     >
                       <p className="text-sm font-bold text-[#262626] truncate">{t.well_name}</p>
                       <p className="text-[11px] text-[#595959] truncate">

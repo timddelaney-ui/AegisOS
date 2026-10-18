@@ -126,7 +126,7 @@ export function cyclesToFailure(OD_in, bend_radius_in = REEL_CORE_RADIUS_IN, smy
 
 // Interpret damage array (0..1) into a color string green->red
 export function damageColor(d) {
-  if (d <= 0.3) return "#0D6535";       // green
+  if (d <= 0.3) return "#C44A08";       // green
   if (d <= 0.5) return "#4EA55F";       // light green
   if (d <= 0.7) return "#C36600";       // amber
   if (d <= 0.9) return "#D64545";       // red

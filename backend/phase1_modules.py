@@ -1819,6 +1819,245 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
             raise HTTPException(404, "Not found.")
         return {"success": True}
 
+    # -----------------------------------------------------------------
+    # PHASE 2 — Playback Annotations (manual + rig-computer sourced)
+    # Timestamped notes on the Live Ops timeline, visible in playback,
+    # exported in CSV/LAS. Rig-computer rules (threshold-driven) write
+    # to the same collection via /liveops/annotations/ingest. The
+    # ingest pathway is the hand-off point for real WITS 0 / Modbus
+    # listeners (Phase 2) and currently accepts jobs from the browser
+    # simulator or any trusted feeder.
+    # -----------------------------------------------------------------
+    SEVERITIES = ("info", "warn", "critical")
+
+    class AnnotationCreate(BaseModel):
+        timestamp_ms: int                      # unix epoch ms of the sample this note refers to
+        note: str
+        severity: str = "info"                 # info | warn | critical
+        depth_ft: Optional[float] = None       # snapshot of depth at drop time (optional)
+        channel: Optional[str] = None          # e.g. "pressure_psi", "weight_lb" — if attached to one series
+        value: Optional[float] = None          # snapshotted channel value
+
+    class AnnotationIngestItem(BaseModel):
+        timestamp_ms: int
+        note: str
+        severity: str = "warn"
+        rule_id: Optional[str] = None          # which threshold rule fired
+        channel: Optional[str] = None
+        value: Optional[float] = None
+        depth_ft: Optional[float] = None
+
+    class AnnotationIngest(BaseModel):
+        items: List[AnnotationIngestItem]
+        source: str = "rig_computer"           # 'rig_computer' | 'daq_rule' | 'wits0' | 'modbus' | 'witsml'
+
+    class AnnotationUpdate(BaseModel):
+        note: Optional[str] = None
+        severity: Optional[str] = None
+
+    def _ser_annot(d: dict) -> dict:
+        return ser(d)
+
+    @api_router.post("/liveops/annotations")
+    async def create_annotation(body: AnnotationCreate, user: dict = Depends(require_user)):
+        """Supervisor-or-higher drops a timestamped note on the playback timeline."""
+        require_supervisor(user)
+        team_id = user.get("team_id")
+        if not team_id:
+            raise HTTPException(400, "No team.")
+        sev = (body.severity or "info").lower()
+        if sev not in SEVERITIES:
+            raise HTTPException(400, f"severity must be one of {SEVERITIES}")
+        note = (body.note or "").strip()
+        if not note:
+            raise HTTPException(400, "note required")
+        annot_id = f"annot_{uuid.uuid4().hex[:12]}"
+        doc = {
+            "annot_id": annot_id,
+            "team_id": team_id,
+            "timestamp_ms": int(body.timestamp_ms),
+            "note": note[:500],
+            "severity": sev,
+            "depth_ft": body.depth_ft,
+            "channel": body.channel,
+            "value": body.value,
+            "author_user_id": user["user_id"],
+            "author_name": user.get("name") or user.get("email"),
+            "author_email": user.get("email"),
+            "source": "manual",
+            "rule_id": None,
+            "created_at": now_utc(),
+        }
+        await db.playback_annotations.insert_one(doc)
+        doc.pop("_id", None)
+        return _ser_annot(doc)
+
+    @api_router.post("/liveops/annotations/ingest")
+    async def ingest_annotations(body: AnnotationIngest, user: dict = Depends(require_user)):
+        """
+        Rig-computer / DAQ ingest pathway. Accepts a batch of auto-generated
+        notes (e.g. "pressure spike at 9120 psi — exceeded 9000 psi hard cap").
+        Any crew+ user may call this (the rig computer runs under a team session).
+        Phase 2 hand-off: real WITS 0 / Modbus / WITSML listeners will POST
+        here after evaluating threshold rules (see /liveops/annotations/rules).
+        """
+        require_crew(user)
+        team_id = user.get("team_id")
+        if not team_id:
+            raise HTTPException(400, "No team.")
+        src = (body.source or "rig_computer").lower()
+        if src not in ("rig_computer", "daq_rule", "wits0", "modbus", "witsml", "simulated"):
+            src = "rig_computer"
+        now = now_utc()
+        docs = []
+        for it in body.items:
+            sev = (it.severity or "warn").lower()
+            if sev not in SEVERITIES:
+                sev = "warn"
+            note = (it.note or "").strip()
+            if not note:
+                continue
+            docs.append({
+                "annot_id": f"annot_{uuid.uuid4().hex[:12]}",
+                "team_id": team_id,
+                "timestamp_ms": int(it.timestamp_ms),
+                "note": note[:500],
+                "severity": sev,
+                "depth_ft": it.depth_ft,
+                "channel": it.channel,
+                "value": it.value,
+                "author_user_id": f"rig_{src}",
+                "author_name": f"Rig Computer · {src}",
+                "author_email": None,
+                "source": src,
+                "rule_id": it.rule_id,
+                "created_at": now,
+            })
+        if not docs:
+            return {"inserted": 0, "items": []}
+        await db.playback_annotations.insert_many(docs)
+        for d in docs:
+            d.pop("_id", None)
+        return {"inserted": len(docs), "items": [_ser_annot(d) for d in docs]}
+
+    @api_router.get("/liveops/annotations")
+    async def list_annotations(
+        from_ms: Optional[int] = None,
+        to_ms: Optional[int] = None,
+        limit: int = 500,
+        user: dict = Depends(require_user),
+    ):
+        """List annotations for the user's team within an optional time window."""
+        team_id = user.get("team_id")
+        if not team_id:
+            return {"annotations": []}
+        q: Dict[str, Any] = {"team_id": team_id}
+        if from_ms is not None or to_ms is not None:
+            rng: Dict[str, Any] = {}
+            if from_ms is not None: rng["$gte"] = int(from_ms)
+            if to_ms is not None: rng["$lte"] = int(to_ms)
+            q["timestamp_ms"] = rng
+        docs = await db.playback_annotations.find(q, {"_id": 0}).sort("timestamp_ms", 1).limit(min(limit, 2000)).to_list(min(limit, 2000))
+        return {"annotations": [_ser_annot(d) for d in docs]}
+
+    @api_router.patch("/liveops/annotations/{annot_id}")
+    async def update_annotation(annot_id: str, body: AnnotationUpdate, user: dict = Depends(require_user)):
+        """Author or management can edit a manual annotation. Rig-sourced notes are immutable."""
+        existing = await db.playback_annotations.find_one({"annot_id": annot_id, "team_id": user.get("team_id")}, {"_id": 0})
+        if not existing:
+            raise HTTPException(404, "Not found.")
+        if existing.get("source") != "manual":
+            raise HTTPException(403, "Rig-sourced annotations cannot be edited.")
+        if existing.get("author_user_id") != user["user_id"] and not is_management(user):
+            raise HTTPException(403, "Only the author or management can edit this note.")
+        update: Dict[str, Any] = {}
+        if body.note is not None:
+            note = body.note.strip()
+            if not note:
+                raise HTTPException(400, "note cannot be empty")
+            update["note"] = note[:500]
+        if body.severity is not None:
+            sev = body.severity.lower()
+            if sev not in SEVERITIES:
+                raise HTTPException(400, f"severity must be one of {SEVERITIES}")
+            update["severity"] = sev
+        if not update:
+            return _ser_annot(existing)
+        update["updated_at"] = now_utc()
+        await db.playback_annotations.update_one({"annot_id": annot_id}, {"$set": update})
+        merged = {**existing, **update}
+        return _ser_annot(merged)
+
+    @api_router.delete("/liveops/annotations/{annot_id}")
+    async def delete_annotation(annot_id: str, user: dict = Depends(require_user)):
+        existing = await db.playback_annotations.find_one({"annot_id": annot_id, "team_id": user.get("team_id")}, {"_id": 0})
+        if not existing:
+            raise HTTPException(404, "Not found.")
+        # Author can delete their own manual note; management can delete any note on their team.
+        if existing.get("source") == "manual":
+            if existing.get("author_user_id") != user["user_id"] and not is_management(user):
+                raise HTTPException(403, "Only the author or management can delete.")
+        else:
+            if not is_management(user):
+                raise HTTPException(403, "Only management can delete rig-sourced annotations.")
+        await db.playback_annotations.delete_one({"annot_id": annot_id})
+        return {"success": True}
+
+    # ---- Rig-computer threshold rules (Phase 2 pathway) ----
+    # These are the user-tunable triggers the rig computer / DAQ listener
+    # evaluates in real time against each incoming WITS 0 / Modbus sample.
+    # Shipping defaults are safe — users approve / tune them before testing
+    # with real company data.
+    DEFAULT_RULES = [
+        {"rule_id": "p_hard_cap",    "channel": "p_internal_psi",       "op": ">",  "threshold": 9000,  "severity": "critical", "note": "Pressure hard cap breached"},
+        {"rule_id": "p_warn",        "channel": "p_internal_psi",       "op": ">",  "threshold": 7500,  "severity": "warn",     "note": "Pressure warning threshold"},
+        {"rule_id": "w_overpull",    "channel": "weight_lb",            "op": ">",  "threshold": 27000, "severity": "critical", "note": "Overpull — approaching string yield"},
+        {"rule_id": "w_slack",       "channel": "weight_lb",            "op": "<",  "threshold": 1500,  "severity": "warn",     "note": "Low weight — possible slack / stuck"},
+        {"rule_id": "traction_hi",   "channel": "traction_pressure_psi","op": ">",  "threshold": 1800,  "severity": "warn",     "note": "Injector traction pressure high"},
+    ]
+
+    @api_router.get("/liveops/annotations/rules")
+    async def list_annotation_rules(user: dict = Depends(require_user)):
+        team_id = user.get("team_id")
+        if not team_id:
+            return {"rules": DEFAULT_RULES, "defaults": True}
+        docs = await db.rig_annotation_rules.find({"team_id": team_id}, {"_id": 0}).to_list(100)
+        if not docs:
+            return {"rules": DEFAULT_RULES, "defaults": True}
+        return {"rules": [ser(d) for d in docs], "defaults": False}
+
+    class RuleUpsert(BaseModel):
+        rule_id: str
+        channel: str
+        op: str                         # '>' or '<'
+        threshold: float
+        severity: str = "warn"
+        note: str
+        enabled: bool = True
+
+    @api_router.put("/liveops/annotations/rules")
+    async def upsert_annotation_rules(rules: List[RuleUpsert], user: dict = Depends(require_user)):
+        require_supervisor(user)
+        team_id = user.get("team_id")
+        if not team_id:
+            raise HTTPException(400, "No team.")
+        await db.rig_annotation_rules.delete_many({"team_id": team_id})
+        payload = []
+        for r in rules:
+            if r.op not in (">", "<"):
+                raise HTTPException(400, "op must be '>' or '<'")
+            if r.severity not in SEVERITIES:
+                raise HTTPException(400, f"severity must be one of {SEVERITIES}")
+            payload.append({
+                **r.model_dump(),
+                "team_id": team_id,
+                "updated_by": user["email"],
+                "updated_at": now_utc(),
+            })
+        if payload:
+            await db.rig_annotation_rules.insert_many(payload)
+        return {"saved": len(payload)}
+
     # PUBLIC — no auth required. Validates share token, creates a guest session, sets cookie.
     @api_router.get("/share/{token}")
     async def redeem_share_link(token: str, response: Response):

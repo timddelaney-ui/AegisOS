@@ -47,7 +47,7 @@ const SheetTabs = ({ currentSheet, onSelectSheet, freeSheets = [], isPro = false
             onClick={() => onSelectSheet(key)}
             className={`px-3 py-2 text-xs font-medium cursor-pointer select-none rounded-t border border-b-0 border-[#CCC] inline-flex items-center gap-1 flex-shrink-0 min-h-[36px] ${
               isActive
-                ? "bg-white text-[#107C41] font-bold border-t-2 border-t-[#107C41] -mb-px"
+                ? "bg-white text-[#FF6B1A] font-bold border-t-2 border-t-[#FF6B1A] -mb-px"
                 : locked
                 ? "bg-[#E1E1E1] text-[#888]"
                 : "bg-[#E1E1E1] text-[#333]"

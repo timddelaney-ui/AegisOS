@@ -83,13 +83,13 @@ const CrewChat = ({ currentUserId }) => {
       data-testid="crew-chat"
       className="bg-white border border-[#D4D4D4] rounded-lg shadow-sm flex flex-col h-[70dvh] sm:h-[600px] overflow-hidden mt-4"
     >
-      <div className="bg-[#0D6535] text-white px-3 py-2 flex items-center gap-2 flex-shrink-0">
+      <div className="bg-[#C44A08] text-white px-3 py-2 flex items-center gap-2 flex-shrink-0">
         <MessageSquare className="w-4 h-4" strokeWidth={2.5} />
         <span className="text-sm font-bold">Crew Chat — {rigLabel(rigId)}</span>
         <span className="text-[9px] bg-white/20 px-1.5 py-[2px] rounded font-semibold ml-2">SKIPPER WATCHDOG ON</span>
       </div>
 
-      <div className="px-3 py-2 bg-[#F0F9F3] border-b border-[#D4D4D4] text-[11px] text-[#0D6535] flex items-start gap-1.5 flex-shrink-0">
+      <div className="px-3 py-2 bg-[#FFF7EF] border-b border-[#D4D4D4] text-[11px] text-[#C44A08] flex items-start gap-1.5 flex-shrink-0">
         <Sparkles className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" strokeWidth={2.5} />
         <span>Type <strong>hey skipper</strong> to ping the AI hand. Every message is scoped to <strong>{rigLabel(rigId)}</strong>.</span>
       </div>
@@ -106,8 +106,8 @@ const CrewChat = ({ currentUserId }) => {
           // they now render exactly like any other crew message to keep the chat clean.
           if (m.is_skipper) {
             return (
-              <div key={m.message_id} className="bg-white border border-[#107C41]/40 rounded px-2.5 py-2 text-[12px] mr-6 shadow-sm">
-                <div className="flex items-center gap-1.5 text-[10px] font-bold text-[#107C41] mb-1">
+              <div key={m.message_id} className="bg-white border border-[#FF6B1A]/40 rounded px-2.5 py-2 text-[12px] mr-6 shadow-sm">
+                <div className="flex items-center gap-1.5 text-[10px] font-bold text-[#FF6B1A] mb-1">
                   <Sparkles className="w-3 h-3" strokeWidth={2.5} /> {m.sender_name}
                 </div>
                 <div className="whitespace-pre-wrap leading-relaxed text-[#262626]">{m.text}</div>
@@ -118,7 +118,7 @@ const CrewChat = ({ currentUserId }) => {
           return (
             <div key={m.message_id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
               <div className={`max-w-[85%] px-2.5 py-1.5 rounded text-[12px] leading-relaxed whitespace-pre-wrap shadow-sm ${
-                mine ? "bg-[#107C41] text-white" : "bg-white border border-[#D4D4D4] text-[#262626]"
+                mine ? "bg-[#FF6B1A] text-white" : "bg-white border border-[#D4D4D4] text-[#262626]"
               }`}>
                 {!mine && <div className="text-[10px] font-bold mb-0.5 opacity-80">{m.sender_name}</div>}
                 <div>{m.text}</div>
@@ -140,14 +140,14 @@ const CrewChat = ({ currentUserId }) => {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && send()}
             placeholder={`Message ${rigLabel(rigId)} crew or ask hey skipper…`}
-            className="flex-1 bg-[#FAFAFA] border border-[#CCC] px-2.5 py-2 rounded text-sm outline-none focus:border-[#107C41] focus:ring-2 focus:ring-[#107C41]/10"
+            className="flex-1 bg-[#FAFAFA] border border-[#CCC] px-2.5 py-2 rounded text-sm outline-none focus:border-[#FF6B1A] focus:ring-2 focus:ring-[#FF6B1A]/10"
             disabled={sending}
           />
           <button
             onClick={send}
             disabled={sending || !input.trim()}
             data-testid="chat-send-btn"
-            className="bg-[#107C41] hover:bg-[#0D6535] text-white px-3 rounded disabled:opacity-50 flex items-center justify-center"
+            className="bg-[#FF6B1A] hover:bg-[#C44A08] text-white px-3 rounded disabled:opacity-50 flex items-center justify-center"
           >
             {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
           </button>

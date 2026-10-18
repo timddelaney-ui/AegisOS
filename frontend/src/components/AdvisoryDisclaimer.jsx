@@ -89,7 +89,7 @@ export const AdvisoryModal = () => {
           <button
             data-testid="advisory-ack-btn"
             onClick={acknowledge}
-            className="bg-[#107C41] hover:bg-[#0D6535] text-white text-sm font-bold px-4 py-2 rounded"
+            className="bg-[#FF6B1A] hover:bg-[#C44A08] text-white text-sm font-bold px-4 py-2 rounded"
           >
             I understand — Continue
           </button>

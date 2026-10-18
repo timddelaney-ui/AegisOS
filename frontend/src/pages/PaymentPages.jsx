@@ -52,14 +52,14 @@ export const PaymentSuccess = () => {
       <div className="bg-white border border-[#D4D4D4] rounded-lg shadow-lg p-8 max-w-md w-full text-center">
         {status === "polling" && (
           <>
-            <Loader2 className="w-12 h-12 text-[#107C41] animate-spin mx-auto mb-4" />
+            <Loader2 className="w-12 h-12 text-[#FF6B1A] animate-spin mx-auto mb-4" />
             <h2 className="text-lg font-bold text-[#262626] mb-2">Confirming your payment…</h2>
             <p className="text-sm text-[#595959]">This takes a few seconds. Please don't close this page.</p>
           </>
         )}
         {status === "paid" && (
           <>
-            <CheckCircle2 className="w-14 h-14 text-[#107C41] mx-auto mb-4" strokeWidth={2} />
+            <CheckCircle2 className="w-14 h-14 text-[#FF6B1A] mx-auto mb-4" strokeWidth={2} />
             <h2 className="text-lg font-bold text-[#262626] mb-2">You're in!</h2>
             <p className="text-sm text-[#595959] mb-4">Your subscription is active. Redirecting you to the workbook…</p>
           </>
@@ -69,7 +69,7 @@ export const PaymentSuccess = () => {
             <XCircle className="w-14 h-14 text-[#C00000] mx-auto mb-4" strokeWidth={2} />
             <h2 className="text-lg font-bold text-[#262626] mb-2">Payment not confirmed</h2>
             <p className="text-sm text-[#595959] mb-4">If you were charged, refresh in a moment. Otherwise please try again.</p>
-            <button onClick={() => navigate("/pricing")} className="bg-[#107C41] hover:bg-[#0D6535] text-white px-4 py-2 rounded font-semibold text-sm">Back to Pricing</button>
+            <button onClick={() => navigate("/pricing")} className="bg-[#FF6B1A] hover:bg-[#C44A08] text-white px-4 py-2 rounded font-semibold text-sm">Back to Pricing</button>
           </>
         )}
       </div>
@@ -85,7 +85,7 @@ export const PaymentCancel = () => {
         <XCircle className="w-14 h-14 text-[#595959] mx-auto mb-4" strokeWidth={2} />
         <h2 className="text-lg font-bold text-[#262626] mb-2">Payment canceled</h2>
         <p className="text-sm text-[#595959] mb-4">No charge was made. You can subscribe anytime.</p>
-        <button onClick={() => navigate("/pricing")} className="bg-[#107C41] hover:bg-[#0D6535] text-white px-4 py-2 rounded font-semibold text-sm">Back to Pricing</button>
+        <button onClick={() => navigate("/pricing")} className="bg-[#FF6B1A] hover:bg-[#C44A08] text-white px-4 py-2 rounded font-semibold text-sm">Back to Pricing</button>
       </div>
     </div>
   );

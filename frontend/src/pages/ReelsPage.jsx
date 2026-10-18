@@ -11,7 +11,7 @@ import { Plus, Upload, Trash2, CheckCircle2, Lock } from "lucide-react";
 const emptyInterval = () => ({ start_md_ft: 0, end_md_ft: 1000, od_in: 2.0, wt_in: 0.175, grade: "QT-900", smys_psi: 90000 });
 
 const ReelCard = ({ reel, isActive, canWrite, onActivate, onDelete }) => (
-  <div data-testid={`reel-card-${reel.reel_id}`} className={`bg-white border rounded-lg p-3 ${isActive ? "border-[#107C41] shadow-md" : "border-[#D4D4D4]"}`}>
+  <div data-testid={`reel-card-${reel.reel_id}`} className={`bg-white border rounded-lg p-3 ${isActive ? "border-[#FF6B1A] shadow-md" : "border-[#D4D4D4]"}`}>
     <div className="flex items-start justify-between gap-2">
       <div>
         <div className="flex items-center gap-2">
@@ -26,7 +26,7 @@ const ReelCard = ({ reel, isActive, canWrite, onActivate, onDelete }) => (
       </div>
       <div className="flex items-center gap-1">
         {canWrite && !isActive && !reel.retired && (
-          <button data-testid={`activate-reel-${reel.reel_id}`} onClick={() => onActivate(reel.reel_id)} className="text-[11px] bg-[#107C41] text-white px-2 py-1 rounded font-bold">Set Active</button>
+          <button data-testid={`activate-reel-${reel.reel_id}`} onClick={() => onActivate(reel.reel_id)} className="text-[11px] bg-[#FF6B1A] text-white px-2 py-1 rounded font-bold">Set Active</button>
         )}
         {canWrite && isManagement && (
           <button data-testid={`delete-reel-${reel.reel_id}`} onClick={() => onDelete(reel.reel_id)} className="text-[#C00000] p-1 hover:bg-[#F8D7DA] rounded"><Trash2 className="w-3.5 h-3.5" /></button>
@@ -114,7 +114,7 @@ export default function ReelsPage() {
           <div className="bg-white border border-[#D4D4D4] rounded-lg p-3">
             <div className="flex items-center justify-between mb-2">
               <h2 className="font-bold text-[#262626] text-sm">Add Reel</h2>
-              <button data-testid="toggle-new-reel" onClick={() => setShowNew(!showNew)} className="text-[11px] bg-[#107C41] text-white px-2 py-1 rounded font-bold flex items-center gap-1"><Plus className="w-3 h-3" /> Manual</button>
+              <button data-testid="toggle-new-reel" onClick={() => setShowNew(!showNew)} className="text-[11px] bg-[#FF6B1A] text-white px-2 py-1 rounded font-bold flex items-center gap-1"><Plus className="w-3 h-3" /> Manual</button>
             </div>
             {showNew && (
               <div className="space-y-2 mb-3">
@@ -138,9 +138,9 @@ export default function ReelsPage() {
                       <button onClick={() => removeInterval(i)} className="text-[#C00000] text-xs">×</button>
                     </div>
                   ))}
-                  <button onClick={addInterval} className="text-[11px] text-[#107C41] font-bold flex items-center gap-1"><Plus className="w-3 h-3" />Add taper interval</button>
+                  <button onClick={addInterval} className="text-[11px] text-[#FF6B1A] font-bold flex items-center gap-1"><Plus className="w-3 h-3" />Add taper interval</button>
                 </div>
-                <button data-testid="submit-new-reel" onClick={createReel} className="bg-[#107C41] text-white px-3 py-1 text-xs font-bold rounded">Create Reel ({totalLen} ft)</button>
+                <button data-testid="submit-new-reel" onClick={createReel} className="bg-[#FF6B1A] text-white px-3 py-1 text-xs font-bold rounded">Create Reel ({totalLen} ft)</button>
               </div>
             )}
 

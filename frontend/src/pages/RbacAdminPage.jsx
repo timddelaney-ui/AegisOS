@@ -57,7 +57,7 @@ export default function RbacAdminPage() {
           <h3 className="text-sm font-bold flex items-center gap-1 mb-2"><Globe className="w-4 h-4" />Allowed Email Domains</h3>
           <div className="flex gap-2 items-center">
             <input data-testid="domains-input" placeholder="acme.com, acme-energy.com" value={domainInput} onChange={(e) => setDomainInput(e.target.value)} className="border rounded px-2 py-1 text-xs flex-1" disabled={!canEdit} />
-            {canEdit && <button data-testid="domains-save" onClick={saveDomains} className="bg-[#107C41] text-white px-2 py-1 text-xs font-bold rounded">Save</button>}
+            {canEdit && <button data-testid="domains-save" onClick={saveDomains} className="bg-[#FF6B1A] text-white px-2 py-1 text-xs font-bold rounded">Save</button>}
           </div>
           <p className="text-[10px] text-[#595959] mt-1">Leave empty to allow any Google-signed-in email. Only enforced on team join.</p>
         </div>
@@ -67,7 +67,7 @@ export default function RbacAdminPage() {
           <div className="space-y-1.5">
             {members.map((m) => (
               <div key={m.user_id} data-testid={`member-${m.user_id}`} className="flex items-center gap-2 bg-[#F8FAFC] rounded p-2 text-xs">
-                <span className="w-8 h-8 rounded-full bg-[#107C41] text-white font-bold flex items-center justify-center">{(m.name || m.email).charAt(0).toUpperCase()}</span>
+                <span className="w-8 h-8 rounded-full bg-[#FF6B1A] text-white font-bold flex items-center justify-center">{(m.name || m.email).charAt(0).toUpperCase()}</span>
                 <div className="flex-1 min-w-0">
                   <p className="font-bold truncate">{m.name || m.email}</p>
                   <p className="text-[#595959] truncate">{m.email}</p>

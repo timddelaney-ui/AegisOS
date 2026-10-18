@@ -54,7 +54,7 @@ export const HubCustomizeButton = ({ onApply }) => {
       <button
         data-testid="hub-customize-btn"
         onClick={openModal}
-        className="text-[11px] font-bold bg-white border border-[#D4D4D4] hover:border-[#107C41] rounded px-2 py-1 text-[#262626] flex items-center gap-1"
+        className="text-[11px] font-bold bg-white border border-[#D4D4D4] hover:border-[#FF6B1A] rounded px-2 py-1 text-[#262626] flex items-center gap-1"
       >
         <Eye className="w-3 h-3" />Customize home
       </button>
@@ -93,7 +93,7 @@ export const HubCustomizeButton = ({ onApply }) => {
                       </div>
                     )}
                     <span className="flex-1 min-w-0 text-xs font-bold truncate">{meta?.label || t.id}</span>
-                    <button data-testid={`toggle-tile-${t.id}`} onClick={() => toggle(t.id)} className={`p-1 rounded ${t.visible ? "text-[#107C41]" : "text-[#C4C4C4]"}`}>
+                    <button data-testid={`toggle-tile-${t.id}`} onClick={() => toggle(t.id)} className={`p-1 rounded ${t.visible ? "text-[#FF6B1A]" : "text-[#C4C4C4]"}`}>
                       {t.visible ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
                     </button>
                     <button data-testid={`move-up-${t.id}`} onClick={() => move(i, -1)} disabled={i === 0} className="p-1 text-[#595959] disabled:opacity-30"><ArrowUp className="w-4 h-4" /></button>
@@ -105,7 +105,7 @@ export const HubCustomizeButton = ({ onApply }) => {
 
             <div className="p-3 border-t border-[#E5E5E5] flex justify-end gap-2">
               <button onClick={() => setOpen(false)} className="text-xs px-3 py-1.5 rounded font-bold border">Cancel</button>
-              <button data-testid="hub-customize-save" onClick={save} className="text-xs px-3 py-1.5 rounded font-bold bg-[#107C41] text-white">Save layout</button>
+              <button data-testid="hub-customize-save" onClick={save} className="text-xs px-3 py-1.5 rounded font-bold bg-[#FF6B1A] text-white">Save layout</button>
             </div>
           </div>
         </div>

@@ -1,5 +1,5 @@
 /*
- * CT Field Workbook — Industry-standard formulas & safe-operating-limit checks.
+ * CoilAegis — Industry-standard formulas & safe-operating-limit checks.
  *
  * References baked in:
  *   API RP 5C7  — Coiled Tubing Operations (mechanical / free-point / running loads)

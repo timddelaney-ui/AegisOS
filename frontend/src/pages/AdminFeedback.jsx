@@ -9,7 +9,7 @@ const CATEGORY_META = {
   bug: { label: "Bug", Icon: Bug, color: "text-[#C00000] bg-[#F8D7DA] border-[#F5C6CB]" },
   idea: { label: "Idea", Icon: Lightbulb, color: "text-[#856404] bg-[#FFF3CD] border-[#FFE69C]" },
   ux: { label: "UX", Icon: Palette, color: "text-[#5A67D8] bg-[#E0E7FF] border-[#C7D2FE]" },
-  data_accuracy: { label: "Data", Icon: Calculator, color: "text-[#0D6535] bg-[#E6F4EA] border-[#B7E4C7]" },
+  data_accuracy: { label: "Data", Icon: Calculator, color: "text-[#C44A08] bg-[#FFF1E6] border-[#B7E4C7]" },
   other: { label: "Other", Icon: HelpCircle, color: "text-[#595959] bg-[#F8F9FA] border-[#D4D4D4]" },
 };
 
@@ -53,7 +53,7 @@ const AdminFeedback = () => {
 
   return (
     <div className="min-h-screen bg-[#F3F3F3] flex flex-col">
-      <header className="bg-[#107C41] text-white h-12 flex items-center px-3 shadow-md flex-shrink-0">
+      <header className="bg-[#FF6B1A] text-white h-12 flex items-center px-3 shadow-md flex-shrink-0">
         <button onClick={() => navigate("/app")} className="flex items-center gap-1.5 text-sm font-semibold">
           <ArrowLeft className="w-4 h-4" /> Back
         </button>
@@ -62,7 +62,7 @@ const AdminFeedback = () => {
       <div className="flex-1 p-4 overflow-auto">
         <div className="max-w-4xl mx-auto">
           {loading ? (
-            <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-[#107C41]" /></div>
+            <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-[#FF6B1A]" /></div>
           ) : !isAdmin ? (
             <div className="bg-white border border-[#D4D4D4] rounded-lg p-6 text-center">
               <ShieldAlert className="w-10 h-10 text-[#C00000] mx-auto mb-2" strokeWidth={2} />
@@ -74,7 +74,7 @@ const AdminFeedback = () => {
               <div className="flex flex-wrap gap-2 mb-3">
                 {["all", ...STATUS_OPTIONS].map((s) => (
                   <button key={s} onClick={() => setFilter(s)}
-                    className={`px-3 py-1 rounded-full text-[11px] font-semibold border transition-colors ${filter === s ? "bg-[#107C41] text-white border-[#107C41]" : "bg-white text-[#444] border-[#D4D4D4] hover:border-[#107C41]"}`}>
+                    className={`px-3 py-1 rounded-full text-[11px] font-semibold border transition-colors ${filter === s ? "bg-[#FF6B1A] text-white border-[#FF6B1A]" : "bg-white text-[#444] border-[#D4D4D4] hover:border-[#FF6B1A]"}`}>
                     {s === "all" ? "All" : s.replace("_", " ")}
                     <span className={`ml-1 text-[10px] ${filter === s ? "text-white/80" : "text-[#595959]"}`}>
                       ({s === "all" ? items.length : items.filter((it) => it.status === s).length})
@@ -109,7 +109,7 @@ const AdminFeedback = () => {
                         </div>
                         <textarea placeholder="Admin notes (only you see these)" defaultValue={it.admin_notes || ""}
                           onBlur={(e) => e.target.value !== (it.admin_notes || "") && updateItem(it.feedback_id, { admin_notes: e.target.value })}
-                          className="w-full mt-2 bg-[#FAFAFA] border border-[#EFEFEF] rounded px-2 py-1 text-[11px] resize-none focus:outline-none focus:border-[#107C41]" rows={2} />
+                          className="w-full mt-2 bg-[#FAFAFA] border border-[#EFEFEF] rounded px-2 py-1 text-[11px] resize-none focus:outline-none focus:border-[#FF6B1A]" rows={2} />
                       </div>
                     );
                   })}

@@ -121,7 +121,7 @@ const Input = (props) => (
     type={props.type || "number"}
     step={props.step || "any"}
     inputMode="decimal"
-    className={`px-2 py-1.5 border border-[#CCC] rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#107C41]/40 focus:border-[#107C41] bg-white ${props.className || ""}`}
+    className={`px-2 py-1.5 border border-[#CCC] rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#FF6B1A]/40 focus:border-[#FF6B1A] bg-white ${props.className || ""}`}
   />
 );
 
@@ -146,7 +146,7 @@ const EnvelopeBadge = ({ status }) => {
   const s = (status || "").toLowerCase();
   const isOk = s.includes("within") || s === "balanced";
   const isRisk = s.includes("loss") || s.includes("not") || s.includes("severe") || s.includes("over");
-  const cls = isRisk ? "bg-[#8B0000] text-white" : isOk ? "bg-[#107C41] text-white" : "bg-[#C36600] text-white";
+  const cls = isRisk ? "bg-[#8B0000] text-white" : isOk ? "bg-[#FF6B1A] text-white" : "bg-[#C36600] text-white";
   return (
     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${cls}`}>
       {isRisk ? <AlertTriangle className="w-3 h-3" /> : <CheckCircle2 className="w-3 h-3" />}
@@ -269,7 +269,7 @@ const CTDrillingCalculator = () => {
         <button
           data-testid="ctd-back-btn"
           onClick={() => navigate("/hub")}
-          className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#595959] hover:text-[#107C41]"
+          className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#595959] hover:text-[#FF6B1A]"
         >
           <ArrowLeft className="w-4 h-4" /> Hub
         </button>
@@ -280,7 +280,7 @@ const CTDrillingCalculator = () => {
         <button
           data-testid="ctd-ai-sop-btn"
           onClick={() => setAiOpen(true)}
-          className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-[#107C41] text-white text-[11px] font-bold hover:bg-[#0D6535] shadow-sm"
+          className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-[#FF6B1A] text-white text-[11px] font-bold hover:bg-[#C44A08] shadow-sm"
           title="Scenario-specific SOP + Safe Work + ERP guidance (AER / API / OH&S / CSA / IWCF)"
         >
           <ShieldCheck className="w-3.5 h-3.5" strokeWidth={2.6} />
@@ -291,12 +291,12 @@ const CTDrillingCalculator = () => {
           <button
             data-testid="ctd-unit-imp"
             onClick={() => switchUnits("imp")}
-            className={`px-2 py-1 text-[11px] font-bold rounded ${unitSystem === "imp" ? "bg-white shadow-sm text-[#107C41]" : "text-[#595959]"}`}
+            className={`px-2 py-1 text-[11px] font-bold rounded ${unitSystem === "imp" ? "bg-white shadow-sm text-[#FF6B1A]" : "text-[#595959]"}`}
           >IMP</button>
           <button
             data-testid="ctd-unit-met"
             onClick={() => switchUnits("met")}
-            className={`px-2 py-1 text-[11px] font-bold rounded ${unitSystem === "met" ? "bg-white shadow-sm text-[#107C41]" : "text-[#595959]"}`}
+            className={`px-2 py-1 text-[11px] font-bold rounded ${unitSystem === "met" ? "bg-white shadow-sm text-[#FF6B1A]" : "text-[#595959]"}`}
           >MET</button>
         </div>
       </div>
@@ -310,12 +310,12 @@ const CTDrillingCalculator = () => {
               onClick={() => setMode("balanced")}
               className={`rounded-xl p-3 border-2 text-left transition-all ${
                 vals.mode === "balanced"
-                  ? "bg-[#E6F4EA] border-[#107C41] shadow-md"
-                  : "bg-white border-[#D4D4D4] hover:border-[#107C41]/60"
+                  ? "bg-[#FFF1E6] border-[#FF6B1A] shadow-md"
+                  : "bg-white border-[#D4D4D4] hover:border-[#FF6B1A]/60"
               }`}
             >
               <div className="flex items-start gap-2">
-                <Gauge className={`w-5 h-5 ${vals.mode === "balanced" ? "text-[#0D6535]" : "text-[#595959]"}`} strokeWidth={2.4} />
+                <Gauge className={`w-5 h-5 ${vals.mode === "balanced" ? "text-[#C44A08]" : "text-[#595959]"}`} strokeWidth={2.4} />
                 <div>
                   <p className="text-sm font-bold text-[#262626]">Balanced / Overbalanced</p>
                   <p className="text-[11px] text-[#595959] leading-snug">Single-phase mud. BHP ≥ pore pressure. Mud-weight window check.</p>
@@ -364,7 +364,7 @@ const CTDrillingCalculator = () => {
             <Field label={L.ct_wall}><Input data-testid="ctd-ct-wall" value={vals.ct_wall} onChange={setField("ct_wall")} /></Field>
           </Section>
 
-          <Section title="Fluid & pumps" Icon={Beaker} color="bg-[#E6F4EA] text-[#0D6535]">
+          <Section title="Fluid & pumps" Icon={Beaker} color="bg-[#FFF1E6] text-[#C44A08]">
             <Field label={L.q_bpm}><Input data-testid="ctd-qbpm" value={vals.q_bpm} onChange={setField("q_bpm")} /></Field>
             <Field label={L.rho_ppg}><Input data-testid="ctd-rho" value={vals.rho_ppg} onChange={setField("rho_ppg")} /></Field>
             <Field label={L.mu_cp} hint="Effective at pump rate; 10–50 cp typical for CTD fluids">
@@ -396,28 +396,28 @@ const CTDrillingCalculator = () => {
             <button
               data-testid="ctd-reset-btn"
               onClick={reset}
-              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-[12px] font-semibold border border-[#D4D4D4] bg-white hover:border-[#107C41] hover:text-[#107C41]"
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-[12px] font-semibold border border-[#D4D4D4] bg-white hover:border-[#FF6B1A] hover:text-[#FF6B1A]"
             >
               <RotateCcw className="w-3.5 h-3.5" /> Reset defaults
             </button>
             <button
               data-testid="ctd-copy-btn"
               onClick={copyReport}
-              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-[12px] font-semibold border border-[#D4D4D4] bg-white hover:border-[#107C41] hover:text-[#107C41]"
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-[12px] font-semibold border border-[#D4D4D4] bg-white hover:border-[#FF6B1A] hover:text-[#FF6B1A]"
             >
               <Copy className="w-3.5 h-3.5" /> Copy report
             </button>
             <button
               data-testid="ctd-share-btn"
               onClick={share}
-              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-[12px] font-semibold border border-[#D4D4D4] bg-white hover:border-[#107C41] hover:text-[#107C41]"
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-[12px] font-semibold border border-[#D4D4D4] bg-white hover:border-[#FF6B1A] hover:text-[#FF6B1A]"
             >
               <Share2 className="w-3.5 h-3.5" /> Share
             </button>
             <button
               data-testid="ctd-print-btn"
               onClick={() => window.print()}
-              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-[12px] font-semibold border border-[#D4D4D4] bg-white hover:border-[#107C41] hover:text-[#107C41]"
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-[12px] font-semibold border border-[#D4D4D4] bg-white hover:border-[#FF6B1A] hover:text-[#FF6B1A]"
             >
               <Printer className="w-3.5 h-3.5" /> Print
             </button>
@@ -425,7 +425,7 @@ const CTDrillingCalculator = () => {
 
           {/* Results */}
           <div className="bg-white border border-[#D4D4D4] rounded-xl shadow-sm overflow-hidden" data-testid="ctd-results-panel">
-            <div className={`px-4 py-2 flex items-center justify-between ${isUBD ? "bg-[#FDE8E8]" : "bg-[#E6F4EA]"}`}>
+            <div className={`px-4 py-2 flex items-center justify-between ${isUBD ? "bg-[#FDE8E8]" : "bg-[#FFF1E6]"}`}>
               <h3 className="text-[13px] font-bold text-[#262626] flex items-center gap-2">
                 <Gauge className="w-4 h-4" />
                 {isUBD ? "Underbalanced drilling results" : "Balanced drilling results"}
@@ -446,7 +446,7 @@ const CTDrillingCalculator = () => {
                     <p className="text-lg font-bold text-[#262626] tabular-nums leading-tight mt-0.5">
                       {value} <span className="text-[11px] font-semibold text-[#595959]">{unit}</span>
                     </p>
-                    {r.note && <p className={`text-[10px] mt-0.5 font-semibold ${r.note.includes("UNDER") || r.note.includes("LOSS") || r.note.includes("NOT") ? "text-[#8B0000]" : "text-[#0D6535]"}`}>{r.note}</p>}
+                    {r.note && <p className={`text-[10px] mt-0.5 font-semibold ${r.note.includes("UNDER") || r.note.includes("LOSS") || r.note.includes("NOT") ? "text-[#8B0000]" : "text-[#C44A08]"}`}>{r.note}</p>}
                     {r.formula && <p className="text-[9px] text-[#777] mt-0.5 italic truncate">{r.formula}</p>}
                   </div>
                 );

@@ -42,8 +42,8 @@ const StartCard = ({ rigId, onStarted }) => {
   return (
     <div className="bg-white border border-[#D4D4D4] rounded-lg p-4 space-y-3" data-testid="treatment-start-card">
       <div className="flex items-center gap-2">
-        <ClipboardList className="w-5 h-5 text-[#0D6535]" />
-        <h2 className="text-sm font-bold text-[#0D6535]">Start a new treatment on {rigLabel(rigId)}</h2>
+        <ClipboardList className="w-5 h-5 text-[#C44A08]" />
+        <h2 className="text-sm font-bold text-[#C44A08]">Start a new treatment on {rigLabel(rigId)}</h2>
       </div>
       <p className="text-[12px] text-[#595959]">
         Everyone on the rig sees your notes in near-real time on mobile and desktop. One active treatment per rig — starting a new one closes any prior open log.
@@ -60,7 +60,7 @@ const StartCard = ({ rigId, onStarted }) => {
           className="px-2.5 py-2 border border-[#CCC] rounded text-sm" />
       </div>
       <button data-testid="treatment-start" disabled={busy || !name.trim()} onClick={start}
-        className="text-sm font-bold text-white bg-[#0D6535] hover:bg-[#0A4F28] px-4 py-2 rounded disabled:opacity-50 inline-flex items-center gap-1.5">
+        className="text-sm font-bold text-white bg-[#C44A08] hover:bg-[#0A4F28] px-4 py-2 rounded disabled:opacity-50 inline-flex items-center gap-1.5">
         {busy ? <><Loader2 className="w-4 h-4 animate-spin" /> Starting…</> : <><Play className="w-4 h-4" /> Start treatment</>}
       </button>
     </div>
@@ -144,7 +144,7 @@ const EntryComposer = ({ treatmentId, onAdded }) => {
             type="submit"
             disabled={busy || !text.trim()}
             data-testid="treatment-entry-send"
-            className="text-sm font-bold text-white bg-[#0D6535] hover:bg-[#0A4F28] px-3 rounded disabled:opacity-50 inline-flex items-center gap-1 tap-44 min-w-[52px] justify-center flex-1"
+            className="text-sm font-bold text-white bg-[#C44A08] hover:bg-[#0A4F28] px-3 rounded disabled:opacity-50 inline-flex items-center gap-1 tap-44 min-w-[52px] justify-center flex-1"
           >
             {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
           </button>
@@ -157,7 +157,7 @@ const EntryComposer = ({ treatmentId, onAdded }) => {
             type="checkbox"
             checked={useCustomTime}
             onChange={(e) => setUseCustomTime(e.target.checked)}
-            className="w-3.5 h-3.5 accent-[#0D6535]"
+            className="w-3.5 h-3.5 accent-[#C44A08]"
           />
           <span className="text-[11px] text-[#595959]"><Clock className="inline w-3 h-3 mr-0.5" />Logging a past event</span>
         </label>
@@ -221,7 +221,7 @@ const TreatmentEntryRow = ({ entry, mine, treatmentId, onPatched, onDeleted }) =
 
   return (
     <div className="flex gap-2 items-start group" data-testid={`treatment-entry-${entry.entry_id}`}>
-      <div className="text-[10px] font-mono font-bold text-[#0D6535] mt-0.5 w-12 sm:w-16 flex-shrink-0 text-right leading-tight">
+      <div className="text-[10px] font-mono font-bold text-[#C44A08] mt-0.5 w-12 sm:w-16 flex-shrink-0 text-right leading-tight">
         {stampBar(displayAt)}
         {wasBackdated && (
           <div className="text-[8px] font-normal italic text-[#C36600]" title={`Logged ${stampBar(createdAt)}`}>
@@ -229,7 +229,7 @@ const TreatmentEntryRow = ({ entry, mine, treatmentId, onPatched, onDeleted }) =
           </div>
         )}
       </div>
-      <div className={`flex-1 min-w-0 border-l-2 pl-2 ${mine ? "border-[#0D6535]" : "border-[#D4D4D4]"}`}>
+      <div className={`flex-1 min-w-0 border-l-2 pl-2 ${mine ? "border-[#C44A08]" : "border-[#D4D4D4]"}`}>
         <div className="text-[10px] font-bold text-[#595959] flex items-center gap-1 flex-wrap">
           <User className="w-3 h-3" /> {entry.author_name}
           {wasBackdated && (
@@ -260,7 +260,7 @@ const TreatmentEntryRow = ({ entry, mine, treatmentId, onPatched, onDeleted }) =
             </label>
             <div className="flex gap-1 justify-end">
               <button data-testid={`treatment-entry-cancel-${entry.entry_id}`} onClick={() => { setEditing(false); setText(entry.text); setEventAt(toLocalDTInput(entry.event_at || entry.created_at)); }} className="text-[10px] text-[#595959] px-2 py-1 inline-flex items-center gap-1"><X className="w-3 h-3" /> Cancel</button>
-              <button data-testid={`treatment-entry-save-${entry.entry_id}`} onClick={save} disabled={busy || !text.trim()} className="text-[10px] font-bold text-white bg-[#0D6535] hover:bg-[#0A4F28] px-2 py-1 rounded disabled:opacity-50 inline-flex items-center gap-1">
+              <button data-testid={`treatment-entry-save-${entry.entry_id}`} onClick={save} disabled={busy || !text.trim()} className="text-[10px] font-bold text-white bg-[#C44A08] hover:bg-[#0A4F28] px-2 py-1 rounded disabled:opacity-50 inline-flex items-center gap-1">
                 {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />} Save
               </button>
             </div>
@@ -270,7 +270,7 @@ const TreatmentEntryRow = ({ entry, mine, treatmentId, onPatched, onDeleted }) =
             <div className="text-[13px] text-[#262626] whitespace-pre-wrap break-words flex-1">{entry.text}</div>
             {mine && (
               <div className="flex gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                <button data-testid={`treatment-entry-edit-btn-${entry.entry_id}`} onClick={() => setEditing(true)} className="p-0.5 text-[#107C41] hover:bg-[#F0F9F3] rounded tap-44" aria-label="Edit"><Pencil className="w-3 h-3" /></button>
+                <button data-testid={`treatment-entry-edit-btn-${entry.entry_id}`} onClick={() => setEditing(true)} className="p-0.5 text-[#FF6B1A] hover:bg-[#FFF7EF] rounded tap-44" aria-label="Edit"><Pencil className="w-3 h-3" /></button>
                 <button data-testid={`treatment-entry-delete-btn-${entry.entry_id}`} onClick={remove} className="p-0.5 text-[#C00000] hover:bg-[#F8D7DA] rounded tap-44" aria-label="Delete"><Trash2 className="w-3 h-3" /></button>
               </div>
             )}
@@ -393,7 +393,7 @@ const TreatmentPage = () => {
 
   return (
     <div className="min-h-screen bg-[#F3F3F3] flex flex-col print:bg-white">
-      <header className="bg-[#0D6535] text-white h-12 flex items-center px-3 shadow-md flex-shrink-0 safe-x print:hidden">
+      <header className="bg-[#C44A08] text-white h-12 flex items-center px-3 shadow-md flex-shrink-0 safe-x print:hidden">
         <button onClick={() => navigate("/hub")} data-testid="treatment-back" className="flex items-center gap-1.5 text-sm font-semibold tap-44 -ml-2 pl-2 pr-2"><ArrowLeft className="w-4 h-4" /> Back</button>
         <h1 className="text-sm font-semibold ml-2 flex items-center gap-2 min-w-0"><ClipboardList className="w-4 h-4 flex-shrink-0" /> <span className="truncate">Treatment · {rigLabel(rigId)}</span></h1>
         {refreshing && <RefreshCw className="w-3 h-3 animate-spin ml-2 opacity-70 flex-shrink-0" />}
@@ -417,7 +417,7 @@ const TreatmentPage = () => {
                       <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-[#DCFCE7] text-[#065F46] px-1.5 py-0.5 rounded-full">
                         <span className="w-1.5 h-1.5 rounded-full bg-[#065F46] animate-pulse" /> LIVE
                       </span>
-                      <h2 className="text-base font-bold text-[#0D6535] truncate">{active.name}</h2>
+                      <h2 className="text-base font-bold text-[#C44A08] truncate">{active.name}</h2>
                     </div>
                     <div className="text-[11px] text-[#595959] mt-0.5">
                       {active.well_or_job_no && <>Well/Job: <strong className="text-[#262626]">{active.well_or_job_no}</strong> · </>}
@@ -426,10 +426,10 @@ const TreatmentPage = () => {
                     {active.note && <div className="text-[11px] text-[#595959] italic mt-0.5">{active.note}</div>}
                   </div>
                   <div className="flex gap-1 print:hidden flex-shrink-0">
-                    <button onClick={copyLog} data-testid="treatment-copy" className="text-[11px] font-bold text-[#0D6535] border border-[#0D6535] px-2 py-1.5 rounded inline-flex items-center gap-1 hover:bg-[#F0F9F3] tap-44">
+                    <button onClick={copyLog} data-testid="treatment-copy" className="text-[11px] font-bold text-[#C44A08] border border-[#C44A08] px-2 py-1.5 rounded inline-flex items-center gap-1 hover:bg-[#FFF7EF] tap-44">
                       <Copy className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Copy</span>
                     </button>
-                    <button onClick={printLog} data-testid="treatment-print" className="text-[11px] font-bold text-[#0D6535] border border-[#0D6535] px-2 py-1.5 rounded inline-flex items-center gap-1 hover:bg-[#F0F9F3] tap-44">
+                    <button onClick={printLog} data-testid="treatment-print" className="text-[11px] font-bold text-[#C44A08] border border-[#C44A08] px-2 py-1.5 rounded inline-flex items-center gap-1 hover:bg-[#FFF7EF] tap-44">
                       <Printer className="w-3.5 h-3.5" /> <span className="hidden sm:inline">PDF</span>
                     </button>
                     <button onClick={closeTreatment} disabled={closing} data-testid="treatment-close" className="text-[11px] font-bold text-[#B91C1C] border border-[#B91C1C] px-2 py-1.5 rounded inline-flex items-center gap-1 hover:bg-[#FEF2F2] disabled:opacity-50 tap-44">

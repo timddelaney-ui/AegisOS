@@ -25,11 +25,11 @@ const GUEST_HIDDEN_TILES = new Set([
 
 const greetings = ["Kettle's on", "Ready for shift", "How's the shift", "Morning, hand", "Evening, tool push", "Coffee's brewing"];
 const proTips = [
-  "Tap any sheet tab at the bottom of the workbook to jump between operations.",
+  "The Live Ops dashboard scrubs back 10 minutes — drop a note on any spike for the dossier.",
   "The AI 'Training' mode explains what's happening downhole in plain English — good for a new hand.",
   "Save a job before you head out — it syncs to the whole crew if you're on a team.",
   "The Emergency SOP tab has 17 scenarios with AER/OH&S citations. Bookmark it.",
-  "Switch to Metric units in the sheet — every calculated result converts automatically.",
+  "Switch to Metric units on any tool — every calculated result converts automatically.",
   "Ask the AI 'Troubleshoot' about surface symptoms and it'll walk you through diagnosis.",
 ];
 
@@ -44,10 +44,10 @@ const HubCard = ({ Icon, title, subtitle, onClick, accent, badge, gradient, tile
     data-tile-id={tileId}
     onClick={onClick}
     style={style}
-    className={`group relative overflow-hidden rounded-xl border border-[#D4D4D4] bg-white p-4 text-left shadow-sm hover:shadow-md hover:border-[#107C41] transition-all hover:-translate-y-0.5 ${gradient || ""}`}
+    className={`group relative overflow-hidden rounded-xl border border-[#D4D4D4] bg-white p-4 text-left shadow-sm hover:shadow-md hover:border-[#FF6B1A] transition-all hover:-translate-y-0.5 ${gradient || ""}`}
   >
     <div className="flex items-start gap-3">
-      <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${accent || "bg-[#E6F4EA] text-[#107C41]"}`}>
+      <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${accent || "bg-[#FFF1E6] text-[#FF6B1A]"}`}>
         <Icon className="w-5 h-5" strokeWidth={2.2} />
       </div>
       <div className="flex-1 min-w-0">
@@ -57,7 +57,7 @@ const HubCard = ({ Icon, title, subtitle, onClick, accent, badge, gradient, tile
         </div>
         <p className="text-[11px] text-[#595959] mt-0.5 leading-snug">{subtitle}</p>
       </div>
-      <ChevronRight className="w-4 h-4 text-[#C4C4C4] group-hover:text-[#107C41] flex-shrink-0" />
+      <ChevronRight className="w-4 h-4 text-[#C4C4C4] group-hover:text-[#FF6B1A] flex-shrink-0" />
     </div>
   </button>
   );
@@ -65,7 +65,7 @@ const HubCard = ({ Icon, title, subtitle, onClick, accent, badge, gradient, tile
 
 const StatChip = ({ Icon, value, label, color }) => (
   <div className="flex flex-col items-center bg-white border border-[#D4D4D4] rounded-lg py-2.5 px-2 shadow-sm">
-    <div className={`w-6 h-6 rounded flex items-center justify-center mb-1 ${color || "bg-[#E6F4EA] text-[#107C41]"}`}>
+    <div className={`w-6 h-6 rounded flex items-center justify-center mb-1 ${color || "bg-[#FFF1E6] text-[#FF6B1A]"}`}>
       <Icon className="w-3.5 h-3.5" strokeWidth={2.5} />
     </div>
     <p className="text-lg font-bold text-[#262626] tabular-nums">{value}</p>
@@ -144,27 +144,42 @@ const Hub = () => {
   const openAI = (mode) => { setAiMode(mode); setAiOpen(true); };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#F3F3F3] to-[#E8ECEF] flex flex-col">
+    <div className="min-h-screen bg-[#F7F7F8] flex flex-col">
       <ExcelHeader />
       <RigSelector />
 
       <div className="flex-1 overflow-y-auto pb-8 scroll-smooth-mobile" ref={pullRef}>
         <PullIndicator progress={progress} refreshing={pulling} />
-        <div className="max-w-3xl mx-auto p-4 space-y-4">
-          {/* Greeting */}
-          <div className="pt-2">
-            <p className="text-[11px] font-semibold text-[#107C41] uppercase tracking-wide">{timeOfDay} shift</p>
-            <h1 className="text-2xl font-bold text-[#262626]">{greeting}, {firstName}.</h1>
-            <p className="text-sm text-[#595959] mt-0.5">
+
+        {/* Dark hero band under the brand header — kills the old "spreadsheet shell" vibe */}
+        <div
+          className="relative bg-[#0D1A24] text-white overflow-hidden"
+          style={{ boxShadow: "0 1px 0 rgba(255,107,26,0.2)" }}
+        >
+          <div
+            aria-hidden
+            className="absolute inset-0 opacity-[0.06] pointer-events-none"
+            style={{
+              backgroundImage:
+                "linear-gradient(rgba(255,107,26,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(255,107,26,0.5) 1px, transparent 1px)",
+              backgroundSize: "40px 40px",
+            }}
+          />
+          <div className="relative max-w-3xl mx-auto px-4 pt-5 pb-6">
+            <p className="text-[10px] font-bold text-[#FF6B1A] uppercase tracking-[0.2em]">{timeOfDay} Shift</p>
+            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight mt-1">{greeting}, {firstName}.</h1>
+            <p className="text-sm text-white/65 mt-1 max-w-xl">
               {isPro
-                ? "Pro is unlocked. Every sheet, every SOP, and the AI are yours."
+                ? "Pro is unlocked. Every tool, every SOP, and the AI are yours."
                 : trial.active
                 ? `You've got ${trial.daysLeft} day${trial.daysLeft !== 1 ? "s" : ""} of trial left — kick the tires.`
                 : "Trial's ended — grab Pro and get back to work."}
             </p>
           </div>
+        </div>
 
-          {/* Status stat row */}
+        <div className="max-w-3xl mx-auto p-4 space-y-4 -mt-3">
+          {/* Status stat row — floats over the hero/light boundary */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <StatChip
               Icon={isPro ? Crown : Calendar}
@@ -181,7 +196,7 @@ const Hub = () => {
           <div className="grid grid-cols-2 gap-3">
             <button
               onClick={() => navigate("/app")}
-              className="bg-[#107C41] hover:bg-[#0D6535] text-white py-4 rounded-xl shadow-md flex flex-col items-center justify-center gap-1 transition-all hover:-translate-y-0.5"
+              className="bg-[#FF6B1A] hover:bg-[#C44A08] text-white py-4 rounded-xl shadow-md flex flex-col items-center justify-center gap-1 transition-all hover:-translate-y-0.5"
             >
               <FileSpreadsheet className="w-6 h-6" strokeWidth={2} />
               <span className="text-sm font-bold">Open Workbook</span>
@@ -189,7 +204,7 @@ const Hub = () => {
             </button>
             <button
               onClick={() => openAI("assistant")}
-              className="bg-white border-2 border-[#107C41] text-[#107C41] hover:bg-[#F0F9F3] py-4 rounded-xl shadow-md flex flex-col items-center justify-center gap-1 transition-all hover:-translate-y-0.5"
+              className="bg-white border-2 border-[#FF6B1A] text-[#FF6B1A] hover:bg-[#FFF7EF] py-4 rounded-xl shadow-md flex flex-col items-center justify-center gap-1 transition-all hover:-translate-y-0.5"
             >
               <Sparkles className="w-6 h-6" strokeWidth={2} />
               <span className="text-sm font-bold">Ask the AI</span>
@@ -207,16 +222,16 @@ const Hub = () => {
                 { mode: "sop_erp", Icon: ShieldCheck, label: "SOP / ERP", tint: "bg-[#DBEAFE] text-[#0056B3]" },
                 { mode: "troubleshoot", Icon: Wrench, label: "Troubleshoot", tint: "bg-[#FFF3CD] text-[#856404]" },
                 { mode: "training", Icon: GraduationCap, label: "Training", tint: "bg-[#E0E7FF] text-[#5A67D8]" },
-                { mode: "program", Icon: FileText, label: "Job Program", tint: "bg-[#E6F4EA] text-[#0D6535]" },
+                { mode: "program", Icon: FileText, label: "Job Program", tint: "bg-[#FFF1E6] text-[#C44A08]" },
                 { mode: "emergency", Icon: AlertOctagon, label: "Emergency", tint: "bg-[#F8D7DA] text-[#721C24]" },
                 { mode: "interpret", Icon: Gauge, label: "Explain Results", tint: "bg-[#CFE2FF] text-[#084298]" },
-                { mode: "assistant", Icon: MessageSquare, label: "Field Chat", tint: "bg-[#E6F4EA] text-[#107C41]" },
+                { mode: "assistant", Icon: MessageSquare, label: "Field Chat", tint: "bg-[#FFF1E6] text-[#FF6B1A]" },
               ].map(({ mode, Icon, label, tint }) => (
                 <button
                   key={mode}
                   data-testid={`hub-ai-move-${mode}`}
                   onClick={() => openAI(mode)}
-                  className="bg-white border border-[#D4D4D4] hover:border-[#107C41] rounded-lg p-2.5 flex items-center gap-2 shadow-sm transition-colors"
+                  className="bg-white border border-[#D4D4D4] hover:border-[#FF6B1A] rounded-lg p-2.5 flex items-center gap-2 shadow-sm transition-colors"
                 >
                   <div className={`w-7 h-7 rounded flex items-center justify-center ${tint}`}>
                     <Icon className="w-3.5 h-3.5" strokeWidth={2.5} />
@@ -232,9 +247,9 @@ const Hub = () => {
             <div className="bg-white border border-[#D4D4D4] rounded-xl p-4 shadow-sm">
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-sm font-bold text-[#262626] flex items-center gap-1.5">
-                  <FolderOpen className="w-4 h-4 text-[#107C41]" /> Recent Jobs
+                  <FolderOpen className="w-4 h-4 text-[#FF6B1A]" /> Recent Jobs
                 </h3>
-                <button onClick={() => navigate("/jobs")} className="text-[11px] text-[#107C41] font-semibold hover:underline">See all</button>
+                <button onClick={() => navigate("/jobs")} className="text-[11px] text-[#FF6B1A] font-semibold hover:underline">See all</button>
               </div>
               {loading ? (
                 <p className="text-[11px] text-[#595959]">Loading…</p>
@@ -246,7 +261,7 @@ const Hub = () => {
                     <button
                       key={j.job_id}
                       onClick={() => navigate("/app", { state: { loadJob: j } })}
-                      className="w-full text-left px-2 py-1.5 rounded hover:bg-[#F0F9F3] border border-transparent hover:border-[#107C41]/30 transition-colors"
+                      className="w-full text-left px-2 py-1.5 rounded hover:bg-[#FFF7EF] border border-transparent hover:border-[#FF6B1A]/30 transition-colors"
                     >
                       <p className="text-[12px] font-semibold text-[#262626] truncate">{j.title}</p>
                       <p className="text-[10px] text-[#595959] truncate">
@@ -261,9 +276,9 @@ const Hub = () => {
             <div className="bg-white border border-[#D4D4D4] rounded-xl p-4 shadow-sm">
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-sm font-bold text-[#262626] flex items-center gap-1.5">
-                  <Users className="w-4 h-4 text-[#107C41]" /> Crew
+                  <Users className="w-4 h-4 text-[#FF6B1A]" /> Crew
                 </h3>
-                <button onClick={() => navigate("/team")} className="text-[11px] text-[#107C41] font-semibold hover:underline">Manage</button>
+                <button onClick={() => navigate("/team")} className="text-[11px] text-[#FF6B1A] font-semibold hover:underline">Manage</button>
               </div>
               {team ? (
                 <>
@@ -276,7 +291,7 @@ const Hub = () => {
                       m.picture ? (
                         <img key={m.user_id} src={m.picture} alt="" className="w-6 h-6 rounded-full border-2 border-white" />
                       ) : (
-                        <div key={m.user_id} className="w-6 h-6 rounded-full bg-[#107C41] text-white text-[10px] font-bold flex items-center justify-center border-2 border-white">
+                        <div key={m.user_id} className="w-6 h-6 rounded-full bg-[#FF6B1A] text-white text-[10px] font-bold flex items-center justify-center border-2 border-white">
                           {m.name?.charAt(0)}
                         </div>
                       )
@@ -286,7 +301,7 @@ const Hub = () => {
               ) : (
                 <>
                   <p className="text-[12px] text-[#595959] mb-2">You're rolling solo. Create a crew to share jobs with your shift.</p>
-                  <button onClick={() => navigate("/team")} className="text-[11px] font-bold text-[#107C41] hover:underline">Create a crew →</button>
+                  <button onClick={() => navigate("/team")} className="text-[11px] font-bold text-[#FF6B1A] hover:underline">Create a crew →</button>
                 </>
               )}
             </div>
@@ -297,7 +312,7 @@ const Hub = () => {
             <button
               data-testid="hub-manager-link"
               onClick={() => navigate("/manager")}
-              className="w-full bg-gradient-to-r from-[#0D6535] to-[#0A4F28] text-white rounded-xl p-4 shadow-md flex items-center gap-3 hover:shadow-lg transition-all"
+              className="w-full bg-gradient-to-r from-[#C44A08] to-[#0A4F28] text-white rounded-xl p-4 shadow-md flex items-center gap-3 hover:shadow-lg transition-all"
             >
               <ShieldCheck className="w-8 h-8 flex-shrink-0" strokeWidth={2} />
               <div className="flex-1 text-left">
@@ -327,7 +342,7 @@ const Hub = () => {
               Icon={Zap}
               title="Live Ops"
               subtitle="Split-screen Von Mises + Fatigue + Weight + Pressure + chart. Click a panel to go full-screen."
-              accent="bg-[#F0F9F3] text-[#0D6535]"
+              accent="bg-[#FFF7EF] text-[#C44A08]"
               onClick={() => navigate("/live-ops")}
               badge="LIVE"
             />
@@ -387,7 +402,7 @@ const Hub = () => {
               Icon={Activity}
               title="Reel Fatigue Heatmap"
               subtitle="Palmgren-Miner damage per station, driven by live traction pressure. Green → red at 80% derate."
-              accent="bg-[#F0F9F3] text-[#0D6535]"
+              accent="bg-[#FFF7EF] text-[#C44A08]"
               onClick={() => navigate("/fatigue")}
               badge="NEW"
             />
@@ -497,7 +512,7 @@ const Hub = () => {
               Icon={Mail}
               title="Crew Email Contacts"
               subtitle="Address book for shift-end handover emails. Mark defaults for one-click send."
-              accent="bg-[#E6F4EA] text-[#0D6535]"
+              accent="bg-[#FFF1E6] text-[#C44A08]"
               onClick={() => navigate("/crew-contacts")}
               badge="NEW"
             />
@@ -535,7 +550,7 @@ const Hub = () => {
               subtitle={activeTreatment
                 ? `LIVE · ${activeTreatment.entry_count || 0} entries · started by ${activeTreatment.created_by_name}. Tap to continue logging.`
                 : "Timestamped job log everyone on the rig sees in real time. Perfect for handovers and post-jobs."}
-              accent={activeTreatment ? "bg-[#DCFCE7] text-[#065F46]" : "bg-[#F0F9F3] text-[#0D6535]"}
+              accent={activeTreatment ? "bg-[#DCFCE7] text-[#065F46]" : "bg-[#FFF7EF] text-[#C44A08]"}
               onClick={() => navigate("/treatment")}
               badge={activeTreatment ? "LIVE" : "NEW"}
             />
@@ -581,7 +596,7 @@ const Hub = () => {
               Icon={MessageSquarePlus}
               title="Send Feedback"
               subtitle="Bug, idea, or feature request — every submission gets reviewed."
-              accent="bg-[#E6F4EA] text-[#107C41]"
+              accent="bg-[#FFF1E6] text-[#FF6B1A]"
               onClick={() => document.dispatchEvent(new CustomEvent("open-feedback"))}
             />
           </div>
@@ -599,13 +614,13 @@ const Hub = () => {
 
           {/* Upgrade nudge (only if not Pro) */}
           {!isPro && (
-            <div className="bg-gradient-to-r from-[#107C41] to-[#0D6535] text-white rounded-xl p-4 shadow-md flex items-center gap-3">
+            <div className="bg-gradient-to-r from-[#FF6B1A] to-[#C44A08] text-white rounded-xl p-4 shadow-md flex items-center gap-3">
               <Crown className="w-8 h-8 flex-shrink-0" strokeWidth={2} />
               <div className="flex-1">
                 <p className="text-sm font-bold">Cheaper than a coffee</p>
                 <p className="text-[11px] opacity-90">$2.99/mo or $24.99/yr — every sheet, AI, Emergency SOPs, and jobs.</p>
               </div>
-              <button onClick={() => navigate("/pricing")} className="bg-white text-[#0D6535] px-3 py-2 rounded text-sm font-bold hover:bg-[#F0F9F3]">
+              <button onClick={() => navigate("/pricing")} className="bg-white text-[#C44A08] px-3 py-2 rounded text-sm font-bold hover:bg-[#FFF7EF]">
                 Upgrade
               </button>
             </div>

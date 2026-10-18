@@ -46,13 +46,13 @@ export function MiniVonMises({ reel, sample, large = false }) {
         <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-full">
           <rect x={PAD} y={PAD} width={W - 2 * PAD} height={H - 2 * PAD} fill="#FAFAFA" stroke="#E5E5E5" />
           <path d={envPath(env100)} fill="rgba(214,69,69,0.08)" stroke="#8B0000" strokeDasharray="3 2" strokeWidth="1.3" />
-          <path d={envPath(env80)}  fill="rgba(16,124,65,0.10)" stroke="#107C41" strokeWidth="2" />
+          <path d={envPath(env80)}  fill="rgba(16,124,65,0.10)" stroke="#FF6B1A" strokeWidth="2" />
           <line x1={toSvg(0, -yMax).x} y1={toSvg(0, -yMax).y} x2={toSvg(0, yMax).x} y2={toSvg(0, yMax).y} stroke="#262626" strokeWidth="0.6" />
           <line x1={toSvg(-xMax, 0).x} y1={toSvg(-xMax, 0).y} x2={toSvg(xMax, 0).x} y2={toSvg(xMax, 0).y} stroke="#262626" strokeWidth="0.6" />
-          <circle cx={op.x} cy={op.y} r={large ? "9" : "6"} fill={alert ? "#C00000" : warn ? "#C36600" : "#0D6535"} stroke="#fff" strokeWidth="2">
+          <circle cx={op.x} cy={op.y} r={large ? "9" : "6"} fill={alert ? "#C00000" : warn ? "#C36600" : "#C44A08"} stroke="#fff" strokeWidth="2">
             {alert && <animate attributeName="r" values={large ? "9;13;9" : "6;9;6"} dur="0.9s" repeatCount="indefinite" />}
           </circle>
-          <text x={W - 4} y={14} textAnchor="end" fontSize={large ? 11 : 9} fill="#107C41">80% SMYS</text>
+          <text x={W - 4} y={14} textAnchor="end" fontSize={large ? 11 : 9} fill="#FF6B1A">80% SMYS</text>
           {large && (
             <>
               <text x={W / 2} y={H - 4} textAnchor="middle" fontSize="11" fill="#595959">Δp (psi) · burst (+) / collapse (−)</text>

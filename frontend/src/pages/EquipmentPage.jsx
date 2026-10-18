@@ -12,7 +12,7 @@ import AttachmentUploader from "../components/AttachmentUploader";
 
 const KIND_TABS = [
   { id: "engine",    label: "Engine Hours",     Icon: Cog,         accent: "#0056B3" },
-  { id: "injector",  label: "Injector Meters",  Icon: Gauge,       accent: "#0D6535" },
+  { id: "injector",  label: "Injector Meters",  Icon: Gauge,       accent: "#C44A08" },
   { id: "lifting",   label: "Lifting Gear",     Icon: Anchor,      accent: "#C36600" },
   { id: "bop_pce",   label: "BOP / PCE Tests",  Icon: ShieldAlert, accent: "#C00000" },
   { id: "reel_iron", label: "Reel & Iron",      Icon: Wrench,      accent: "#7C3AED" },
@@ -251,9 +251,9 @@ const ItemRow = ({ item, kind, onLog, onDelete, onPatch }) => {
           {item.note && <div className="text-[11px] text-[#444] mt-0.5 italic">{item.note}</div>}
         </div>
         <div className="flex flex-col gap-1">
-          <button data-testid={`equip-edit-open-${item.item_id}`} onClick={startEdit} className="text-[10px] font-bold text-[#107C41] border border-[#107C41] hover:bg-[#F0F9F3] px-2 py-1 rounded flex items-center gap-1 tap-44"><Edit3 className="w-3 h-3" />Edit</button>
-          <button data-testid={`equip-log-open-${item.item_id}`} onClick={() => setOpenLog((v) => !v)} className="text-[10px] font-bold text-white bg-[#0D6535] hover:bg-[#0A4F28] px-2 py-1 rounded flex items-center gap-1"><Edit3 className="w-3 h-3" />Log</button>
-          <button data-testid={`equip-att-open-${item.item_id}`} onClick={() => setOpenAtt((v) => !v)} className="text-[10px] font-bold text-[#0D6535] border border-[#0D6535] hover:bg-[#F0F9F3] px-2 py-1 rounded flex items-center gap-1"><Paperclip className="w-3 h-3" />Files</button>
+          <button data-testid={`equip-edit-open-${item.item_id}`} onClick={startEdit} className="text-[10px] font-bold text-[#FF6B1A] border border-[#FF6B1A] hover:bg-[#FFF7EF] px-2 py-1 rounded flex items-center gap-1 tap-44"><Edit3 className="w-3 h-3" />Edit</button>
+          <button data-testid={`equip-log-open-${item.item_id}`} onClick={() => setOpenLog((v) => !v)} className="text-[10px] font-bold text-white bg-[#C44A08] hover:bg-[#0A4F28] px-2 py-1 rounded flex items-center gap-1"><Edit3 className="w-3 h-3" />Log</button>
+          <button data-testid={`equip-att-open-${item.item_id}`} onClick={() => setOpenAtt((v) => !v)} className="text-[10px] font-bold text-[#C44A08] border border-[#C44A08] hover:bg-[#FFF7EF] px-2 py-1 rounded flex items-center gap-1"><Paperclip className="w-3 h-3" />Files</button>
           <button data-testid={`equip-delete-${item.item_id}`} onClick={() => onDelete(item)} className="text-[#C00000] hover:bg-[#F8D7DA] rounded p-1 tap-44"><Trash2 className="w-3.5 h-3.5" /></button>
         </div>
       </div>
@@ -266,7 +266,7 @@ const ItemRow = ({ item, kind, onLog, onDelete, onPatch }) => {
           <input placeholder="Note" value={editDraft.note} onChange={(e) => setEditDraft({ ...editDraft, note: e.target.value })} className="w-full px-2 py-1.5 border border-[#CCC] rounded text-sm" data-testid={`equip-edit-note-${item.item_id}`} />
           <div className="flex gap-2 justify-end">
             <button onClick={() => setOpenEdit(false)} className="text-[11px] text-[#595959] px-2 py-1">Cancel</button>
-            <button data-testid={`equip-edit-save-${item.item_id}`} onClick={saveEdit} disabled={savingEdit || !editDraft.name?.trim()} className="text-[11px] font-bold text-white bg-[#107C41] hover:bg-[#0D6535] px-3 py-1 rounded disabled:opacity-50 inline-flex items-center gap-1">
+            <button data-testid={`equip-edit-save-${item.item_id}`} onClick={saveEdit} disabled={savingEdit || !editDraft.name?.trim()} className="text-[11px] font-bold text-white bg-[#FF6B1A] hover:bg-[#C44A08] px-3 py-1 rounded disabled:opacity-50 inline-flex items-center gap-1">
               {savingEdit ? "Saving…" : "Save"}
             </button>
           </div>
@@ -297,22 +297,22 @@ const ItemRow = ({ item, kind, onLog, onDelete, onPatch }) => {
             {kind === "engine" && (
               <>
                 <button data-testid={`equip-log-hours-${item.item_id}`} onClick={() => onLog(item, "hours_update", logForm).then(() => { setLogForm({ hours: "", meters: "", pressure_psi: "", date: "", note: "" }); setOpenLog(false); })} className="text-[10px] font-bold text-white bg-[#0056B3] px-2 py-1 rounded">Update hours</button>
-                <button data-testid={`equip-log-service-${item.item_id}`} onClick={() => onLog(item, "service", logForm).then(() => { setLogForm({ hours: "", meters: "", pressure_psi: "", date: "", note: "" }); setOpenLog(false); })} className="text-[10px] font-bold text-white bg-[#0D6535] px-2 py-1 rounded">Mark serviced</button>
+                <button data-testid={`equip-log-service-${item.item_id}`} onClick={() => onLog(item, "service", logForm).then(() => { setLogForm({ hours: "", meters: "", pressure_psi: "", date: "", note: "" }); setOpenLog(false); })} className="text-[10px] font-bold text-white bg-[#C44A08] px-2 py-1 rounded">Mark serviced</button>
               </>
             )}
             {kind === "injector" && (
-              <button onClick={() => onLog(item, "meters_update", logForm).then(() => { setLogForm({ hours: "", meters: "", pressure_psi: "", date: "", note: "" }); setOpenLog(false); })} className="text-[10px] font-bold text-white bg-[#0D6535] px-2 py-1 rounded">Update meters/hours</button>
+              <button onClick={() => onLog(item, "meters_update", logForm).then(() => { setLogForm({ hours: "", meters: "", pressure_psi: "", date: "", note: "" }); setOpenLog(false); })} className="text-[10px] font-bold text-white bg-[#C44A08] px-2 py-1 rounded">Update meters/hours</button>
             )}
             {kind === "lifting" && (
-              <button onClick={() => onLog(item, "inspection", logForm).then(() => { setLogForm({ hours: "", meters: "", pressure_psi: "", date: "", note: "" }); setOpenLog(false); })} className="text-[10px] font-bold text-white bg-[#0D6535] px-2 py-1 rounded">Log inspection</button>
+              <button onClick={() => onLog(item, "inspection", logForm).then(() => { setLogForm({ hours: "", meters: "", pressure_psi: "", date: "", note: "" }); setOpenLog(false); })} className="text-[10px] font-bold text-white bg-[#C44A08] px-2 py-1 rounded">Log inspection</button>
             )}
             {kind === "bop_pce" && (
-              <button onClick={() => onLog(item, "test", logForm).then(() => { setLogForm({ hours: "", meters: "", pressure_psi: "", date: "", note: "" }); setOpenLog(false); })} className="text-[10px] font-bold text-white bg-[#0D6535] px-2 py-1 rounded">Log test</button>
+              <button onClick={() => onLog(item, "test", logForm).then(() => { setLogForm({ hours: "", meters: "", pressure_psi: "", date: "", note: "" }); setOpenLog(false); })} className="text-[10px] font-bold text-white bg-[#C44A08] px-2 py-1 rounded">Log test</button>
             )}
             {kind === "reel_iron" && (
               <button onClick={() => onLog(item, "pressure_update", logForm).then(() => { setLogForm({ hours: "", meters: "", pressure_psi: "", date: "", note: "" }); setOpenLog(false); })} className="text-[10px] font-bold text-white bg-[#0056B3] px-2 py-1 rounded">Update pressure</button>
             )}
-            <button onClick={() => onLog(item, "note", logForm).then(() => { setLogForm({ hours: "", meters: "", pressure_psi: "", date: "", note: "" }); setOpenLog(false); })} className="text-[10px] font-semibold text-[#0D6535] px-2 py-1 rounded border border-[#0D6535]">Add note</button>
+            <button onClick={() => onLog(item, "note", logForm).then(() => { setLogForm({ hours: "", meters: "", pressure_psi: "", date: "", note: "" }); setOpenLog(false); })} className="text-[10px] font-semibold text-[#C44A08] px-2 py-1 rounded border border-[#C44A08]">Add note</button>
           </div>
         </div>
       )}
@@ -395,7 +395,7 @@ const EquipmentPage = () => {
 
   return (
     <div className="min-h-screen bg-[#F3F3F3] flex flex-col">
-      <header className="bg-[#0D6535] text-white h-12 flex items-center px-3 shadow-md flex-shrink-0">
+      <header className="bg-[#C44A08] text-white h-12 flex items-center px-3 shadow-md flex-shrink-0">
         <button onClick={() => navigate("/hub")} data-testid="equipment-back" className="flex items-center gap-1.5 text-sm font-semibold"><ArrowLeft className="w-4 h-4" /> Back</button>
         <h1 className="text-sm font-semibold ml-4 flex items-center gap-2"><Wrench className="w-4 h-4" /> Equipment & Assets · {rigLabel(rigId)}</h1>
       </header>
@@ -419,7 +419,7 @@ const EquipmentPage = () => {
                   key={t.id}
                   data-testid={`equipment-tab-${t.id}`}
                   onClick={() => setTab(t.id)}
-                  className={`flex-shrink-0 sm:flex-1 min-w-[88px] sm:min-w-0 flex items-center justify-center gap-1 px-2 py-2 rounded text-[11px] font-bold uppercase whitespace-nowrap tap-44 ${active ? "text-white" : "text-[#595959] hover:bg-[#F0F9F3]"}`}
+                  className={`flex-shrink-0 sm:flex-1 min-w-[88px] sm:min-w-0 flex items-center justify-center gap-1 px-2 py-2 rounded text-[11px] font-bold uppercase whitespace-nowrap tap-44 ${active ? "text-white" : "text-[#595959] hover:bg-[#FFF7EF]"}`}
                   style={active ? { background: t.accent } : {}}
                 >
                   <Icon className="w-3.5 h-3.5" strokeWidth={2.5} />

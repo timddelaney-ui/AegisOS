@@ -116,7 +116,7 @@ export default function NotificationCenter() {
         const txt = (m.text || "").slice(0, 140);
         toast(`${sender} · ${rigLabel(rigId)}`, {
           description: txt,
-          icon: <MessageSquare className="w-4 h-4 text-[#0D6535]" />,
+          icon: <MessageSquare className="w-4 h-4 text-[#C44A08]" />,
           action: { label: "Reply", onClick: () => navigate("/team") },
           duration: 7000,
           className: "ctp-banner-chat",
@@ -209,10 +209,10 @@ export default function NotificationCenter() {
   return (
     <div
       data-testid="notif-perm-banner"
-      className="fixed z-[70] left-1/2 -translate-x-1/2 top-2 sm:top-4 bg-white border border-[#107C41] rounded-xl shadow-xl px-3 py-2 flex items-center gap-2 max-w-[95vw] sm:max-w-sm"
+      className="fixed z-[70] left-1/2 -translate-x-1/2 top-2 sm:top-4 bg-white border border-[#FF6B1A] rounded-xl shadow-xl px-3 py-2 flex items-center gap-2 max-w-[95vw] sm:max-w-sm"
       style={{ top: "calc(env(safe-area-inset-top, 0px) + 8px)" }}
     >
-      <Bell className="w-4 h-4 text-[#107C41] flex-shrink-0" strokeWidth={2.6} />
+      <Bell className="w-4 h-4 text-[#FF6B1A] flex-shrink-0" strokeWidth={2.6} />
       <div className="flex-1 min-w-0">
         <p className="text-[12px] font-bold text-[#262626] leading-tight">Turn on crew alerts?</p>
         <p className="text-[11px] text-[#595959] leading-tight">Get device notifications for chat, tasks and treatment updates.</p>
@@ -220,7 +220,7 @@ export default function NotificationCenter() {
       <button
         data-testid="notif-perm-enable"
         onClick={requestPermission}
-        className="px-2.5 py-1 bg-[#107C41] hover:bg-[#0D6535] text-white text-[11px] font-bold rounded"
+        className="px-2.5 py-1 bg-[#FF6B1A] hover:bg-[#C44A08] text-white text-[11px] font-bold rounded"
       >
         Turn on
       </button>
