@@ -163,6 +163,7 @@ const Hub = () => {
             </p>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {[
+                { mode: "sop_erp", Icon: ShieldCheck, label: "SOP / ERP", tint: "bg-[#DBEAFE] text-[#0056B3]" },
                 { mode: "troubleshoot", Icon: Wrench, label: "Troubleshoot", tint: "bg-[#FFF3CD] text-[#856404]" },
                 { mode: "training", Icon: GraduationCap, label: "Training", tint: "bg-[#E0E7FF] text-[#5A67D8]" },
                 { mode: "program", Icon: FileText, label: "Job Program", tint: "bg-[#E6F4EA] text-[#0D6535]" },
@@ -172,6 +173,7 @@ const Hub = () => {
               ].map(({ mode, Icon, label, tint }) => (
                 <button
                   key={mode}
+                  data-testid={`hub-ai-move-${mode}`}
                   onClick={() => openAI(mode)}
                   className="bg-white border border-[#D4D4D4] hover:border-[#107C41] rounded-lg p-2.5 flex items-center gap-2 shadow-sm transition-colors"
                 >

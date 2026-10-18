@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Gauge, Flame, Snowflake, AlertTriangle, Info, CheckCircle2,
-  Sliders, Beaker, BookOpen, RotateCcw, Share2, Copy, Printer,
+  Sliders, Beaker, BookOpen, RotateCcw, Share2, Copy, Printer, ShieldCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 import { computeCTDrilling, fmtResult } from "../lib/ctdCalculator";
@@ -11,6 +11,7 @@ import { AdvisoryStrip } from "../components/AdvisoryDisclaimer";
 import ScenarioManager from "../components/ctd/ScenarioManager";
 import NitrogenPlanner from "../components/ctd/NitrogenPlanner";
 import PressureDepthPlot from "../components/ctd/PressureDepthPlot";
+import AIPanel from "../components/AIPanel";
 
 // Conversions used only to translate user inputs into internal Imperial.
 const conv = {
@@ -157,6 +158,7 @@ const EnvelopeBadge = ({ status }) => {
 const CTDrillingCalculator = () => {
   const navigate = useNavigate();
   const [unitSystem, setUnitSystem] = useState("imp");
+  const [aiOpen, setAiOpen] = useState(false);
   const [vals, setVals] = useState(DEFAULT_IMP);
 
   const setField = (k) => (e) => setVals((v) => ({ ...v, [k]: e.target.value }));
@@ -273,6 +275,16 @@ const CTDrillingCalculator = () => {
         <h1 className="text-[13px] sm:text-sm font-bold text-[#262626] flex-1 truncate">
           CT Drilling Calculator <span className="hidden sm:inline text-[#595959] font-normal">— Balanced / Underbalanced</span>
         </h1>
+        <button
+          data-testid="ctd-ai-sop-btn"
+          onClick={() => setAiOpen(true)}
+          className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-[#107C41] text-white text-[11px] font-bold hover:bg-[#0D6535] shadow-sm"
+          title="Scenario-specific SOP + Safe Work + ERP guidance (AER / API / OH&S / CSA / IWCF)"
+        >
+          <ShieldCheck className="w-3.5 h-3.5" strokeWidth={2.6} />
+          <span className="hidden sm:inline">SOP / ERP AI</span>
+          <span className="sm:hidden">AI</span>
+        </button>
         <div className="flex items-center bg-[#F0F0F0] rounded-md p-0.5">
           <button
             data-testid="ctd-unit-imp"
@@ -504,6 +516,34 @@ const CTDrillingCalculator = () => {
           </p>
         </div>
       </div>
+
+      <AIPanel
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+        initialMode="sop_erp"
+        contextBuilder={() => {
+          const summaryText = (result.summary || []).map((r) => {
+            if (r.kind === "text") return `${r.label}: ${r.textVal || "—"}`;
+            const { value, unit } = fmtResult(r.val, r.kind, unitSystem);
+            return `${r.label}: ${value} ${unit}`;
+          }).join("; ");
+          const warningsText = (result.warnings || []).map((w) => `[${w.level}] ${w.msg}`).join(" | ");
+          return {
+            sheet_key: "CT_DRILLING_CALC",
+            sheet_title: vals.mode === "underbalanced"
+              ? "CT Underbalanced Drilling Calculator"
+              : "CT Balanced Drilling Calculator",
+            drilling_mode: vals.mode,
+            unit_system: unitSystem,
+            inputs: JSON.stringify(vals),
+            results: summaryText,
+            warnings: warningsText,
+            standards_focus: vals.mode === "underbalanced"
+              ? "AER Directive 008 (UBD/MPD), IADC UBO/MPD Handbook, API RP 5C7, OH&S Code Part 4, AER Dir 019, CSA Z662"
+              : "API RP 5C7, AER Directive 037, OH&S Code, AER Dir 019, CSA Z662, IWCF WellCAP",
+          };
+        }}
+      />
     </div>
   );
 };

@@ -1,40 +1,59 @@
 import React, { useState, useRef, useEffect } from "react";
-import { X, Send, Loader2, Sparkles, Brain, AlertOctagon, FileText, Wrench, MessageSquare, GraduationCap, ChevronDown, ChevronRight } from "lucide-react";
+import { X, Send, Loader2, Sparkles, Brain, AlertOctagon, FileText, Wrench, MessageSquare, GraduationCap, ChevronDown, ChevronRight, ShieldCheck } from "lucide-react";
 import axios from "axios";
 import { API, useAuth } from "../context/AuthContext";
 
 const MODES = [
   { id: "assistant", label: "Field Assistant", Icon: MessageSquare, blurb: "Ask anything about the current sheet — pump rates, safe limits, procedures." },
   { id: "interpret", label: "Explain Results", Icon: Brain, blurb: "Plain-field interpretation of the calculated numbers, risks, and next steps." },
+  { id: "sop_erp", label: "SOP / ERP", Icon: ShieldCheck, blurb: "Compliance-grade SOP + Safe-work + ERP guidance tied to this scenario — every answer cites API / AER / OH&S / CSA / IWCF." },
   { id: "troubleshoot", label: "Troubleshoot", Icon: Wrench, blurb: "Diagnose downhole scenarios (stuck pipe, kick, lost circulation) per industry SOPs." },
   { id: "training", label: "Training", Icon: GraduationCap, blurb: "New hand? Get plain-English explanations of what's happening downhole and why the numbers matter." },
   { id: "program", label: "Job Program", Icon: FileText, blurb: "Draft a step-by-step CT job procedure from the current parameters." },
   { id: "emergency", label: "Emergency", Icon: AlertOctagon, blurb: "Well-control and HSE emergency guidance per OH&S, AER, IWCF." },
 ];
 
-// Parse assistant response into ACTION NOW / WHY DETAILS sections.
-// Accepts *bold* markers or plain "ACTION NOW" headers, case-insensitive.
+// Parse assistant response into labelled sections.
+// Supports the 2-section (ACTION NOW / WHY DETAILS) and 3-section
+// (ACTION NOW / SOP CHECKLIST / ERP TRIGGERS & ESCALATION) formats.
 const parseAiResponse = (raw) => {
-  if (!raw || typeof raw !== "string") return { action: raw || "", details: "" };
-  // Normalize markdown ** headers by stripping the asterisks around header labels
+  if (!raw || typeof raw !== "string") return { action: raw || "", sections: [] };
   const text = raw.replace(/\*\*/g, "");
-  // Split on WHY / DETAILS header (case-insensitive, allow variants)
-  const splitRegex = /(?:^|\n)\s*(?:WHY\s*\/\s*DETAILS|WHY & DETAILS|WHY|DETAILS)\s*:?\s*\n/i;
-  const parts = text.split(splitRegex);
-  if (parts.length < 2) {
-    // No structured markers — fall back to entire body as "action"
-    const cleaned = text.replace(/(?:^|\n)\s*ACTION\s*NOW\s*:?\s*\n?/i, "\n").trim();
-    return { action: cleaned, details: "" };
+  // Capture headers: ACTION NOW · WHY/DETAILS · SOP CHECKLIST · ERP TRIGGERS…
+  const headerRegex = /(?:^|\n)\s*(ACTION\s*NOW|WHY\s*\/?\s*DETAILS|WHY\s*&\s*DETAILS|WHY|DETAILS|SOP\s*CHECKLIST|ERP\s*TRIGGERS(?:\s*&\s*ESCALATION)?)\s*:?\s*\n/gi;
+  const matches = [...text.matchAll(headerRegex)];
+  if (matches.length === 0) return { action: text.trim(), sections: [] };
+
+  const chunks = [];
+  for (let i = 0; i < matches.length; i++) {
+    const m = matches[i];
+    const start = m.index + m[0].length;
+    const end = i + 1 < matches.length ? matches[i + 1].index : text.length;
+    const label = m[1].toUpperCase().replace(/\s+/g, " ").trim();
+    chunks.push({ label, body: text.slice(start, end).trim() });
   }
-  const [head, ...rest] = parts;
-  const action = head.replace(/(?:^|\n)\s*ACTION\s*NOW\s*:?\s*\n?/i, "\n").trim();
-  const details = rest.join("\n\n").trim();
-  return { action, details };
+  // Action = whatever lives under ACTION NOW (or everything before first other header)
+  const actionChunk = chunks.find((c) => c.label.startsWith("ACTION"));
+  const action = actionChunk ? actionChunk.body : text.slice(0, matches[0].index).trim();
+  const sections = chunks.filter((c) => !c.label.startsWith("ACTION"));
+  return { action, sections };
+};
+
+const SECTION_META = {
+  "WHY / DETAILS": { tone: "neutral", label: "WHY / DETAILS" },
+  "WHY/DETAILS":   { tone: "neutral", label: "WHY / DETAILS" },
+  "WHY & DETAILS": { tone: "neutral", label: "WHY / DETAILS" },
+  "WHY":           { tone: "neutral", label: "WHY" },
+  "DETAILS":       { tone: "neutral", label: "DETAILS" },
+  "SOP CHECKLIST": { tone: "sop",     label: "SOP CHECKLIST" },
+  "ERP TRIGGERS":  { tone: "erp",     label: "ERP TRIGGERS & ESCALATION" },
+  "ERP TRIGGERS & ESCALATION": { tone: "erp", label: "ERP TRIGGERS & ESCALATION" },
 };
 
 const AIMessage = ({ content }) => {
-  const [expanded, setExpanded] = useState(false);
-  const { action, details } = parseAiResponse(content);
+  const [open, setOpen] = useState({});
+  const { action, sections } = parseAiResponse(content);
+  const toggle = (i) => setOpen((o) => ({ ...o, [i]: !o[i] }));
   return (
     <div className="bg-white border border-[#D4D4D4] text-[#262626] mr-6 shadow-sm rounded overflow-hidden" data-testid="ai-message-bubble">
       {action && (
@@ -43,21 +62,33 @@ const AIMessage = ({ content }) => {
           <div className="text-[12px] leading-relaxed whitespace-pre-wrap">{action}</div>
         </div>
       )}
-      {details && (
-        <div className="border-t border-[#EFEFEF] bg-[#FAFAFA]">
-          <button
-            onClick={() => setExpanded((v) => !v)}
-            data-testid="ai-toggle-details"
-            className="w-full flex items-center justify-between px-2.5 py-1.5 text-[10px] font-bold text-[#595959] tracking-wider hover:bg-[#F0F9F3]"
-          >
-            <span>WHY / DETAILS</span>
-            {expanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-          </button>
-          {expanded && (
-            <div className="px-2.5 pb-2 text-[12px] leading-relaxed whitespace-pre-wrap text-[#333]">{details}</div>
-          )}
-        </div>
-      )}
+      {sections.map((s, i) => {
+        const meta = SECTION_META[s.label] || { tone: "neutral", label: s.label };
+        const tone = meta.tone;
+        const expanded = !!open[i];
+        const btnBg = tone === "sop"
+          ? "hover:bg-[#DBEAFE] text-[#0056B3] bg-[#F0F6FF]"
+          : tone === "erp"
+            ? "hover:bg-[#FEE2E2] text-[#8B0000] bg-[#FFF2F2]"
+            : "hover:bg-[#F0F9F3] text-[#595959] bg-[#FAFAFA]";
+        return (
+          <div key={i} className="border-t border-[#EFEFEF]">
+            <button
+              onClick={() => toggle(i)}
+              data-testid={`ai-section-toggle-${i}`}
+              className={`w-full flex items-center justify-between px-2.5 py-1.5 text-[10px] font-bold tracking-wider ${btnBg}`}
+            >
+              <span>{meta.label}</span>
+              {expanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+            </button>
+            {expanded && (
+              <div className={`px-2.5 pb-2 pt-1 text-[12px] leading-relaxed whitespace-pre-wrap text-[#333] ${tone === "sop" ? "bg-[#F0F6FF]/40" : tone === "erp" ? "bg-[#FFF2F2]/40" : "bg-[#FAFAFA]"}`}>
+                {s.body}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 };
@@ -117,6 +148,14 @@ const AIPanel = ({ open, onClose, contextBuilder, initialMode = "assistant" }) =
   const quickPrompts = {
     assistant: ["What's the safe pump rate here?", "Any red flags with these inputs?", "Explain the buoyancy calc"],
     interpret: ["Interpret these results"],
+    sop_erp: [
+      "Build the SOP + ERP for this scenario",
+      "What are the pre-job compliance checks?",
+      "ERP triggers and escalation if BHP goes above fracture pressure",
+      "H2S handling SOP for this well",
+      "Who do I call and when under AER Dir 019?",
+      "Required PPE and competencies for this operation",
+    ],
     troubleshoot: ["Stuck at TD, hoseline pressure dropped", "Losing returns, what next?", "Kick detected during POOH"],
     training: ["Walk me through what happens downhole", "What is WOB and why does it matter?", "Why does the friction go up with rate?", "What does 'tag bottom' mean?"],
     program: ["Draft the full job program from these inputs"],
