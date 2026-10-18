@@ -284,6 +284,24 @@ const Hub = () => {
               badge="NEW"
             />
             <HubCard
+              data-testid="hub-docs-tile"
+              Icon={FileText}
+              title="Company Documents"
+              subtitle="Upload SOPs, maintenance & daily checklists. AI references them alongside industry standards."
+              accent="bg-[#DBEAFE] text-[#0056B3]"
+              onClick={() => navigate("/documents")}
+              badge="NEW"
+            />
+            <HubCard
+              data-testid="hub-erp-tile"
+              Icon={AlertOctagon}
+              title="Site-Specific ERP Template"
+              subtitle="1-page emergency response cover sheet — crew, muster point, hospital. Fill, save, print."
+              accent="bg-[#FDE8E8] text-[#C00000]"
+              onClick={() => navigate("/erp-template")}
+              badge="NEW"
+            />
+            <HubCard
               Icon={Wrench}
               title="Equipment & Assets"
               subtitle="Engine hours, injector meters, lifting certs, BOP/PCE tests, reel + iron MAWP — all flagged."

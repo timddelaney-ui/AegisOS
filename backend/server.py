@@ -613,6 +613,337 @@ async def delete_ctd_scenario(scenario_id: str, user: dict = Depends(require_use
     return {"success": True}
 
 
+# ============ Company Documents (SOP library — team scoped) ============
+# Reuses the Emergent Object Storage layer (initialised later in file).
+DOC_CATEGORIES = {"sop", "maintenance", "daily_checklist", "pre_job_checklist",
+                  "reference", "regulation", "other"}
+DOC_ALLOWED_EXT = {"pdf", "png", "jpg", "jpeg", "webp"}
+
+
+class CompanyDocUpdate(BaseModel):
+    name: Optional[str] = None
+    category: Optional[str] = None
+    description: Optional[str] = None
+    tags: Optional[List[str]] = None
+
+
+@api_router.post("/documents")
+async def upload_company_doc(
+    file: UploadFile = File(...),
+    name: str = Form(...),
+    category: str = Form(...),
+    description: Optional[str] = Form(None),
+    tags: Optional[str] = Form(None),  # comma-separated
+    user: dict = Depends(require_user),
+):
+    """Upload a company SOP / checklist / reference doc. Team-scoped."""
+    team_id = user.get("team_id")
+    if not team_id:
+        raise HTTPException(400, "Join or create a team before uploading documents.")
+    if category not in DOC_CATEGORIES:
+        raise HTTPException(400, f"category must be one of {sorted(DOC_CATEGORIES)}")
+    raw_name = (file.filename or "upload.bin").strip()
+    ext = raw_name.rsplit(".", 1)[-1].lower() if "." in raw_name else "bin"
+    if ext not in DOC_ALLOWED_EXT:
+        raise HTTPException(400, f"Unsupported file type .{ext}. Allowed: {sorted(DOC_ALLOWED_EXT)}")
+    data = await file.read()
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise HTTPException(413, f"File too large ({len(data)/1024/1024:.1f} MB). Max 15 MB.")
+    if len(data) == 0:
+        raise HTTPException(400, "Empty file.")
+    mime = _mime_for_ext(ext)
+
+    doc_id = f"doc_{uuid.uuid4().hex[:16]}"
+    storage_path = f"{STORAGE_APP_NAME}/team/{team_id}/documents/{doc_id}.{ext}"
+    try:
+        result = _put_object(storage_path, data, mime)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Doc upload failed: %s", e)
+        raise HTTPException(500, "Upload failed — try again.")
+
+    tag_list = [t.strip() for t in (tags or "").split(",") if t.strip()][:10]
+    now = datetime.now(timezone.utc)
+    rec = {
+        "doc_id": doc_id,
+        "team_id": team_id,
+        "name": name.strip()[:200] or raw_name,
+        "category": category,
+        "description": (description or "").strip()[:500] or None,
+        "tags": tag_list,
+        "filename": raw_name[:200],
+        "storage_path": result.get("path", storage_path),
+        "content_type": mime,
+        "size": result.get("size", len(data)),
+        "uploader_user_id": user["user_id"],
+        "uploader_name": user.get("name") or user["email"].split("@")[0],
+        "uploader_email": user["email"],
+        "is_deleted": False,
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.company_documents.insert_one(rec)
+    rec.pop("_id", None)
+    out = _serialize(rec)
+    out["download_url"] = f"/api/documents/{doc_id}/download"
+    return out
+
+
+@api_router.get("/documents")
+async def list_company_docs(category: Optional[str] = None,
+                             user: dict = Depends(require_user)):
+    team_id = user.get("team_id")
+    if not team_id:
+        return {"documents": [], "team_id": None, "by_category": {}}
+    q: Dict[str, Any] = {"team_id": team_id, "is_deleted": False}
+    if category:
+        if category not in DOC_CATEGORIES:
+            raise HTTPException(400, "unknown category")
+        q["category"] = category
+    docs = await db.company_documents.find(q, {"_id": 0}).sort("updated_at", -1).to_list(500)
+    out = []
+    by_cat: Dict[str, int] = {}
+    for d in docs:
+        s = _serialize(d)
+        s["download_url"] = f"/api/documents/{d['doc_id']}/download"
+        out.append(s)
+        by_cat[d["category"]] = by_cat.get(d["category"], 0) + 1
+    return {"documents": out, "team_id": team_id, "by_category": by_cat}
+
+
+@api_router.patch("/documents/{doc_id}")
+async def update_company_doc(doc_id: str, body: CompanyDocUpdate,
+                              user: dict = Depends(require_user)):
+    team_id = user.get("team_id")
+    if not team_id:
+        raise HTTPException(400, "No team.")
+    rec = await db.company_documents.find_one(
+        {"doc_id": doc_id, "team_id": team_id, "is_deleted": False}, {"_id": 0})
+    if not rec:
+        raise HTTPException(404, "Not found.")
+    if rec["uploader_user_id"] != user["user_id"] and not _is_admin(user):
+        raise HTTPException(403, "Only uploader or admin can edit.")
+    update = {k: v for k, v in body.dict().items() if v is not None}
+    if "category" in update and update["category"] not in DOC_CATEGORIES:
+        raise HTTPException(400, "unknown category")
+    if "tags" in update:
+        update["tags"] = [t.strip() for t in update["tags"] if t and str(t).strip()][:10]
+    update["updated_at"] = datetime.now(timezone.utc)
+    await db.company_documents.update_one({"doc_id": doc_id}, {"$set": update})
+    rec = await db.company_documents.find_one({"doc_id": doc_id}, {"_id": 0})
+    return _serialize(rec)
+
+
+@api_router.get("/documents/{doc_id}/download")
+async def download_company_doc(doc_id: str, auth: Optional[str] = None,
+                                user: Optional[dict] = Depends(get_current_user)):
+    if not user and auth:
+        session = await db.user_sessions.find_one({"session_token": auth}, {"_id": 0})
+        if session and session.get("user_id"):
+            user = await db.users.find_one({"user_id": session["user_id"]}, {"_id": 0})
+    if not user:
+        raise HTTPException(401, "Not authenticated.")
+    rec = await db.company_documents.find_one(
+        {"doc_id": doc_id, "is_deleted": False}, {"_id": 0})
+    if not rec:
+        raise HTTPException(404, "Not found.")
+    if rec.get("team_id") != user.get("team_id") and not _is_admin(user):
+        raise HTTPException(403, "Document belongs to another team.")
+    try:
+        data, ctype = _get_object(rec["storage_path"])
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Doc download failed: %s", e)
+        raise HTTPException(500, "Download failed.")
+    return Response(content=data, media_type=rec.get("content_type") or ctype, headers={
+        "Content-Disposition": f'inline; filename="{rec.get("filename","doc.pdf")}"',
+        "Cache-Control": "private, max-age=300",
+    })
+
+
+@api_router.delete("/documents/{doc_id}")
+async def delete_company_doc(doc_id: str, user: dict = Depends(require_user)):
+    team_id = user.get("team_id")
+    if not team_id:
+        raise HTTPException(400, "No team.")
+    rec = await db.company_documents.find_one(
+        {"doc_id": doc_id, "team_id": team_id, "is_deleted": False}, {"_id": 0})
+    if not rec:
+        raise HTTPException(404, "Not found.")
+    if rec["uploader_user_id"] != user["user_id"] and not _is_admin(user):
+        raise HTTPException(403, "Only uploader or admin can delete.")
+    await db.company_documents.update_one(
+        {"doc_id": doc_id},
+        {"$set": {"is_deleted": True, "deleted_at": datetime.now(timezone.utc),
+                  "deleted_by": user["email"]}},
+    )
+    return {"success": True}
+
+
+async def _summarise_team_docs_for_ai(team_id: Optional[str], category: Optional[str] = None, limit: int = 20) -> str:
+    """Return a short bullet list `name — category — description` for AI context."""
+    if not team_id:
+        return ""
+    q: Dict[str, Any] = {"team_id": team_id, "is_deleted": False}
+    if category:
+        q["category"] = category
+    docs = await db.company_documents.find(q, {"_id": 0}).sort("updated_at", -1).to_list(limit)
+    if not docs:
+        return ""
+    lines = []
+    for d in docs:
+        desc = (d.get("description") or "").strip()
+        desc_part = f" — {desc[:120]}" if desc else ""
+        lines.append(f"• \"{d['name']}\" ({d['category'].replace('_', ' ')}){desc_part}")
+    return "\n".join(lines)
+
+
+# ============ Scenario-Linked ERP Templates ============
+class ErpTemplateIn(BaseModel):
+    well_name: str
+    rig_id: Optional[str] = None
+    scenario_id: Optional[str] = None  # link to ctd_scenarios
+    lsd_uwi: Optional[str] = None
+    operation: Optional[str] = None    # Balanced drill-out / UBD / Wireline etc
+    date: Optional[str] = None         # ISO date user sets
+
+    supervisor_name: Optional[str] = None
+    supervisor_phone: Optional[str] = None
+    company_man_name: Optional[str] = None
+    company_man_phone: Optional[str] = None
+    hse_advisor: Optional[str] = None
+
+    muster_point: Optional[str] = None
+    windsock_location: Optional[str] = None
+    primary_escape_route: Optional[str] = None
+    secondary_escape_route: Optional[str] = None
+
+    nearest_hospital_name: Optional[str] = None
+    nearest_hospital_phone: Optional[str] = None
+    nearest_hospital_distance_km: Optional[float] = None
+    air_ambulance_phone: Optional[str] = None
+
+    h2s_zone: Optional[bool] = None
+    h2s_concentration_ppm: Optional[float] = None
+    kill_fluid_location: Optional[str] = None
+    bop_rating_mpa: Optional[float] = None
+
+    aer_hotline: Optional[str] = "1-800-222-6514"
+    ems_phone: Optional[str] = "911"
+    additional_contacts: Optional[List[Dict[str, str]]] = None  # [{role, name, phone}]
+    notes: Optional[str] = None
+
+
+class ErpTemplateUpdate(BaseModel):
+    well_name: Optional[str] = None
+    rig_id: Optional[str] = None
+    scenario_id: Optional[str] = None
+    lsd_uwi: Optional[str] = None
+    operation: Optional[str] = None
+    date: Optional[str] = None
+    supervisor_name: Optional[str] = None
+    supervisor_phone: Optional[str] = None
+    company_man_name: Optional[str] = None
+    company_man_phone: Optional[str] = None
+    hse_advisor: Optional[str] = None
+    muster_point: Optional[str] = None
+    windsock_location: Optional[str] = None
+    primary_escape_route: Optional[str] = None
+    secondary_escape_route: Optional[str] = None
+    nearest_hospital_name: Optional[str] = None
+    nearest_hospital_phone: Optional[str] = None
+    nearest_hospital_distance_km: Optional[float] = None
+    air_ambulance_phone: Optional[str] = None
+    h2s_zone: Optional[bool] = None
+    h2s_concentration_ppm: Optional[float] = None
+    kill_fluid_location: Optional[str] = None
+    bop_rating_mpa: Optional[float] = None
+    aer_hotline: Optional[str] = None
+    ems_phone: Optional[str] = None
+    additional_contacts: Optional[List[Dict[str, str]]] = None
+    notes: Optional[str] = None
+
+
+@api_router.post("/erp-templates")
+async def create_erp_template(body: ErpTemplateIn, user: dict = Depends(require_user)):
+    if not body.well_name.strip():
+        raise HTTPException(400, "Well name required")
+    tid = f"erp_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc)
+    doc = body.dict()
+    doc.update({
+        "template_id": tid,
+        "team_id": user.get("team_id"),
+        "created_by_user_id": user["user_id"],
+        "created_by_name": user["name"],
+        "created_at": now,
+        "updated_at": now,
+    })
+    doc["well_name"] = doc["well_name"].strip()
+    await db.erp_templates.insert_one(doc)
+    doc.pop("_id", None)
+    return _serialize(doc)
+
+
+@api_router.get("/erp-templates")
+async def list_erp_templates(user: dict = Depends(require_user)):
+    q = {"$or": [{"created_by_user_id": user["user_id"]}]}
+    if user.get("team_id"):
+        q["$or"].append({"team_id": user["team_id"]})
+    docs = await db.erp_templates.find(q, {"_id": 0}).sort("updated_at", -1).to_list(200)
+    return [_serialize(d) for d in docs]
+
+
+@api_router.get("/erp-templates/{template_id}")
+async def get_erp_template(template_id: str, user: dict = Depends(require_user)):
+    doc = await db.erp_templates.find_one({"template_id": template_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Not found")
+    is_owner = doc["created_by_user_id"] == user["user_id"]
+    is_teammate = doc.get("team_id") and doc.get("team_id") == user.get("team_id")
+    if not (is_owner or is_teammate):
+        raise HTTPException(403, "Access denied")
+    return _serialize(doc)
+
+
+@api_router.patch("/erp-templates/{template_id}")
+async def update_erp_template(template_id: str, body: ErpTemplateUpdate,
+                               user: dict = Depends(require_user)):
+    doc = await db.erp_templates.find_one({"template_id": template_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Not found")
+    is_owner = doc["created_by_user_id"] == user["user_id"]
+    is_team_editor = (
+        doc.get("team_id")
+        and doc.get("team_id") == user.get("team_id")
+        and (user.get("role") in ("admin", "field_manager", "ops_manager") or _is_admin(user))
+    )
+    if not (is_owner or is_team_editor):
+        raise HTTPException(403, "Only owner or team admin can edit")
+    update = {k: v for k, v in body.dict().items() if v is not None}
+    update["updated_at"] = datetime.now(timezone.utc)
+    await db.erp_templates.update_one({"template_id": template_id}, {"$set": update})
+    doc = await db.erp_templates.find_one({"template_id": template_id}, {"_id": 0})
+    return _serialize(doc)
+
+
+@api_router.delete("/erp-templates/{template_id}")
+async def delete_erp_template(template_id: str, user: dict = Depends(require_user)):
+    doc = await db.erp_templates.find_one({"template_id": template_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Not found")
+    is_owner = doc["created_by_user_id"] == user["user_id"]
+    is_team_admin = (
+        doc.get("team_id") and doc["team_id"] == user.get("team_id") and _is_admin(user)
+    )
+    if not (is_owner or is_team_admin):
+        raise HTTPException(403, "Only owner or team admin can delete")
+    await db.erp_templates.delete_one({"template_id": template_id})
+    return {"success": True}
+
+
 # ============ AI / GEMINI ROUTES ============
 EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
 GEMINI_MODEL = "gemini-2.5-flash"
@@ -810,6 +1141,22 @@ async def ai_chat(req: AIChatRequest, user: dict = Depends(require_user)):
         if req.context.get("standards_focus"):
             ctx_lines.append(f"Standards focus: {req.context['standards_focus']}")
         user_text = user_text + "\n".join(ctx_lines)
+
+    # For sop_erp mode, inject the company's uploaded documents (SOPs, checklists)
+    # so the AI can reference them BY NAME alongside industry standards.
+    if req.mode == "sop_erp" and user.get("team_id"):
+        try:
+            doc_block = await _summarise_team_docs_for_ai(user.get("team_id"))
+            if doc_block:
+                system_msg = system_msg + (
+                    "\n\n**COMPANY-SPECIFIC DOCUMENTS AVAILABLE TO THIS CREW (reference them by name whenever they apply):**\n"
+                    + doc_block
+                    + "\n\nWhen one of these documents is relevant, say for example: "
+                    "'See \"<document name>\" (<category>) — the company SOP that governs this step.' "
+                    "Give the document name EXACTLY as above; never invent documents the company does not have."
+                )
+        except Exception as e:
+            logger.warning("Failed to inject team docs into AI prompt: %s", e)
 
     try:
         chat = LlmChat(
