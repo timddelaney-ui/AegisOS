@@ -3236,10 +3236,12 @@ class TreatmentCreate(BaseModel):
 
 class TreatmentEntryCreate(BaseModel):
     text: str
+    event_at: Optional[str] = None   # ISO timestamp of when the event actually happened (if different from logged time)
 
 
 class TreatmentEntryUpdate(BaseModel):
-    text: str
+    text: Optional[str] = None
+    event_at: Optional[str] = None   # retroactively correct the event time
 
 
 @api_router.get("/treatments")
@@ -3349,6 +3351,12 @@ async def list_treatment_entries(treatment_id: str, since: Optional[str] = None,
         except Exception:
             pass  # bad since — return all
     docs = await db.treatment_entries.find(q, {"_id": 0}).sort("created_at", 1).to_list(2000)
+    # Backfill event_at for legacy entries, then sort by event time so retroactive
+    # stamps slot into their correct chronological position.
+    for d in docs:
+        if not d.get("event_at"):
+            d["event_at"] = d.get("created_at")
+    docs.sort(key=lambda d: d.get("event_at") or d.get("created_at"))
     return {"entries": [_serialize(d) for d in docs], "treatment": _serialize(trt)}
 
 
@@ -3368,6 +3376,25 @@ async def add_treatment_entry(treatment_id: str, body: TreatmentEntryCreate, use
     if trt.get("status") != "active":
         raise HTTPException(400, "Treatment is closed — reopen or start a new one to log entries.")
     now = datetime.now(timezone.utc)
+    # If the user supplied an explicit event time (e.g. logging later from a computer
+    # for an event they witnessed outside), accept it. Otherwise event_at = now.
+    event_at = now
+    if body.event_at:
+        try:
+            s = body.event_at.replace("Z", "+00:00")
+            parsed = datetime.fromisoformat(s)
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            # Clamp: can't be in the future, can't be older than 30 days
+            if parsed > now + timedelta(minutes=5):
+                raise HTTPException(400, "Event time can't be in the future.")
+            if parsed < now - timedelta(days=30):
+                raise HTTPException(400, "Event time can't be older than 30 days.")
+            event_at = parsed
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(400, "Invalid event_at timestamp.")
     doc = {
         "entry_id": f"trn_{uuid.uuid4().hex[:12]}",
         "treatment_id": treatment_id,
@@ -3377,6 +3404,7 @@ async def add_treatment_entry(treatment_id: str, body: TreatmentEntryCreate, use
         "author_name": user.get("name") or user["email"].split("@")[0],
         "text": text,
         "created_at": now,
+        "event_at": event_at,
     }
     await db.treatment_entries.insert_one(doc)
     # Roll-up counters on the treatment doc
@@ -3393,20 +3421,38 @@ async def edit_treatment_entry(treatment_id: str, entry_id: str, body: Treatment
     team_id = user.get("team_id")
     if not team_id:
         raise HTTPException(400, "No team.")
-    text = (body.text or "").strip()
-    if not text:
-        raise HTTPException(400, "Entry text can't be empty.")
-    if len(text) > 2000:
-        raise HTTPException(400, "Entry too long (max 2000 chars).")
     entry = await db.treatment_entries.find_one({"entry_id": entry_id, "treatment_id": treatment_id, "team_id": team_id}, {"_id": 0})
     if not entry:
         raise HTTPException(404, "Entry not found.")
     if entry.get("author") != user["email"] and not _is_admin(user):
         raise HTTPException(403, "Only the author or an admin can edit this entry.")
     now = datetime.now(timezone.utc)
+    update: Dict[str, Any] = {"edited_at": now, "edited_by": user["email"]}
+    if body.text is not None:
+        text = body.text.strip()
+        if not text:
+            raise HTTPException(400, "Entry text can't be empty.")
+        if len(text) > 2000:
+            raise HTTPException(400, "Entry too long (max 2000 chars).")
+        update["text"] = text
+    if body.event_at is not None:
+        try:
+            s = body.event_at.replace("Z", "+00:00")
+            parsed = datetime.fromisoformat(s)
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            if parsed > now + timedelta(minutes=5):
+                raise HTTPException(400, "Event time can't be in the future.")
+            if parsed < now - timedelta(days=30):
+                raise HTTPException(400, "Event time can't be older than 30 days.")
+            update["event_at"] = parsed
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(400, "Invalid event_at timestamp.")
     await db.treatment_entries.update_one(
         {"entry_id": entry_id, "treatment_id": treatment_id, "team_id": team_id},
-        {"$set": {"text": text, "edited_at": now, "edited_by": user["email"]}},
+        {"$set": update},
     )
     updated = await db.treatment_entries.find_one({"entry_id": entry_id}, {"_id": 0})
     return _serialize(updated)

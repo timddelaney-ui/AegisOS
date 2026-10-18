@@ -4,7 +4,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, Loader2, ClipboardList, Play, Square, Send, Trash2,
-  Copy, Printer, RefreshCw, User, Pencil, Check, X,
+  Copy, Printer, RefreshCw, User, Pencil, Check, X, Zap, Clock,
 } from "lucide-react";
 import { API, useAuth } from "../context/AuthContext";
 import { useRig, rigLabel } from "../context/RigContext";
@@ -73,44 +73,115 @@ const StartCard = ({ rigId, onStarted }) => {
   );
 };
 
+const toLocalDTInput = (iso) => {
+  // Converts ISO/timestamp -> datetime-local input value "YYYY-MM-DDTHH:MM"
+  const d = iso ? new Date(iso) : new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+const fromLocalDTInput = (s) => (s ? new Date(s).toISOString() : null);
+
 const EntryComposer = ({ treatmentId, onAdded }) => {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
+  const [useCustomTime, setUseCustomTime] = useState(false);
+  const [eventAt, setEventAt] = useState(() => toLocalDTInput());
+  const [quickStamping, setQuickStamping] = useState(false);
   const inputRef = useRef(null);
 
-  const send = async () => {
-    const t = text.trim();
+  const send = async (overrideText) => {
+    const t = (overrideText ?? text).trim();
     if (!t) return;
     setBusy(true);
     try {
-      const { data } = await axios.post(`${API}/treatments/${treatmentId}/entries`, { text: t }, { withCredentials: true });
-      setText("");
+      const body = { text: t };
+      if (useCustomTime && eventAt) body.event_at = fromLocalDTInput(eventAt);
+      const { data } = await axios.post(`${API}/treatments/${treatmentId}/entries`, body, { withCredentials: true });
+      if (overrideText === undefined) setText("");
+      setUseCustomTime(false);
+      setEventAt(toLocalDTInput());
       onAdded(data);
       inputRef.current?.focus();
-    } catch (e) { toast.error(e.response?.data?.detail || "Failed to log entry."); }
+      return data;
+    } catch (e) { toast.error(e.response?.data?.detail || "Failed to log entry."); return null; }
     finally { setBusy(false); }
   };
 
+  // Quick-stamp: drop a timestamped marker in one tap, fill in later from phone or desktop.
+  const quickStamp = async () => {
+    setQuickStamping(true);
+    try {
+      const stamp = new Date();
+      const hhmm = `${String(stamp.getHours()).padStart(2, "0")}:${String(stamp.getMinutes()).padStart(2, "0")}`;
+      const placeholder = `⏱ ${hhmm} — (fill in later)`;
+      await send(placeholder);
+      toast.success(`Stamped ${hhmm} — edit the note any time`, { duration: 3500 });
+    } finally { setQuickStamping(false); }
+  };
+
   return (
-    <form className="bg-white border-t border-[#D4D4D4] p-2 flex gap-2 sticky bottom-0 safe-bottom" onSubmit={(e) => { e.preventDefault(); send(); }} data-testid="treatment-composer">
-      <textarea
-        ref={inputRef}
-        data-testid="treatment-entry-input"
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => {
-          // Enter (without shift) submits, Shift+Enter inserts a newline
-          if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (text.trim() && !busy) send(); }
-        }}
-        placeholder="Log a note — Enter to send, Shift+Enter for newline"
-        rows={2}
-        maxLength={2000}
-        className="flex-1 px-2.5 py-2 border border-[#CCC] rounded text-sm resize-none"
-      />
-      <button type="submit" disabled={busy || !text.trim()} data-testid="treatment-entry-send"
-        className="self-stretch text-sm font-bold text-white bg-[#0D6535] hover:bg-[#0A4F28] px-4 rounded disabled:opacity-50 inline-flex items-center gap-1 tap-44 min-w-[52px] justify-center">
-        {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-      </button>
+    <form className="bg-white border-t border-[#D4D4D4] p-2 flex flex-col gap-1.5 sticky bottom-0 safe-bottom" onSubmit={(e) => { e.preventDefault(); send(); }} data-testid="treatment-composer">
+      <div className="flex gap-2">
+        <textarea
+          ref={inputRef}
+          data-testid="treatment-entry-input"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (text.trim() && !busy) send(); }
+          }}
+          placeholder="Log a note — Enter to send, Shift+Enter for newline"
+          rows={2}
+          maxLength={2000}
+          className="flex-1 px-2.5 py-2 border border-[#CCC] rounded text-sm resize-none"
+        />
+        <div className="flex flex-col gap-1 self-stretch">
+          <button
+            type="button"
+            data-testid="treatment-quick-stamp"
+            onClick={quickStamp}
+            disabled={quickStamping || busy}
+            title="Drop a timestamp placeholder (edit the note later from phone or computer)"
+            className="text-[11px] font-bold text-[#C36600] bg-white border-2 border-[#C36600] hover:bg-[#FFF4D6] px-2 rounded disabled:opacity-50 inline-flex items-center gap-1 tap-44 min-w-[60px] justify-center flex-1"
+          >
+            {quickStamping ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <><Zap className="w-3.5 h-3.5" strokeWidth={2.6} /> Stamp</>}
+          </button>
+          <button
+            type="submit"
+            disabled={busy || !text.trim()}
+            data-testid="treatment-entry-send"
+            className="text-sm font-bold text-white bg-[#0D6535] hover:bg-[#0A4F28] px-3 rounded disabled:opacity-50 inline-flex items-center gap-1 tap-44 min-w-[52px] justify-center flex-1"
+          >
+            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+          </button>
+        </div>
+      </div>
+      <div className="flex items-center gap-2 flex-wrap">
+        <label className="inline-flex items-center gap-1 cursor-pointer" data-testid="treatment-custom-time-toggle-wrap">
+          <input
+            data-testid="treatment-custom-time-toggle"
+            type="checkbox"
+            checked={useCustomTime}
+            onChange={(e) => setUseCustomTime(e.target.checked)}
+            className="w-3.5 h-3.5 accent-[#0D6535]"
+          />
+          <span className="text-[11px] text-[#595959]"><Clock className="inline w-3 h-3 mr-0.5" />Logging a past event</span>
+        </label>
+        {useCustomTime && (
+          <input
+            data-testid="treatment-event-at"
+            type="datetime-local"
+            value={eventAt}
+            onChange={(e) => setEventAt(e.target.value)}
+            className="px-2 py-0.5 border border-[#CCC] rounded text-[11px] text-[#262626] bg-white"
+          />
+        )}
+        {useCustomTime && (
+          <span className="text-[10px] text-[#C36600] italic">
+            This note will slot into chronological order by the event time.
+          </span>
+        )}
+      </div>
     </form>
   );
 };
@@ -118,14 +189,24 @@ const EntryComposer = ({ treatmentId, onAdded }) => {
 const TreatmentEntryRow = ({ entry, mine, treatmentId, onPatched, onDeleted }) => {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(entry.text);
+  const [eventAt, setEventAt] = useState(toLocalDTInput(entry.event_at || entry.created_at));
   const [busy, setBusy] = useState(false);
+
+  // What we display as the primary timestamp — the event time if present, else logged time.
+  const displayAt = entry.event_at || entry.created_at;
+  const createdAt = entry.created_at;
+  const wasBackdated = entry.event_at && Math.abs(new Date(entry.event_at) - new Date(entry.created_at)) > 60 * 1000;
 
   const save = async () => {
     const t = text.trim();
     if (!t) return;
     setBusy(true);
     try {
-      const { data } = await axios.patch(`${API}/treatments/${treatmentId}/entries/${entry.entry_id}`, { text: t }, { withCredentials: true });
+      const { data } = await axios.patch(
+        `${API}/treatments/${treatmentId}/entries/${entry.entry_id}`,
+        { text: t, event_at: fromLocalDTInput(eventAt) },
+        { withCredentials: true },
+      );
       onPatched(data);
       toast.success("Entry updated.");
       setEditing(false);
@@ -146,10 +227,20 @@ const TreatmentEntryRow = ({ entry, mine, treatmentId, onPatched, onDeleted }) =
 
   return (
     <div className="flex gap-2 items-start group" data-testid={`treatment-entry-${entry.entry_id}`}>
-      <div className="text-[10px] font-mono font-bold text-[#0D6535] mt-0.5 w-12 sm:w-16 flex-shrink-0 text-right leading-tight">{stampBar(entry.created_at)}</div>
+      <div className="text-[10px] font-mono font-bold text-[#0D6535] mt-0.5 w-12 sm:w-16 flex-shrink-0 text-right leading-tight">
+        {stampBar(displayAt)}
+        {wasBackdated && (
+          <div className="text-[8px] font-normal italic text-[#C36600]" title={`Logged ${stampBar(createdAt)}`}>
+            backdated
+          </div>
+        )}
+      </div>
       <div className={`flex-1 min-w-0 border-l-2 pl-2 ${mine ? "border-[#0D6535]" : "border-[#D4D4D4]"}`}>
-        <div className="text-[10px] font-bold text-[#595959] flex items-center gap-1">
+        <div className="text-[10px] font-bold text-[#595959] flex items-center gap-1 flex-wrap">
           <User className="w-3 h-3" /> {entry.author_name}
+          {wasBackdated && (
+            <span className="text-[9px] font-normal italic text-[#C36600]">· logged {stampBar(createdAt)}</span>
+          )}
           {entry.edited_at && <span className="text-[9px] font-normal italic text-[#8A8A8A]">· edited {stampBar(entry.edited_at)}</span>}
         </div>
         {editing ? (
@@ -163,8 +254,18 @@ const TreatmentEntryRow = ({ entry, mine, treatmentId, onPatched, onDeleted }) =
               className="w-full px-2 py-1.5 border border-[#CCC] rounded text-sm"
               autoFocus
             />
+            <label className="flex items-center gap-1.5 text-[10px] text-[#595959]">
+              <Clock className="w-3 h-3" />Event time:
+              <input
+                data-testid={`treatment-entry-edit-event-${entry.entry_id}`}
+                type="datetime-local"
+                value={eventAt}
+                onChange={(e) => setEventAt(e.target.value)}
+                className="px-1.5 py-0.5 border border-[#CCC] rounded text-[11px] bg-white"
+              />
+            </label>
             <div className="flex gap-1 justify-end">
-              <button data-testid={`treatment-entry-cancel-${entry.entry_id}`} onClick={() => { setEditing(false); setText(entry.text); }} className="text-[10px] text-[#595959] px-2 py-1 inline-flex items-center gap-1"><X className="w-3 h-3" /> Cancel</button>
+              <button data-testid={`treatment-entry-cancel-${entry.entry_id}`} onClick={() => { setEditing(false); setText(entry.text); setEventAt(toLocalDTInput(entry.event_at || entry.created_at)); }} className="text-[10px] text-[#595959] px-2 py-1 inline-flex items-center gap-1"><X className="w-3 h-3" /> Cancel</button>
               <button data-testid={`treatment-entry-save-${entry.entry_id}`} onClick={save} disabled={busy || !text.trim()} className="text-[10px] font-bold text-white bg-[#0D6535] hover:bg-[#0A4F28] px-2 py-1 rounded disabled:opacity-50 inline-flex items-center gap-1">
                 {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />} Save
               </button>
@@ -174,7 +275,7 @@ const TreatmentEntryRow = ({ entry, mine, treatmentId, onPatched, onDeleted }) =
           <div className="flex items-start gap-1">
             <div className="text-[13px] text-[#262626] whitespace-pre-wrap break-words flex-1">{entry.text}</div>
             {mine && (
-              <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="flex gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                 <button data-testid={`treatment-entry-edit-btn-${entry.entry_id}`} onClick={() => setEditing(true)} className="p-0.5 text-[#107C41] hover:bg-[#F0F9F3] rounded tap-44" aria-label="Edit"><Pencil className="w-3 h-3" /></button>
                 <button data-testid={`treatment-entry-delete-btn-${entry.entry_id}`} onClick={remove} className="p-0.5 text-[#C00000] hover:bg-[#F8D7DA] rounded tap-44" aria-label="Delete"><Trash2 className="w-3 h-3" /></button>
               </div>
