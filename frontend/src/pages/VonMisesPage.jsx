@@ -72,8 +72,8 @@ export default function VonMisesPage() {
         g.gain.value = 0.08;
         o.connect(g); g.connect(ctx.destination);
         o.start();
-        setTimeout(() => { try { o.stop(); ctx.close(); } catch {} }, 220);
-      } catch { /* audio unsupported */ }
+        setTimeout(() => { try { o.stop(); ctx.close(); } catch (e) { console.debug("[VonMises] oscillator teardown failed", e?.message); } }, 220);
+      } catch (e) { console.debug("[VonMises] audio unsupported", e?.message); }
     }
   }, [alert, muted]);
 
@@ -100,7 +100,7 @@ export default function VonMisesPage() {
             onClick={() => {
               const next = !muted;
               setMuted(next);
-              try { localStorage.setItem("coilaegis_vm_muted", next ? "1" : "0"); } catch {}
+              try { localStorage.setItem("coilaegis_vm_muted", next ? "1" : "0"); } catch (e) { console.debug("[VonMises] localStorage write failed", e?.message); }
             }}
             title={muted ? "Enable 95% warning chirp" : "Mute 95% warning chirp"}
             className="text-[10px] font-bold px-2 py-0.5 rounded bg-white/10 border border-white/20 hover:bg-white/20 flex items-center gap-1"

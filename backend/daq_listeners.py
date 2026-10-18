@@ -33,7 +33,6 @@ import logging
 import struct
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
-import os
 
 logger = logging.getLogger(__name__)
 

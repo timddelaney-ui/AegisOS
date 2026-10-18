@@ -1,5 +1,4 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, Cookie, Header, UploadFile, File, Form
-from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -1597,7 +1596,7 @@ async def crew_send(body: CrewMessage, user: dict = Depends(require_user)):
                 "is_skipper": True,
                 "created_at": datetime.now(timezone.utc),
             })
-        except Exception as e:
+        except Exception:
             logger.exception("Skipper AI reply failed")
 
     return {"success": True, "message_id": user_msg["message_id"]}
@@ -1924,8 +1923,6 @@ async def crew_handover_summary(rig_id: str, hours: int = 12, user: dict = Depen
     hours = max(1, min(hours, 24 * 7))
     now = datetime.now(timezone.utc)
     cutoff = now - timedelta(hours=hours)
-
-    rig_or_legacy = [{"rig_id": rig_id}, {"rig_id": None}, {"rig_id": {"$exists": False}}]
 
     # Completed checklist tasks (action = checked) in window, this rig
     completed_events = await db.checklist_events.find(
@@ -3859,9 +3856,8 @@ async def _start_daq_orchestrator():
 
 @app.on_event("shutdown")
 async def _stop_daq_orchestrator():
-    global _daq_orchestrator
     if _daq_orchestrator:
         try:
             await _daq_orchestrator.stop()
         except Exception:
-            pass
+            logger.debug("DAQ orchestrator shutdown error (non-fatal)", exc_info=True)

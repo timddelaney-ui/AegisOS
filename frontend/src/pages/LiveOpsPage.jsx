@@ -142,14 +142,14 @@ export default function LiveOpsPage() {
     try {
       const r = await axios.get(`${API}/liveops/annotations`, { params: { limit: 500 }, withCredentials: true });
       setAnnotations(r.data?.annotations || []);
-    } catch { /* silent */ }
+    } catch (e) { console.debug("[LiveOps] refreshAnnotations failed", e?.response?.status || e?.message); }
   };
 
   const refreshTreatmentEvents = async () => {
     try {
       const r = await axios.get(`${API}/treatments/events-timeline`, { params: { rig_id: rigId, limit: 500 }, withCredentials: true });
       setTEvents(r.data?.events || []);
-    } catch { /* silent */ }
+    } catch (e) { console.debug("[LiveOps] refreshTreatmentEvents failed", e?.response?.status || e?.message); }
   };
 
   useEffect(() => {
@@ -194,7 +194,7 @@ export default function LiveOpsPage() {
 
   const savePrefs = async (nextLayout) => {
     try { await axios.patch(`${API}/me/prefs`, { liveops_layout: nextLayout }, { withCredentials: true }); }
-    catch { /* non-blocking */ }
+    catch (e) { console.debug("[LiveOps] savePrefs non-blocking failure", e?.response?.status || e?.message); }
   };
 
   // Refresh fatigue state
@@ -203,7 +203,7 @@ export default function LiveOpsPage() {
     try {
       const r = await axios.get(`${API}/fatigue/state`, { params: { reel_id: activeReel.reel_id }, withCredentials: true });
       setFatigue(r.data);
-    } catch {}
+    } catch (e) { console.debug("[LiveOps] refreshFatigue failed", e?.response?.status || e?.message); }
   };
   useEffect(() => { refreshFatigue(); }, [activeReel?.reel_id]); // eslint-disable-line
 
@@ -233,7 +233,7 @@ export default function LiveOpsPage() {
               };
             }
           }
-        } catch { /* fall through to simulator */ }
+        } catch (e) { console.debug("[LiveOps] live stream fetch failed, falling through to simulator", e?.response?.status || e?.message); }
       }
       setSamples((prev) => {
         const last = prev[prev.length - 1];
@@ -249,7 +249,7 @@ export default function LiveOpsPage() {
           const last = samples[samples.length - 1];
           const sample = nextSimSample(last, t);
           await postSampleResilient({ ...sample, reel_id: activeReel?.reel_id, source: "simulated" });
-        } catch { /* already handled by resilient wrapper */ }
+        } catch (e) { console.debug("[LiveOps] postSampleResilient inner failure", e?.message); }
       }
       // Every 3 seconds, advance the fatigue engine with the latest traction pressure
       if (t % 3 === 0 && activeReel?.reel_id) {
@@ -263,7 +263,7 @@ export default function LiveOpsPage() {
             source: realSample ? (realSample.source || "wits") : "simulated",
           }, { withCredentials: true });
           setFatigue(r.data);
-        } catch {}
+        } catch (e) { console.debug("[LiveOps] fatigue feed failed", e?.response?.status || e?.message); }
       }
     }, TICK_MS);
     return () => { if (timerRef.current) clearInterval(timerRef.current); timerRef.current = null; };

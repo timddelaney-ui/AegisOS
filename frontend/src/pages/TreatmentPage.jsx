@@ -407,7 +407,7 @@ const TreatmentPage = () => {
   const toggleSplit = () => {
     setSplitView((v) => {
       const next = !v;
-      try { localStorage.setItem("coilaegis_treatment_split_v1", next ? "1" : "0"); } catch {}
+      try { localStorage.setItem("coilaegis_treatment_split_v1", next ? "1" : "0"); } catch (e) { console.debug("[Treatment] localStorage write failed", e?.message); }
       return next;
     });
   };
@@ -444,7 +444,7 @@ const TreatmentPage = () => {
         setEntries((prev) => [...prev, ...data.entries]);
         sinceRef.current = data.entries[data.entries.length - 1].created_at;
       }
-    } catch (e) { /* ignore transient errors */ }
+    } catch (e) { console.debug("[Treatment] pollNew transient error", e?.response?.status || e?.message); }
     finally { setRefreshing(false); }
   }, [active]);
 

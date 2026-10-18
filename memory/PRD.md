@@ -328,3 +328,20 @@ join only.
   the helpers to translate to plan terms (`supervisor` / `management`).
 - All timestamps use 24-hour (military) format via `/app/frontend/src/lib/timeFormat.js`.
 - No audio alerts anywhere — visual (color flash + banner + icon) only.
+
+## Code Quality (2026-02-18)
+P0 code-review fixes applied, zero behavior change:
+- Added `console.debug` logging to all silent `catch` blocks on `LiveOpsPage.jsx`,
+  `TreatmentPage.jsx`, `WellborePage.jsx`, `VonMisesPage.jsx` (silent failures
+  previously hid network/storage/audio errors from devtools).
+- Cleaned pyflakes-flagged dead code: removed unused `JSONResponse` import,
+  unused `Field` import, unused `os` import, unused locals `rig_or_legacy`,
+  `GOOSENECK_RADIUS_FT`, `STRAIGHTENER_RADIUS_FT`, unused `as e`, and the
+  no-op `global _daq_orchestrator` statement.
+- `eval()` findings in the review (`crew_safety_eval`, `_post_eval`) were
+  **false positives** — just function names, no actual `eval()` call exists.
+- Deferred (would risk re-render loops): 137 React hook-dependency warnings
+  explicitly suppressed by developers via `// eslint-disable-next-line`.
+- Deferred (large refactor out of scope): split `server.py` (~3,860 lines) and
+  `phase1_modules.register_phase1()` (~2,100 lines) into route modules.
+

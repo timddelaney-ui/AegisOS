@@ -89,7 +89,7 @@ export default function WellborePage() {
       const r = await axios.get(`${API}/surveys`, { withCredentials: true });
       setSurveys(r.data?.surveys || []);
       setActiveId(r.data?.active_survey_id || r.data?.surveys?.[0]?.survey_id || null);
-    } catch {}
+    } catch (e) { console.debug("[Wellbore] survey refresh failed", e?.response?.status || e?.message); }
   };
   useEffect(() => { refresh(); }, []);
   useEffect(() => {

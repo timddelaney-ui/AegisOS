@@ -7,7 +7,7 @@ Imported by server.py — relies on `api_router`, `db`, `require_user`,
 """
 
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone, timedelta
 import csv
@@ -497,8 +497,6 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
 
     NODE_SPACING_FT_DEFAULT = 100
     REEL_CORE_RADIUS_FT = 72.0 / 12.0        # 72 in core radius (standard CT reel)
-    GOOSENECK_RADIUS_FT = 72.0 / 12.0
-    STRAIGHTENER_RADIUS_FT = 1e9             # pseudo-infinite (no bending)
     P_REF_PSI = 1200.0                       # reference injector traction pressure
     PRESSURE_UPLIFT_K = 0.6                  # pressure sensitivity
 
