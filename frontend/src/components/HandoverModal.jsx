@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
-import { X, Copy, Check, Loader2, FileText, ClipboardCheck, Package, Wrench, ListChecks, MessageSquare, Paperclip, Mail, Send } from "lucide-react";
+import { X, Copy, Check, Loader2, FileText, ClipboardCheck, Package, Wrench, ListChecks, MessageSquare, Paperclip, Mail, Send, Users, Zap } from "lucide-react";
 import { API } from "../context/AuthContext";
 import { useRig, rigLabel } from "../context/RigContext";
 import AttachmentUploader from "./AttachmentUploader";
@@ -78,6 +78,10 @@ const HandoverModal = ({ open, onClose }) => {
   const [recipients, setRecipients] = useState("");
   const [emailNote, setEmailNote] = useState("");
   const [sending, setSending] = useState(false);
+  const [savedContacts, setSavedContacts] = useState([]);
+  const [selectedContactIds, setSelectedContactIds] = useState(new Set());
+  const [showContacts, setShowContacts] = useState(false);
+  const [sendingShiftEnd, setSendingShiftEnd] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true); setError(null); setSummary(null); setCopied(false);
@@ -92,6 +96,40 @@ const HandoverModal = ({ open, onClose }) => {
   }, [rigId, hours]);
 
   useEffect(() => { if (open) load(); }, [open, load]);
+
+  // Load saved crew contacts whenever the modal opens so the "Use crew" option is ready.
+  useEffect(() => {
+    if (!open) return;
+    (async () => {
+      try {
+        const { data } = await axios.get(`${API}/crew/contacts`, { withCredentials: true });
+        const list = data.contacts || [];
+        setSavedContacts(list);
+        // Pre-select defaults
+        const defaults = new Set(list.filter((c) => c.is_default_recipient).map((c) => c.contact_id));
+        setSelectedContactIds(defaults);
+      } catch { setSavedContacts([]); }
+    })();
+  }, [open]);
+
+  // When the email panel is opened, auto-populate the recipients field from saved defaults.
+  const loadSavedCrew = () => {
+    const picked = savedContacts.filter((c) => selectedContactIds.has(c.contact_id));
+    const emails = picked.map((c) => c.email);
+    const existing = recipients.split(/[,;\s\n]+/).map((r) => r.trim()).filter(Boolean);
+    const merged = Array.from(new Set([...existing, ...emails]));
+    setRecipients(merged.join(", "));
+    setShowContacts(false);
+    toast.success(`Added ${emails.length} saved contact${emails.length === 1 ? "" : "s"}`);
+  };
+
+  const toggleContact = (cid) => {
+    setSelectedContactIds((prev) => {
+      const n = new Set(prev);
+      if (n.has(cid)) n.delete(cid); else n.add(cid);
+      return n;
+    });
+  };
 
   const text = useMemo(() => buildText(rigLabel(rigId), summary), [rigId, summary]);
 
@@ -137,6 +175,31 @@ const HandoverModal = ({ open, onClose }) => {
     } finally { setSending(false); }
   };
 
+  // One-click shift-end: auto-generate body server-side, send to default recipients
+  const sendShiftEnd = async () => {
+    const defaults = savedContacts.filter((c) => c.is_default_recipient);
+    if (defaults.length === 0) {
+      toast.error("No default-recipient crew contacts yet — add some first.");
+      return;
+    }
+    const confirmMsg = `Send shift-end handover for ${rigLabel(rigId)} (last ${hours}h) to ${defaults.length} default recipient${defaults.length === 1 ? "" : "s"}?\n\n${defaults.map((c) => `• ${c.name} <${c.email}>`).join("\n")}`;
+    if (!window.confirm(confirmMsg)) return;
+    setSendingShiftEnd(true);
+    try {
+      const { data } = await axios.post(`${API}/crew/shift-end-handover`, {
+        rig_id: rigId,
+        hours,
+        note: emailNote || null,
+      }, { withCredentials: true });
+      toast.success(`Shift-end emailed to ${data.recipients.length} recipient${data.recipients.length === 1 ? "" : "s"}`);
+    } catch (e) {
+      const detail = e.response?.data?.detail;
+      const status = e.response?.status;
+      if (status === 503) toast.error("Email isn't configured yet — ask your admin to add a Resend API key.");
+      else toast.error(detail || `Shift-end send failed (HTTP ${status || "?"}).`);
+    } finally { setSendingShiftEnd(false); }
+  };
+
   if (!open) return null;
 
   return (
@@ -175,6 +238,17 @@ const HandoverModal = ({ open, onClose }) => {
           </button>
           <div className="ml-auto flex items-center gap-2">
             <button
+              data-testid="handover-shift-end-send"
+              onClick={sendShiftEnd}
+              disabled={!summary || loading || sendingShiftEnd || savedContacts.filter((c) => c.is_default_recipient).length === 0}
+              className="text-[12px] font-bold px-3 py-1.5 rounded flex items-center gap-1.5 disabled:opacity-50 bg-[#C36600] hover:bg-[#A35600] text-white shadow-sm"
+              title={savedContacts.filter((c) => c.is_default_recipient).length === 0 ? "Add default-recipient crew contacts first" : "Send a shift-end digest to all default-recipient contacts"}
+            >
+              {sendingShiftEnd ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" strokeWidth={2.6} />}
+              <span className="hidden sm:inline">Shift-end send</span>
+              <span className="sm:hidden">Shift</span>
+            </button>
+            <button
               data-testid="handover-email-open"
               onClick={() => setEmailOpen((v) => !v)}
               disabled={!summary || loading}
@@ -195,10 +269,53 @@ const HandoverModal = ({ open, onClose }) => {
 
         {emailOpen && (
           <div className="px-3 py-2.5 bg-[#F0F9F3] border-b border-[#D1E7DD] space-y-2" data-testid="handover-email-panel">
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 flex-wrap">
               <Mail className="w-3.5 h-3.5 text-[#0D6535]" />
               <span className="text-[11px] font-bold text-[#0D6535] uppercase tracking-wide">Send handover by email</span>
+              {savedContacts.length > 0 && (
+                <button
+                  data-testid="handover-use-saved-crew"
+                  onClick={() => setShowContacts((v) => !v)}
+                  className="ml-auto text-[11px] font-bold text-[#0D6535] inline-flex items-center gap-1 border border-[#0D6535] px-2 py-0.5 rounded hover:bg-[#E6F4EA]"
+                >
+                  <Users className="w-3 h-3" /> Use saved crew ({savedContacts.length})
+                </button>
+              )}
             </div>
+            {showContacts && (
+              <div className="bg-white border border-[#D1E7DD] rounded p-2 max-h-40 overflow-y-auto" data-testid="handover-contacts-picker">
+                {savedContacts.map((c) => (
+                  <label
+                    key={c.contact_id}
+                    data-testid={`handover-contact-${c.contact_id}`}
+                    className="flex items-center gap-2 py-1 px-1 hover:bg-[#F0F9F3] rounded cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedContactIds.has(c.contact_id)}
+                      onChange={() => toggleContact(c.contact_id)}
+                      className="w-3.5 h-3.5 accent-[#107C41]"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[12px] font-semibold text-[#262626] truncate">
+                        {c.name}
+                        {c.is_default_recipient && <span className="ml-1.5 text-[9px] text-[#0D6535] font-bold">DEFAULT</span>}
+                      </p>
+                      <p className="text-[10px] text-[#595959] truncate">{c.email}{c.role ? ` · ${c.role}` : ""}</p>
+                    </div>
+                  </label>
+                ))}
+                <div className="flex justify-end pt-1 mt-1 border-t border-[#F0F0F0]">
+                  <button
+                    data-testid="handover-contacts-apply"
+                    onClick={loadSavedCrew}
+                    className="text-[11px] font-bold text-white bg-[#107C41] hover:bg-[#0D6535] px-2 py-0.5 rounded"
+                  >
+                    Add {selectedContactIds.size} to recipients
+                  </button>
+                </div>
+              </div>
+            )}
             <textarea
               data-testid="handover-recipients"
               value={recipients}
@@ -225,7 +342,7 @@ const HandoverModal = ({ open, onClose }) => {
                 {sending ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Sending…</> : <><Send className="w-3.5 h-3.5" /> Send email</>}
               </button>
               <span className="text-[10px] text-[#595959] italic">
-                Reply-to is set to your account. Content matches the Copy output.
+                Shows your name in the From line · Reply-To is your account email.
               </span>
             </div>
           </div>

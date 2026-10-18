@@ -22,6 +22,7 @@ import TreatmentPage from "./pages/TreatmentPage";
 import CTDrillingCalculator from "./pages/CTDrillingCalculator";
 import DocumentsPage from "./pages/DocumentsPage";
 import ErpTemplatePage from "./pages/ErpTemplatePage";
+import CrewContactsPage from "./pages/CrewContactsPage";
 import ManagerGreeting from "./components/ManagerGreeting";
 import RedeemDialog from "./components/RedeemDialog";
 import FeedbackDialog from "./components/FeedbackDialog";
@@ -228,6 +229,7 @@ const AppRouter = () => {
         <Route path="/documents" element={<ProtectedRoute><DocumentsPage /></ProtectedRoute>} />
         <Route path="/erp-template" element={<ProtectedRoute><ErpTemplatePage /></ProtectedRoute>} />
         <Route path="/erp-template/:templateId" element={<ProtectedRoute><ErpTemplatePage /></ProtectedRoute>} />
+        <Route path="/crew-contacts" element={<ProtectedRoute><CrewContactsPage /></ProtectedRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <AdvisoryFooter />

@@ -5,7 +5,7 @@ import { useAuth, API, isProUser } from "../context/AuthContext";
 import {
   FileSpreadsheet, FolderOpen, Users, Sparkles, ChevronRight, Crown, AlertTriangle,
   MessageSquare, Wrench, GraduationCap, AlertOctagon, FileText, Calendar, Gauge,
-  Ticket, MessageSquarePlus, Zap, Menu, ShieldCheck, HardHat, ClipboardList, Flame,
+  Ticket, MessageSquarePlus, Zap, Menu, ShieldCheck, HardHat, ClipboardList, Flame, Mail,
 } from "lucide-react";
 import { workbookData } from "../mock/workbookData";
 import ExcelHeader from "../components/ExcelHeader";
@@ -299,6 +299,15 @@ const Hub = () => {
               subtitle="1-page emergency response cover sheet — crew, muster point, hospital. Fill, save, print."
               accent="bg-[#FDE8E8] text-[#C00000]"
               onClick={() => navigate("/erp-template")}
+              badge="NEW"
+            />
+            <HubCard
+              data-testid="hub-crew-contacts-tile"
+              Icon={Mail}
+              title="Crew Email Contacts"
+              subtitle="Address book for shift-end handover emails. Mark defaults for one-click send."
+              accent="bg-[#E6F4EA] text-[#0D6535]"
+              onClick={() => navigate("/crew-contacts")}
               badge="NEW"
             />
             <HubCard

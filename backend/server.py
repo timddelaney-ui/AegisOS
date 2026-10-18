@@ -2038,7 +2038,7 @@ async def send_handover_email(body: HandoverEmailRequest, user: dict = Depends(r
     text_body = (body.note + "\n\n" if body.note else "") + body.body_text
 
     params = {
-        "from": f"CT Field Workbook <{RESEND_FROM_EMAIL}>",
+        "from": f"{sender_name} via CT Pocket <{RESEND_FROM_EMAIL}>",
         "to": cleaned,
         "subject": subject,
         "html": html_body,
@@ -2077,6 +2077,310 @@ async def send_handover_email(body: HandoverEmailRequest, user: dict = Depends(r
         pass
 
     return {"success": True, "email_id": email_id, "recipients": cleaned}
+
+
+# ============ Crew Email Contacts (team address book) ============
+class CrewContactCreate(BaseModel):
+    name: str
+    email: str
+    role: Optional[str] = None            # Supervisor / Tool Push / Day Op / Night Op / Office / Other
+    is_default_recipient: bool = True     # auto-select on shift-end send
+
+
+class CrewContactUpdate(BaseModel):
+    name: Optional[str] = None
+    email: Optional[str] = None
+    role: Optional[str] = None
+    is_default_recipient: Optional[bool] = None
+
+
+@api_router.post("/crew/contacts")
+async def create_crew_contact(body: CrewContactCreate, user: dict = Depends(require_user)):
+    team_id = user.get("team_id")
+    if not team_id:
+        raise HTTPException(400, "Join or create a team first.")
+    name = body.name.strip()
+    email = (body.email or "").strip().lower()
+    if not name:
+        raise HTTPException(400, "Name required.")
+    if not _EMAIL_RE.match(email):
+        raise HTTPException(400, "Valid email required.")
+    # Prevent duplicates per team
+    dup = await db.crew_contacts.find_one({"team_id": team_id, "email": email, "is_deleted": {"$ne": True}})
+    if dup:
+        raise HTTPException(409, f"'{email}' is already saved for this crew.")
+    cid = f"cc_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc)
+    doc = {
+        "contact_id": cid,
+        "team_id": team_id,
+        "name": name,
+        "email": email,
+        "role": (body.role or "").strip() or None,
+        "is_default_recipient": bool(body.is_default_recipient),
+        "added_by_user_id": user["user_id"],
+        "added_by_name": user.get("name"),
+        "is_deleted": False,
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.crew_contacts.insert_one(doc)
+    doc.pop("_id", None)
+    return _serialize(doc)
+
+
+@api_router.get("/crew/contacts")
+async def list_crew_contacts(user: dict = Depends(require_user)):
+    team_id = user.get("team_id")
+    if not team_id:
+        return {"contacts": [], "team_id": None}
+    docs = await db.crew_contacts.find(
+        {"team_id": team_id, "is_deleted": {"$ne": True}}, {"_id": 0}
+    ).sort("name", 1).to_list(200)
+    return {"contacts": [_serialize(d) for d in docs], "team_id": team_id}
+
+
+@api_router.patch("/crew/contacts/{contact_id}")
+async def update_crew_contact(contact_id: str, body: CrewContactUpdate, user: dict = Depends(require_user)):
+    team_id = user.get("team_id")
+    if not team_id:
+        raise HTTPException(400, "No team.")
+    doc = await db.crew_contacts.find_one(
+        {"contact_id": contact_id, "team_id": team_id, "is_deleted": {"$ne": True}}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Not found.")
+    update: Dict[str, Any] = {}
+    if body.name is not None:
+        n = body.name.strip()
+        if not n:
+            raise HTTPException(400, "Name cannot be empty.")
+        update["name"] = n
+    if body.email is not None:
+        e = body.email.strip().lower()
+        if not _EMAIL_RE.match(e):
+            raise HTTPException(400, "Valid email required.")
+        update["email"] = e
+    if body.role is not None:
+        update["role"] = body.role.strip() or None
+    if body.is_default_recipient is not None:
+        update["is_default_recipient"] = bool(body.is_default_recipient)
+    update["updated_at"] = datetime.now(timezone.utc)
+    await db.crew_contacts.update_one({"contact_id": contact_id}, {"$set": update})
+    doc = await db.crew_contacts.find_one({"contact_id": contact_id}, {"_id": 0})
+    return _serialize(doc)
+
+
+@api_router.delete("/crew/contacts/{contact_id}")
+async def delete_crew_contact(contact_id: str, user: dict = Depends(require_user)):
+    team_id = user.get("team_id")
+    if not team_id:
+        raise HTTPException(400, "No team.")
+    doc = await db.crew_contacts.find_one(
+        {"contact_id": contact_id, "team_id": team_id, "is_deleted": {"$ne": True}}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Not found.")
+    await db.crew_contacts.update_one(
+        {"contact_id": contact_id},
+        {"$set": {"is_deleted": True, "deleted_at": datetime.now(timezone.utc), "deleted_by": user["email"]}})
+    return {"success": True}
+
+
+# ============ One-click Shift-End Handover ============
+class ShiftEndHandoverRequest(BaseModel):
+    rig_id: str
+    hours: int = 12                     # window of activity to summarise
+    extra_recipients: Optional[List[str]] = None     # ad-hoc one-off recipients
+    include_contact_ids: Optional[List[str]] = None  # override default-recipient set
+    note: Optional[str] = None                        # supervisor's cover note
+    subject: Optional[str] = None
+
+
+async def _build_shift_end_body(team_id: str, rig_id: str, hours: int) -> str:
+    """Pulls last `hours` of crew-chat and treatment entries for this rig and builds a tidy text block."""
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=max(1, min(hours, 72)))
+    rig_label = (rig_id or "").replace("RIG", "Rig ").replace("YARD", "Yard")
+    lines: List[str] = [f"SHIFT-END HANDOVER · {rig_label}", f"Window: last {hours} hours (since {cutoff.strftime('%Y-%m-%d %H:%M UTC')})", ""]
+
+    # Treatment entries
+    try:
+        tx_entries = await db.treatment_entries.find(
+            {"team_id": team_id, "rig_id": rig_id, "created_at": {"$gte": cutoff}},
+            {"_id": 0}
+        ).sort("created_at", 1).to_list(300)
+    except Exception:
+        tx_entries = []
+    lines.append(f"TREATMENT / OPERATIONS LOG ({len(tx_entries)} entries)")
+    if not tx_entries:
+        lines.append("  — No entries logged in window.")
+    else:
+        for e in tx_entries:
+            ts = e.get("created_at")
+            tstr = ts.strftime("%H:%M") if hasattr(ts, "strftime") else str(ts)[:16]
+            author = e.get("created_by_name") or e.get("created_by") or "crew"
+            txt = (e.get("text") or "").strip().replace("\n", " ")
+            lines.append(f"  {tstr}  {author}: {txt}")
+
+    # Crew chat (skip own? here include everyone's — supervisor sees context)
+    try:
+        msgs = await db.crew_messages.find(
+            {"team_id": team_id, "rig_id": rig_id, "created_at": {"$gte": cutoff}},
+            {"_id": 0}
+        ).sort("created_at", 1).to_list(500)
+    except Exception:
+        msgs = []
+    lines.append("")
+    lines.append(f"CREW CHAT ({len(msgs)} messages)")
+    if not msgs:
+        lines.append("  — No chat traffic in window.")
+    else:
+        for m in msgs:
+            ts = m.get("created_at")
+            tstr = ts.strftime("%H:%M") if hasattr(ts, "strftime") else str(ts)[:16]
+            who = m.get("sender_name") or m.get("sender_email") or "crew"
+            txt = (m.get("text") or "").strip().replace("\n", " ")
+            if txt:
+                lines.append(f"  {tstr}  {who}: {txt}")
+
+    # To-dos still open
+    try:
+        todos = await db.team_items.find(
+            {"team_id": team_id, "rig_id": rig_id, "kind": "todo", "status": {"$ne": "done"}},
+            {"_id": 0}
+        ).sort("created_at", 1).to_list(100)
+    except Exception:
+        todos = []
+    lines.append("")
+    lines.append(f"OPEN TO-DOS ({len(todos)})")
+    if not todos:
+        lines.append("  — All clear.")
+    else:
+        for t in todos:
+            lines.append(f"  • {t.get('name') or '(no title)'}  [{t.get('status','open')}]")
+
+    lines.append("")
+    lines.append("— End of handover —")
+    return "\n".join(lines)
+
+
+@api_router.post("/crew/shift-end-handover")
+async def send_shift_end_handover(body: ShiftEndHandoverRequest, user: dict = Depends(require_user)):
+    team_id = user.get("team_id")
+    if not team_id:
+        raise HTTPException(400, "Join or create a team first.")
+    if not body.rig_id:
+        raise HTTPException(400, "rig_id required.")
+
+    # Resolve recipient list:
+    # - include_contact_ids wins if provided; else all contacts marked default
+    # - plus any ad-hoc extra_recipients
+    contact_query: Dict[str, Any] = {"team_id": team_id, "is_deleted": {"$ne": True}}
+    if body.include_contact_ids is not None:
+        contact_query["contact_id"] = {"$in": body.include_contact_ids}
+    else:
+        contact_query["is_default_recipient"] = True
+    contacts = await db.crew_contacts.find(contact_query, {"_id": 0}).to_list(200)
+
+    recipients: List[str] = []
+    seen = set()
+    for c in contacts:
+        e = (c.get("email") or "").strip().lower()
+        if e and e not in seen:
+            seen.add(e); recipients.append(e)
+    for e in body.extra_recipients or []:
+        e2 = (e or "").strip().lower()
+        if _EMAIL_RE.match(e2) and e2 not in seen:
+            seen.add(e2); recipients.append(e2)
+    if not recipients:
+        raise HTTPException(400, "No recipients — add crew contacts (default) or paste at least one address.")
+    if len(recipients) > 10:
+        raise HTTPException(400, "Max 10 recipients per shift-end send.")
+
+    body_text = await _build_shift_end_body(team_id, body.rig_id, body.hours or 12)
+
+    if not RESEND_API_KEY or _resend is None:
+        raise HTTPException(503, "Email sending isn't configured yet. Ask an admin to add RESEND_API_KEY to the server environment.")
+
+    rig_label = (body.rig_id or "").replace("RIG", "Rig ").replace("YARD", "Yard")
+    sender_name = user.get("name") or user["email"].split("@")[0]
+    subject = (body.subject or f"Shift-end handover — {rig_label} · last {body.hours}h").strip()[:150]
+    html_body = _html_email_from_text(sender_name, rig_label, body_text, body.note)
+    text_body = (body.note + "\n\n" if body.note else "") + body_text
+
+    params = {
+        "from": f"{sender_name} via CT Pocket <{RESEND_FROM_EMAIL}>",
+        "to": recipients,
+        "subject": subject,
+        "html": html_body,
+        "text": text_body,
+        "reply_to": [user["email"]] if user.get("email") else None,
+    }
+    params = {k: v for k, v in params.items() if v is not None}
+
+    try:
+        resp = await asyncio.to_thread(_resend.Emails.send, params)
+    except Exception as e:
+        msg = str(e)
+        if "domain" in msg.lower() or "not verified" in msg.lower():
+            raise HTTPException(502, "Sender domain is not verified on Resend. Verify your domain or use the test sender (onboarding@resend.dev).")
+        raise HTTPException(502, f"Email provider error: {msg[:200]}")
+
+    email_id = resp.get("id") if isinstance(resp, dict) else None
+    try:
+        await db.handover_emails.insert_one({
+            "team_id": team_id,
+            "rig_id": body.rig_id,
+            "sender_email": user["email"],
+            "sender_name": sender_name,
+            "recipients": recipients,
+            "subject": subject,
+            "resend_email_id": email_id,
+            "body_text": body_text[:20000],
+            "note": body.note,
+            "shift_end_auto": True,
+            "sent_at": datetime.now(timezone.utc),
+        })
+    except Exception:
+        pass
+
+    return {"success": True, "email_id": email_id, "recipients": recipients, "body_preview": body_text[:1500]}
+
+
+# ============ Shift-end handover PREVIEW (no email, no key required) ============
+@api_router.post("/crew/shift-end-preview")
+async def preview_shift_end(body: ShiftEndHandoverRequest, user: dict = Depends(require_user)):
+    """Builds the summary body + resolves intended recipients WITHOUT sending.
+    Lets the UI show the supervisor exactly what will go out before they send."""
+    team_id = user.get("team_id")
+    if not team_id:
+        raise HTTPException(400, "Join or create a team first.")
+    if not body.rig_id:
+        raise HTTPException(400, "rig_id required.")
+
+    contact_query: Dict[str, Any] = {"team_id": team_id, "is_deleted": {"$ne": True}}
+    if body.include_contact_ids is not None:
+        contact_query["contact_id"] = {"$in": body.include_contact_ids}
+    else:
+        contact_query["is_default_recipient"] = True
+    contacts = await db.crew_contacts.find(contact_query, {"_id": 0}).to_list(200)
+    recipients: List[str] = []
+    seen = set()
+    for c in contacts:
+        e = (c.get("email") or "").strip().lower()
+        if e and e not in seen:
+            seen.add(e); recipients.append(e)
+    for e in body.extra_recipients or []:
+        e2 = (e or "").strip().lower()
+        if _EMAIL_RE.match(e2) and e2 not in seen:
+            seen.add(e2); recipients.append(e2)
+
+    body_text = await _build_shift_end_body(team_id, body.rig_id, body.hours or 12)
+    return {
+        "recipients": recipients,
+        "body_text": body_text,
+        "from_display": f"{user.get('name') or user['email'].split('@')[0]} via CT Pocket <{RESEND_FROM_EMAIL}>",
+        "reply_to": user.get("email"),
+        "configured": bool(RESEND_API_KEY and _resend is not None),
+    }
 
 
 # ============ MANAGER DASHBOARD ============
