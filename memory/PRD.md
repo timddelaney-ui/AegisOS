@@ -156,6 +156,30 @@ join only.
   Engineering Job Audit Dossier PDF.
 - Stripe tiers go live (Tier 1 Hand $2.99/mo, Tier 2 Unit $249/yr).
 
+## Changelog — 2026-02-18 · Field Beta pricing + feedback
+### Pricing (dormant payments) + Floating Beta Feedback drawer
+- **New Pricing page** (`/pricing`) — deep slate `#0F172A` with amber `#F59E0B`
+  and cyan `#06B6D4` accents. Monthly / Annual toggle (annual default,
+  25% savings badge). Three cards:
+  - Pro Hand · $19.99/mo or $179/yr · solo hand
+  - CT Unit Package · $99/mo or $999/yr · highlighted "Most popular"
+    cyan ring · whole crew
+  - Enterprise · "Let's talk" · multi-fleet, SSO, SLA, on-prem option
+- CTAs are **dormant** — "Start free · no card" routes to `/hub`, no
+  Stripe redirect, no card capture. "FIELD TEST BETA · 100% UNLOCKED"
+  amber banner locked to the top.
+- **New BetaFeedbackDrawer** replaces the old FeedbackDialog modal.
+  Floating right-edge "Beta feedback" tab (hidden on login) opens a
+  full slide-in drawer with:
+  - Sentiment picker (👍 😐 👎) using lucide-neutral SVG emoji in buttons
+  - Category chips: Bug / Feature / Field incident / UX / Other
+  - Auto-captured: page URL + user_agent + user
+  - 5-item recent-submissions list stored in localStorage so users see
+    what they've sent
+  - Still listens to the legacy `open-feedback` custom event so the
+    hamburger menu's "Beta feedback" entry still fires it
+- Backend: `/api/feedback` now accepts optional `sentiment` + `user_agent`
+  and a new `field_incident` category.
 ## Changelog — 2026-02-18 · Real DAQ listeners
 ### WITS 0 / Modbus TCP / WITSML REST ingest wired
 - **`daq_listeners.py`** — asyncio listener framework with 3 production

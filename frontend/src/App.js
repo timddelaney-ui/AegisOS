@@ -38,12 +38,12 @@ import ShareRedeemPage from "./pages/ShareRedeemPage";
 import { ActiveReelProvider } from "./context/ActiveReelContext";
 import ManagerGreeting from "./components/ManagerGreeting";
 import RedeemDialog from "./components/RedeemDialog";
-import FeedbackDialog from "./components/FeedbackDialog";
+import NotificationCenter from "./components/NotificationCenter";
+import TrainingModeBanner from "./components/TrainingModeBanner";
+import BetaFeedbackDrawer from "./components/BetaFeedbackDrawer";
 import { AdvisoryFooter, AdvisoryModal, AdvisoryStrip } from "./components/AdvisoryDisclaimer";
 import { Toaster } from "./components/ui/sonner";
 import InstallAppPrompt, { registerServiceWorker } from "./components/InstallAppPrompt";
-import NotificationCenter from "./components/NotificationCenter";
-import TrainingModeBanner from "./components/TrainingModeBanner";
 import RigSelector from "./components/RigSelector";
 import ServiceToggle, { useServiceView } from "./components/ServiceToggle";
 import { useAuth, API, isProUser } from "./context/AuthContext";
@@ -224,6 +224,7 @@ const AppRouter = () => {
   return (
     <>
       <TrainingModeBanner />
+      <BetaFeedbackDrawer />
       <Routes>
         <Route path="/share/:token" element={<ShareRedeemPage />} />
         <Route path="/" element={<LandingRedirect />} />
@@ -263,7 +264,6 @@ const AppRouter = () => {
       <AdvisoryModal />
       <ManagerGreeting />
       <RedeemDialog />
-      <FeedbackDialog />
       <InstallAppPrompt />
       <NotificationCenter />
       <ResponsiveToaster />

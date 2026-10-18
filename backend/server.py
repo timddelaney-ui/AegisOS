@@ -85,10 +85,12 @@ class TeamJoin(BaseModel):
 
 
 class FeedbackCreate(BaseModel):
-    category: str  # bug | idea | ux | data_accuracy | other
+    category: str  # bug | idea | ux | data_accuracy | field_incident | other
     subject: str
     message: str
     page: Optional[str] = None
+    sentiment: Optional[str] = None   # positive | neutral | negative
+    user_agent: Optional[str] = None  # client-captured browser / OS string
 
 
 # ============ AUTH HELPERS ============
@@ -1213,18 +1215,23 @@ def _is_admin(user: dict) -> bool:
 
 @api_router.post("/feedback")
 async def submit_feedback(body: FeedbackCreate, user: dict = Depends(require_user)):
-    valid_categories = {"bug", "idea", "ux", "data_accuracy", "other"}
+    valid_categories = {"bug", "idea", "ux", "data_accuracy", "field_incident", "other"}
     if body.category not in valid_categories:
         raise HTTPException(400, f"Invalid category. Use one of: {valid_categories}")
+    valid_sentiments = {None, "", "positive", "neutral", "negative"}
+    if body.sentiment not in valid_sentiments:
+        raise HTTPException(400, f"Invalid sentiment. Use one of: {valid_sentiments - {None}}")
     doc = {
         "feedback_id": f"fb_{uuid.uuid4().hex[:12]}",
         "user_id": user["user_id"],
         "user_email": user["email"],
         "user_name": user.get("name"),
         "category": body.category,
+        "sentiment": body.sentiment or None,
         "subject": body.subject.strip()[:200],
         "message": body.message.strip()[:5000],
         "page": (body.page or "").strip()[:200],
+        "user_agent": (body.user_agent or "").strip()[:300],
         "status": "new",  # new | in_review | in_progress | done | wontfix
         "admin_notes": "",
         "created_at": datetime.now(timezone.utc),
