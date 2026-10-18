@@ -29,7 +29,7 @@ export default function PartsOrdersPage() {
   const [form, setForm] = useState({ part_number: "", description: "", quantity: 1, needed_by: "" });
 
   const refresh = async () => {
-    try { const r = await axios.get(`${API}/parts-orders`, { withCredentials: true }); setOrders(r.data?.orders || []); } catch {}
+    try { const r = await axios.get(`${API}/parts-orders`, { withCredentials: true }); setOrders(r.data?.orders || []); } catch (e) { console.debug("[PartsOrders] refresh failed", e?.response?.status || e?.message); }
   };
   useEffect(() => { refresh(); }, []);
 

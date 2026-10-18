@@ -329,19 +329,29 @@ join only.
 - All timestamps use 24-hour (military) format via `/app/frontend/src/lib/timeFormat.js`.
 - No audio alerts anywhere — visual (color flash + banner + icon) only.
 
-## Code Quality (2026-02-18)
-P0 code-review fixes applied, zero behavior change:
-- Added `console.debug` logging to all silent `catch` blocks on `LiveOpsPage.jsx`,
-  `TreatmentPage.jsx`, `WellborePage.jsx`, `VonMisesPage.jsx` (silent failures
-  previously hid network/storage/audio errors from devtools).
-- Cleaned pyflakes-flagged dead code: removed unused `JSONResponse` import,
-  unused `Field` import, unused `os` import, unused locals `rig_or_legacy`,
-  `GOOSENECK_RADIUS_FT`, `STRAIGHTENER_RADIUS_FT`, unused `as e`, and the
-  no-op `global _daq_orchestrator` statement.
-- `eval()` findings in the review (`crew_safety_eval`, `_post_eval`) were
-  **false positives** — just function names, no actual `eval()` call exists.
-- Deferred (would risk re-render loops): 137 React hook-dependency warnings
-  explicitly suppressed by developers via `// eslint-disable-next-line`.
-- Deferred (large refactor out of scope): split `server.py` (~3,860 lines) and
-  `phase1_modules.register_phase1()` (~2,100 lines) into route modules.
+## Code Quality (2026-02-18, iter 2)
+Second-pass critical-fix sweep:
+- Added `console.debug` logging to 6 more silent `catch` blocks:
+  `TimecardsPage`, `TasksPage`, `RbacAdminPage`, `PartsOrdersPage`, `Hub`,
+  `FatiguePage` (total 15 silent catches now surface in devtools).
+- Moved hard-coded `DEMO_SESSION_TOKEN` out of 11 test files; now read via
+  `os.environ.get("DEMO_SESSION_TOKEN", "<seed default>")`.
+- Replaced index-as-key with stable natural keys in `WellborePage` (station
+  md_ft), `CTDrillingCalculator` (result.key / r.label / w.msg / formula
+  string), `BetaFeedbackDrawer` (feedback_id), `TrainingModeBanner`
+  (role+text hash).
+- localStorage audit: **no tokens, no secrets**. All usage is UI prefs
+  (muted, split-view, active-rig, dismissed-at timestamps, cached offline
+  samples, rig labels/status). Auth session uses httpOnly cookies.
+- 137-missing-hook-deps claim was over-counted. CRA's real ESLint flags
+  **3** warnings (`FatiguePage:26`, `TasksPage:28`, `TimecardsPage:63`) —
+  all legitimately silenced via `// eslint-disable-next-line` to prevent
+  infinite-loop re-renders when refresh functions aren't memoized.
+- eval() flags re-confirmed as **false positives** (function names only:
+  `crew_safety_eval`, `_post_eval`).
+- Deferred (large refactor out of scope, user-noted):
+  - split `server.py` and `phase1_modules.register_phase1()` into modules;
+  - reduce `daq_listeners` nesting via helper extraction;
+  - break up `LiveOpsPage`, `Hub`, `DocumentsPage`, `CTDrillingCalculator`
+    oversized components.
 

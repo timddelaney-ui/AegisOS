@@ -21,7 +21,7 @@ export default function FatiguePage() {
 
   const refresh = async () => {
     if (!activeReel) return;
-    try { const r = await axios.get(`${API}/fatigue/state`, { params: { reel_id: activeReel.reel_id }, withCredentials: true }); setState(r.data); } catch {}
+    try { const r = await axios.get(`${API}/fatigue/state`, { params: { reel_id: activeReel.reel_id }, withCredentials: true }); setState(r.data); } catch (e) { console.debug("[Fatigue] refresh failed", e?.response?.status || e?.message); }
   };
   useEffect(() => { refresh(); /* eslint-disable-next-line */ }, [activeReel?.reel_id]);
   useEffect(() => { setCurrentDepth(depth); }, [depth, setCurrentDepth]);

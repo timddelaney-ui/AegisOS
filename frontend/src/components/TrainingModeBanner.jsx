@@ -89,7 +89,7 @@ const TrainingModeBanner = () => {
           <div className="flex-1 overflow-y-auto p-2 space-y-2 text-xs">
             {messages.map((m, i) => (
               <div
-                key={i}
+                key={`${m.role}-${i}-${m.text?.slice(0, 24) || ""}`}
                 className={m.role === "user"
                   ? "bg-[#FF6B1A] text-white rounded-lg px-3 py-2 ml-6 self-end"
                   : "bg-white/5 border border-white/10 rounded-lg px-3 py-2 mr-6"}

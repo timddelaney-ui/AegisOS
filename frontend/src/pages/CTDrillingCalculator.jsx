@@ -441,7 +441,7 @@ const CTDrillingCalculator = () => {
               {(result.summary || []).filter((r) => r.kind !== "text").slice(0, 6).map((r, i) => {
                 const { value, unit } = fmtResult(r.val, r.kind, unitSystem);
                 return (
-                  <div key={i} data-testid={`ctd-result-${r.key || i}`} className="bg-white border border-[#E4E4E4] rounded-lg p-2.5">
+                  <div key={r.key || `sum-${i}`} data-testid={`ctd-result-${r.key || i}`} className="bg-white border border-[#E4E4E4] rounded-lg p-2.5">
                     <p className="text-[10px] font-semibold text-[#595959] uppercase leading-tight">{r.label}</p>
                     <p className="text-lg font-bold text-[#262626] tabular-nums leading-tight mt-0.5">
                       {value} <span className="text-[11px] font-semibold text-[#595959]">{unit}</span>
@@ -458,7 +458,7 @@ const CTDrillingCalculator = () => {
               {(result.detail || []).map((r, i) => {
                 const { value, unit } = fmtResult(r.val, r.kind, unitSystem);
                 return (
-                  <div key={i} className="flex items-center justify-between px-4 py-2 text-[12px]">
+                  <div key={r.key || r.label || `det-${i}`} className="flex items-center justify-between px-4 py-2 text-[12px]">
                     <span className="text-[#333]">{r.label}</span>
                     <span className="font-semibold tabular-nums text-[#262626]">
                       {value} <span className="text-[#595959] font-normal">{unit}</span>
@@ -474,7 +474,7 @@ const CTDrillingCalculator = () => {
           {result.warnings?.length > 0 && (
             <div className="space-y-2" data-testid="ctd-warnings">
               {result.warnings.map((w, i) => (
-                <div key={i} className={`border rounded-lg px-3 py-2 flex items-start gap-2 ${warnStyle(w.level)}`}>
+                <div key={`${w.level}-${w.msg?.slice(0, 24) || i}`} className={`border rounded-lg px-3 py-2 flex items-start gap-2 ${warnStyle(w.level)}`}>
                   {w.level === "danger" ? <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" /> : <Info className="w-4 h-4 mt-0.5 flex-shrink-0" />}
                   <p className="text-[12px] leading-snug font-medium">{w.msg}</p>
                 </div>
@@ -506,7 +506,7 @@ const CTDrillingCalculator = () => {
             <p className="text-[11px] font-bold uppercase text-[#595959] mb-1 tracking-wide">Formulas used</p>
             <ul className="space-y-0.5">
               {(result.formulas || []).map((f, i) => (
-                <li key={i} className="text-[11px] text-[#333] font-mono">• {f}</li>
+                <li key={`${f.slice(0, 40)}-${i}`} className="text-[11px] text-[#333] font-mono">• {f}</li>
               ))}
             </ul>
             <p className="text-[10px] text-[#777] mt-2 italic">Reference: {result.reference || "—"}</p>

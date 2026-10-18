@@ -32,7 +32,7 @@ def _load_backend_url():
 
 BASE_URL = _load_backend_url()
 API = f"{BASE_URL}/api"
-DEMO_TOKEN = "demo_session_dade4ac57f0c496094fde437e8e91f00"
+DEMO_TOKEN = os.environ.get("DEMO_SESSION_TOKEN", "demo_session_dade4ac57f0c496094fde437e8e91f00")
 
 MONGO_URL = os.environ.get("MONGO_URL", "mongodb://localhost:27017")
 DB_NAME = os.environ.get("DB_NAME", "test_database")

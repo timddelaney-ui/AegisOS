@@ -16,7 +16,7 @@ with open("/app/backend/.env") as fh:
             _env[k] = v.strip().strip('"').strip("'")
 MONGO_URL = _env.get("MONGO_URL", "mongodb://localhost:27017")
 DB_NAME = _env.get("DB_NAME", "test_database")
-DEMO_TOKEN = "demo_session_dade4ac57f0c496094fde437e8e91f00"
+DEMO_TOKEN = os.environ.get("DEMO_SESSION_TOKEN", "demo_session_dade4ac57f0c496094fde437e8e91f00")
 
 
 @pytest.fixture(scope="module")

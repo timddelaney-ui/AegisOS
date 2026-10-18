@@ -5,7 +5,7 @@ import requests
 from datetime import datetime, timezone, timedelta
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
-DEMO_TOKEN = "demo_session_dade4ac57f0c496094fde437e8e91f00"
+DEMO_TOKEN = os.environ.get("DEMO_SESSION_TOKEN", "demo_session_dade4ac57f0c496094fde437e8e91f00")
 
 
 @pytest.fixture

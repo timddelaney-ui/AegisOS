@@ -23,7 +23,7 @@ export default function TasksPage() {
         axios.get(`${API}/rbac/members`, { withCredentials: true }).then((r) => r.data?.members || []).catch(() => []),
       ]);
       setTasks(t); setMembers(m);
-    } catch {}
+    } catch (e) { console.debug("[Tasks] refresh failed", e?.response?.status || e?.message); }
   };
   useEffect(() => { refresh(); /* eslint-disable-next-line */ }, [filter]);
 

@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 
 BACKEND_URL = os.environ.get("BACKEND_URL", "http://localhost:8001")
 API = f"{BACKEND_URL}/api"
-DEMO_TOKEN = "demo_session_dade4ac57f0c496094fde437e8e91f00"
+DEMO_TOKEN = os.environ.get("DEMO_SESSION_TOKEN", "demo_session_dade4ac57f0c496094fde437e8e91f00")
 
 
 def c(token=DEMO_TOKEN):

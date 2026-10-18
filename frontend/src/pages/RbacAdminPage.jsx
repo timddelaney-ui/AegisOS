@@ -21,7 +21,7 @@ export default function RbacAdminPage() {
         axios.get(`${API}/rbac/workspace/domains`, { withCredentials: true }).then((r) => r.data?.allowed_domains || []).catch(() => []),
       ]);
       setMembers(m); setDomains(d); setDomainInput(d.join(", "));
-    } catch {}
+    } catch (e) { console.debug("[RbacAdmin] refresh failed", e?.response?.status || e?.message); }
   };
   useEffect(() => { refresh(); }, []);
 

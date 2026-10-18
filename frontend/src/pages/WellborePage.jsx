@@ -53,7 +53,7 @@ function Wellbore({ survey, depth }) {
   return (
     <group>
       {segs.map((s, i) => (
-        <Line key={i} points={[s.a, s.b]} color={s.color} lineWidth={3} />
+        <Line key={`seg-${survey.stations[i]?.md_ft ?? i}`} points={[s.a, s.b]} color={s.color} lineWidth={3} />
       ))}
       {tip && (
         <mesh position={tip}>

@@ -58,7 +58,7 @@ export default function TimecardsPage() {
         axios.get(`${API}/rbac/members`, { withCredentials: true }).then((r) => r.data?.members || []).catch(() => []),
       ]);
       setLines(l); setPayCodes(p); setMembers(m);
-    } catch (e) { /* ignore */ }
+    } catch (e) { console.debug("[Timecards] refresh failed", e?.response?.status || e?.message); }
   };
   useEffect(() => { refresh(); /* eslint-disable-next-line */ }, [statusFilter, viewUserId, startDate, endDate]);
 

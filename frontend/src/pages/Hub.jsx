@@ -101,7 +101,7 @@ const Hub = () => {
         sessionStorage.setItem("ctp_home_routed", "1");
         navigate(r.data.home_default === "live-ops" ? "/live-ops" : "/app");
       }
-    } catch { /* ignore */ }
+    } catch (e) { console.debug("[Hub] loadPrefs failed", e?.response?.status || e?.message); }
   }, [navigate]);
 
   useEffect(() => { loadPrefs(); }, [loadPrefs]);

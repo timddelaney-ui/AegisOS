@@ -250,7 +250,7 @@ const BetaFeedbackDrawer = () => {
                   <ul className="space-y-1.5">
                     {recents.map((r, i) => (
                       <li
-                        key={i}
+                        key={r.feedback_id || r.id || `rec-${i}`}
                         data-testid={`beta-recent-${i}`}
                         className="bg-white/5 border border-white/10 rounded p-2 text-[11px]"
                       >
