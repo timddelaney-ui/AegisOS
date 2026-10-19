@@ -29,8 +29,10 @@ const Pricing = () => {
   return (
     <div className="min-h-screen bg-[#0F172A] text-slate-100">
       {/* Beta banner */}
-      <div className="bg-amber-400 text-black text-center py-2 text-[11px] font-bold tracking-wide uppercase">
-        Field Test Beta — all tiers 100% unlocked · paywalls dormant · pricing is advertised only
+      <div data-testid="pricing-demo-banner" className="bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-400 text-black text-center py-2 text-[11px] font-bold tracking-wide uppercase flex items-center justify-center gap-2">
+        <Sparkles className="w-3.5 h-3.5" />
+        Enterprise demo mode — every tier gets the full stack while the Field Beta is live
+        <Sparkles className="w-3.5 h-3.5" />
       </div>
 
       {/* Header */}

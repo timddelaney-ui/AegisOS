@@ -991,3 +991,29 @@ Non-fixes (false positives verified again):
   localStorage → UI prefs only (seen flags, last depth, dismissed-at).
   Auth is httpOnly cookie, no tokens in localStorage anywhere.
 
+
+Enterprise Demo Mode (2026-02-19 pm):
+Field Beta posture now rebranded as "Enterprise Demo" so every account
+gets a taste of the top shelf while BETA_UNLOCK is on.
+
+- **BETA_UNLOCK flipped back to `true`** in `backend/.env`. All tiers
+  see the full Enterprise stack while the demo is live.
+- **Header chip** `ENTERPRISE DEMO` (yellow gradient, sparkles icon)
+  renders in `ExcelHeader` whenever `beta_unlock` is true AND the
+  viewer's actual tier is below Enterprise. Click → navigates to
+  Pricing. Tooltip reads "You're sampling the Enterprise stack. Your
+  actual plan is <Personal/Small-Med>."
+  (`[data-testid="header-demo-chip"]`)
+- **Pricing banner** rewritten from "Field Test Beta — all tiers 100%
+  unlocked · paywalls dormant" to a sparkle-flanked
+  "✨ Enterprise demo mode — every tier gets the full stack while the
+  Field Beta is live ✨"
+- **Tutorial copy** for Personal and Small-Med now acknowledges the
+  demo access: last slide reads "Enterprise demo is on — go wild /
+  explore the top shelf" and tells the reader their plan will revert
+  when the demo ends.
+- Demo user confirmed: `beta_unlock:true`, demo.pro remains
+  `smallmed` tier yet Hub shows Live Ops + Security & Compliance
+  tiles side-by-side; the ENTERPRISE DEMO chip renders beside the
+  logo.
+

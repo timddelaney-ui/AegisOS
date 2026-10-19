@@ -68,6 +68,16 @@ const AppHeader = () => {
               <Crown className="w-2.5 h-2.5" strokeWidth={3} /> PRO
             </span>
           )}
+          {secStatus?.beta_unlock && tier !== "enterprise" && (
+            <span
+              data-testid="header-demo-chip"
+              onClick={(e) => { e.stopPropagation(); navigate("/pricing"); }}
+              title={`You're sampling the Enterprise stack. Your actual plan is ${tierSpec?.label || tier}.`}
+              className="ml-1 text-[9px] px-1.5 py-[2px] rounded font-bold flex items-center gap-0.5 flex-shrink-0 cursor-pointer bg-gradient-to-r from-amber-400 to-yellow-300 text-black hover:brightness-110"
+            >
+              <Sparkles className="w-2.5 h-2.5" strokeWidth={3} /> ENTERPRISE DEMO
+            </span>
+          )}
           {secStatus?.tls_version && (
             <span
               data-testid="header-tls-chip"

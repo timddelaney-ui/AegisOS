@@ -41,8 +41,8 @@ const TUTORIAL_SLIDES = {
       bullet: null,
     },
     {
-      title: "Need a crew?",
-      body: "Upgrade to Small-Med Crew ($29.99/mo) when you want timecards, payroll, and a shared schedule. Enterprise unlocks the live telemetry stack. You can preview both plans anytime from Pricing.",
+      title: "Enterprise demo is on — go wild",
+      body: "While Field Beta is live we're unlocking every Enterprise feature for every account so you can see the full stack. Live Ops, 3D Wellbore, dossier email — it's all open. When the demo ends your plan reverts to Personal; upgrade any time to keep what you're using.",
       bullet: null,
     },
   ],
@@ -68,8 +68,8 @@ const TUTORIAL_SLIDES = {
       bullet: null,
     },
     {
-      title: "Ready for live telemetry?",
-      body: "Enterprise unlocks Live Ops (1 Hz telemetry, 3D wellbore, dossier email) and the Live DAQ ingest. Reach out from Pricing for a custom quote.",
+      title: "Enterprise demo is on — explore the top shelf",
+      body: "You already have the crew tooling. While Field Beta is live every account also gets Live Ops (1 Hz telemetry, 3D wellbore, dossier email, DAQ ingest). Try it — when the demo ends your plan reverts to Small-Med; upgrade to keep the live stack.",
       bullet: null,
     },
   ],
