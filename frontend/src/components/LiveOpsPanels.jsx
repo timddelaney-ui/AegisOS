@@ -107,7 +107,7 @@ export function MiniFatigue({ damage = [], spacing = 100, worst = 0, large = fal
 }
 
 // Radial-arc gauge for weight / pressure
-export function LiveGauge({ title, unit, value, min = 0, max = 100, criticalAbove, warnAbove, large = false, color = "#0056B3", digits = 0 }) {
+export function LiveGauge({ title, unit, value, min = 0, max = 100, criticalAbove, warnAbove, large = false, color = "#0056B3", digits = 0, secondary = null }) {
   const v = Number(value) || 0;
   const pct = Math.max(0, Math.min(1, (v - min) / (max - min)));
   const angle = -120 + pct * 240; // -120° to +120°
@@ -137,6 +137,11 @@ export function LiveGauge({ title, unit, value, min = 0, max = 100, criticalAbov
         <span className="text-[10px] font-bold uppercase tracking-wider">{title}</span>
         <span className={`ml-auto text-[11px] font-bold tabular-nums ${critical ? "text-red-400 animate-pulse" : warn ? "text-amber-300" : "text-white"}`}>
           {fmtV(v)} {unit}
+          {secondary && (
+            <span data-testid="livegauge-secondary" className="ml-1.5 text-[9px] font-semibold text-slate-400 tabular-nums">
+              ≈ {secondary}
+            </span>
+          )}
         </span>
       </div>
       <div className="flex-1 bg-white rounded-b border border-[#E5E5E5] flex items-center justify-center">
@@ -158,6 +163,9 @@ export function LiveGauge({ title, unit, value, min = 0, max = 100, criticalAbov
           {/* Center value */}
           <text x={cx} y={cy + r / 2 + 4} textAnchor="middle" fontSize={large ? 28 : 16} fontWeight="bold" fill={critical ? "#C00000" : warn ? "#C36600" : "#262626"} className="tabular-nums">{fmtV(v)}</text>
           <text x={cx} y={cy + r / 2 + (large ? 24 : 16)} textAnchor="middle" fontSize={large ? 12 : 10} fill="#595959">{unit}</text>
+          {secondary && (
+            <text x={cx} y={cy + r / 2 + (large ? 42 : 28)} textAnchor="middle" fontSize={large ? 11 : 9} fill="#8B8B8B" className="tabular-nums">≈ {secondary}</text>
+          )}
           {/* Min/max */}
           <text x={toXY(-120).x} y={toXY(-120).y + 14} textAnchor="middle" fontSize="9" fill="#8B8B8B">{fmtV(min)}</text>
           <text x={toXY(120).x} y={toXY(120).y + 14} textAnchor="middle" fontSize="9" fill="#8B8B8B">{fmtV(max)}</text>

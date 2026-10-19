@@ -705,3 +705,18 @@ not generic SI defaults:
   (no conversion applied), both chart and gauge readouts honour the new
   dims.
 
+
+Skate Dual-Unit Chip (2026-02-19):
+- The injector-skate gauge keeps its primary psi readout (OEM reference)
+  but now shows a tiny secondary `≈ X.X MPa` chip in both the header
+  value row AND under the center value inside the SVG so Metric crews
+  can read the SI equivalent at a glance without hiding the psi
+  safe-work number.
+- The chip is suppressed when the viewer is on Imperial — no extra
+  clutter for crews who already read psi natively.
+- `LiveGauge` gained a `secondary` prop (`string`, optional) so this
+  pattern is reusable by any future gauge that needs an SI complement
+  to an Imperial-first OEM reading.
+- Sample conversions used for sign-off: 1,200 psi ≈ 8.3 MPa, 1,500 psi
+  ≈ 10.3 MPa, 2,000 psi ≈ 13.8 MPa.
+

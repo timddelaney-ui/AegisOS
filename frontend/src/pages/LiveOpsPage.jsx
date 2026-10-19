@@ -721,7 +721,13 @@ export default function LiveOpsPage() {
         const ps = latest.traction_pressure_psi || 0;
         const sm = skateMetrics(ps);
         // Skate pressure stays in psi globally — hydraulic skate-cylinder
-        // recommended ranges are only published in psi by every OEM.
+        // recommended ranges are only published in psi by every OEM. We
+        // still surface a tiny SI chip for Metric crews who want the MPa
+        // equivalent at a glance (not for safe-work decisioning — the
+        // primary psi number is the OEM reference).
+        const skateSecondary = u.isMetric
+          ? `${u.from(ps, "pressure").toFixed(1)} ${u.label("pressure")}`
+          : null;
         return <LiveGauge
           title={`Skate · K_t ${sm.kt.toFixed(2)} · ${sm.label}`}
           unit={u.label("pressure_psi_fixed")}
@@ -731,6 +737,7 @@ export default function LiveOpsPage() {
           warnAbove={u.from(1500, "pressure_psi_fixed")}
           criticalAbove={u.from(2000, "pressure_psi_fixed")}
           large={large}
+          secondary={skateSecondary}
           color={sm.severity === "crit" ? "#EF4444" : sm.severity === "warn" ? "#F59E0B" : "#10B981"} />;
       }
       case "wellbore":
