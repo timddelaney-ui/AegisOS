@@ -901,3 +901,55 @@ Admin Tier Switcher + BETA_UNLOCK Enforcement (2026-02-19 pm):
      `demo.free@example.com` → toast + row re-badge + backend
      responded `previous_tier: "smallmed"`. Reset after the test.
 
+
+Security & Compliance Enterprise Bundle (2026-02-19 pm):
+
+Four subsystems added as a single Enterprise-only feature
+(`security_compliance` in `tiers.js`, hybrid-hidden from Personal + Small-Med):
+
+1. **Workspace status chip** — `GET /api/security/status` returns
+   `{tls_version, data_region, team_id, team_isolated,
+     secure_mode_active, settings}`. Header renders a clickable
+   `[🛡 TLS 1.3]` chip (turns `SECURE` green when any Security toggle
+   is on) that deep-links to the full page. Visible to every tier so
+   clients can see the transport layer, even if the toggle controls
+   are Enterprise-only.
+
+2. **Encrypted-at-rest workspace** — per-team Fernet key held in
+   `db.team_security_keys`. New treatment notes / dossier notes
+   written via `encrypt_for_team(db, team_id, text)` return
+   `enc:v1:<ciphertext>`; `decrypt_for_team` is idempotent on
+   plaintext. Key rotation via `POST /api/security/key/rotate`
+   preserves old keys in a history ring so already-written notes
+   keep decrypting during rotation.
+
+3. **AI privacy mode** — `scrub_pii(text, extra_terms)` replaces
+   `J-\d+` job numbers → `[JOB]`, `Well <Name>` → `Well [WELL]`, and
+   up to 20 team-defined custom terms → `[REDACTED]`. Call-sites
+   that hit upstream LLMs can pipe their user text through this
+   before send; the toggle is persisted per team.
+
+4. **Audit log** — `audit_log(db, actor_user_id, actor_email,
+   team_id, action, …)` writes to `db.audit_log` append-only.
+   `GET /api/security/audit-log` returns the last 50 rows for the
+   viewer's team. Fire-and-forget: never raises so logging failures
+   can't block the primary action. Settings changes and key
+   rotations auto-log; sprinkle `audit_log(...)` at any new sensitive
+   action going forward.
+
+**Backend wiring:**
+- New `security_module.py` builds a FastAPI sub-router with injected
+  deps (require_user, require_enterprise, db, tls_version,
+  data_region). Keeps `server.py` from growing further.
+- `_require_enterprise` guard honors `BETA_UNLOCK` so the same flag
+  that controls tier gating globally also controls Security routes.
+
+**Frontend:**
+- `/security` route (Enterprise-gated) renders the SecurityCompliancePage
+  with 4 sections, toggles, rotation button, custom-term list, audit
+  tail. Hub tile `hub-security-tile` (crimson accent, badge
+  "ENTERPRISE"). Header TLS chip for every tier.
+- All curl paths + a Playwright run verified: 4 sections present, 2
+  audit rows after setting toggles, SECURE chip in header when any
+  toggle is on. Demo user reset to smallmed after test.
+

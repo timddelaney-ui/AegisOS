@@ -150,7 +150,6 @@ export const ROUTE_FEATURES = {
   "/daq":               "daq_ingest",
   "/security":          "security_compliance",
 };
-
 export const tierIndex = (tier) => {
   const i = TIER_ORDER.indexOf(tier);
   return i < 0 ? 0 : i;

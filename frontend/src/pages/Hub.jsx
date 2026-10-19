@@ -59,6 +59,7 @@ const TILE_FEATURE_MAP = {
   "erp-template": "erp_templates",
   "crew-contacts": "crew_contacts",
   "jobs": "jobs_ledger",
+  "security": "security_compliance",
 };
 
 const HubCard = ({ Icon, title, subtitle, onClick, accent, badge, gradient, tileId, tilePrefs, guestBlocked, feature, "data-testid": testId }) => {
@@ -403,6 +404,17 @@ const Hub = () => {
               accent="bg-[#DBEAFE] text-[#0056B3]"
               onClick={() => navigate("/daq")}
               badge="PHASE 2"
+            />
+            <HubCard
+              data-testid="hub-security-tile"
+              tileId="security"
+              tilePrefs={tilePrefs}
+              Icon={ShieldCheck}
+              title="Security & Compliance"
+              subtitle="TLS badge, encrypted notes, AI PII scrubber, audit log. Enterprise privacy posture at a glance."
+              accent="bg-[#FEE2E2] text-[#991B1B]"
+              onClick={() => navigate("/security")}
+              badge="ENTERPRISE"
             />
             <HubCard
               data-testid="hub-ctd-tile"

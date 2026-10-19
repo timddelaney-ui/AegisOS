@@ -4079,6 +4079,30 @@ from phase1_modules import register_phase1  # noqa: E402
 register_phase1(api_router, db, require_user, get_current_user, _is_admin)
 
 
+# ============ SECURITY & COMPLIANCE (Enterprise bundle) ============
+from security_module import build_router as _build_security_router  # noqa: E402
+
+
+async def _require_enterprise(user: dict = Depends(require_user)):
+    """Gate for `/security/*` writes. Honours BETA_UNLOCK the same way the
+    frontend tier guard does so the flag is a single global switch.
+    """
+    tier = _resolve_user_tier(user)
+    if BETA_UNLOCK or tier == "enterprise":
+        return user
+    raise HTTPException(403, "Security & Compliance requires an Enterprise plan.")
+
+
+_security_router = _build_security_router(
+    require_user=require_user,
+    require_enterprise=_require_enterprise,
+    db=db,
+    tls_version="TLS 1.3",
+    data_region=os.environ.get("DATA_REGION", "us-east"),
+)
+api_router.include_router(_security_router)
+
+
 # ============ APP CONFIG ============
 app.include_router(api_router)
 

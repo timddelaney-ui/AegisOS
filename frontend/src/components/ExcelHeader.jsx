@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Menu, LogOut, Users, FolderOpen, Sparkles, X, Crown, MessageSquarePlus, ShieldAlert, Gift, Ticket, Home, RefreshCw, HelpCircle, GraduationCap } from "lucide-react";
+import { Menu, LogOut, Users, FolderOpen, Sparkles, X, Crown, MessageSquarePlus, ShieldAlert, ShieldCheck, Gift, Ticket, Home, RefreshCw, HelpCircle, GraduationCap } from "lucide-react";
 import axios from "axios";
 import { useAuth, API, isProUser } from "../context/AuthContext";
 import { useTier } from "../context/TierContext";
@@ -32,6 +32,7 @@ const AppHeader = () => {
   const { user, logout } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [secStatus, setSecStatus] = useState(null);
   const navigate = useNavigate();
   const isPro = isProUser(user);
   const { open: tourOpen, openTour, closeTour } = useWelcomeTour();
@@ -42,6 +43,10 @@ const AppHeader = () => {
   useEffect(() => {
     if (!user) return;
     axios.get(`${API}/admin/whoami`, { withCredentials: true }).then((r) => setIsAdmin(r.data.is_admin)).catch(() => {});
+    // Transport-layer / privacy chip in the header — refreshed on login
+    // so a tier flip (Personal → Enterprise) immediately surfaces the
+    // encrypted/scrubbed state without a page reload.
+    axios.get(`${API}/security/status`, { withCredentials: true }).then((r) => setSecStatus(r.data)).catch(() => {});
   }, [user]);
 
   return (
@@ -61,6 +66,20 @@ const AppHeader = () => {
           {isPro && (
             <span className="ml-1 text-[9px] bg-[#FF6B1A] text-[#0D1A24] px-1.5 py-[2px] rounded font-bold flex items-center gap-0.5 flex-shrink-0">
               <Crown className="w-2.5 h-2.5" strokeWidth={3} /> PRO
+            </span>
+          )}
+          {secStatus?.tls_version && (
+            <span
+              data-testid="header-tls-chip"
+              onClick={(e) => { e.stopPropagation(); navigate("/security"); }}
+              title={`${secStatus.tls_version}${secStatus.data_region ? ` · ${secStatus.data_region}` : ""}${secStatus.team_isolated ? " · team-isolated" : ""}${secStatus.secure_mode_active ? " · secure mode on" : ""}`}
+              className={`ml-1 text-[9px] px-1.5 py-[2px] rounded font-bold flex items-center gap-0.5 flex-shrink-0 cursor-pointer transition-colors ${
+                secStatus.secure_mode_active
+                  ? "bg-emerald-500 text-black"
+                  : "bg-white/10 text-emerald-300 hover:bg-white/15"
+              }`}
+            >
+              <ShieldCheck className="w-2.5 h-2.5" strokeWidth={3} /> {secStatus.secure_mode_active ? "SECURE" : "TLS 1.3"}
             </span>
           )}
         </button>

@@ -34,6 +34,7 @@ import TimecardsPage from "./pages/TimecardsPage";
 import RbacAdminPage from "./pages/RbacAdminPage";
 import LiveOpsPage from "./pages/LiveOpsPage";
 import DaqConfigPage from "./pages/DaqConfigPage";
+import SecurityCompliancePage from "./pages/SecurityCompliancePage";
 import ShareRedeemPage from "./pages/ShareRedeemPage";
 import { ActiveReelProvider } from "./context/ActiveReelContext";
 import { UnitProvider } from "./context/UnitContext";
@@ -267,6 +268,7 @@ const AppRouter = () => {
         <Route path="/crew-admin" element={<ProtectedRoute feature="rbac_admin"><RbacAdminPage /></ProtectedRoute>} />
         <Route path="/live-ops" element={<ProtectedRoute feature="live_ops"><LiveOpsPage /></ProtectedRoute>} />
         <Route path="/daq" element={<ProtectedRoute feature="daq_ingest"><DaqConfigPage /></ProtectedRoute>} />
+        <Route path="/security" element={<ProtectedRoute feature="security_compliance"><SecurityCompliancePage /></ProtectedRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <AdvisoryFooter />
