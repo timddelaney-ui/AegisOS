@@ -392,6 +392,52 @@ join only.
 ## Job-Log Playback — CSV / LAS / WITS — 2026-02-18
 
 ## Operation Dialect + Treatment-Log ↔ Telemetry Link — 2026-02-18
+
+## Position Designation Ladder (Promotion Flow) — 2026-02-18
+- Replaced the bare "base rate of pay" field with a full **Position
+  Designation** system. The company's promotion ladder lives per-team in
+  Mongo (`db.positions`) seeded with 9 open-domain CT roles:
+  CT Trainee ($22) · CT Operator I ($32) · CT Operator II ($38) ·
+  CT Senior Operator ($45) · CT Supervisor I ($55) · CT Supervisor II
+  ($62) · Field Engineer ($68) · CT Specialist ($75) ·
+  Operations Manager ($90). Default wages are editable; the ladder
+  itself is extensible with custom positions.
+- New backend routes:
+  * `GET /positions` — list the team's ladder (auto-seeds defaults).
+  * `POST /positions` — upsert editable label / default wage / ladder
+    rank (supervisor+).
+  * `DELETE /positions/{position}` — custom only; defaults are
+    protected.
+  * `POST /users/designation` — assign `{position, hourly_rate}` to a
+    crew member. Writes to `db.users` (`position`, `position_label`,
+    `hourly_rate`, legacy `base_rate_hourly` alias so timecards keep
+    working) and appends to `db.designation_log` for payroll audit.
+  * `GET /rbac/members` now returns `position`, `position_label`,
+    `hourly_rate` so the admin UI can render current designation.
+- RbacAdminPage rebuilt (`/crew-admin`):
+  * **Position Designation Ladder** card — pill view by default,
+    inline `LadderEditor` for supervisors to edit label / default wage
+    / rank or add custom positions.
+  * **Members** list shows a cyan "position label" chip + emerald
+    "$X.XX/hr" wage next to every member's email.
+  * **Designate** amber button (replaces old `$` prompt) opens a modal:
+    * Member summary (current position + wage).
+    * Position dropdown · wage pre-fills to the ladder default when the
+      position changes **unless the user has typed a custom number**
+      (shows "pre-filled from ladder" / "customized" chip).
+    * Promotion vs. demotion detected by comparing ladder ranks — a
+      green "Promotion up the ladder — logged to audit trail" or a
+      crimson "Lateral / downward reassignment" banner appears before
+      save.
+    * Toast reads `Promoted · <label> · $XX.XX/hr`.
+- Legacy `POST /paycodes/base-rate` route still works for timecard
+  compatibility (writes the same `base_rate_hourly` field).
+- Verified end-to-end: `GET /positions` returns the 9-rank ladder,
+  `POST /users/designation` with `senior_op $48.50` writes
+  `position_label=CT Senior Operator · hourly_rate=48.50`, UI shows
+  designation chip + modal pre-fills wage from ladder default and
+  flags promotion.
+
 - New `/app/frontend/src/lib/operationCodes.js` — 69-code open-domain
   CT activity dialect grouped into 8 phases: RIG · RIH · CIRC · STIM ·
   MECH · WELL · POOH · SAFETY · NPT. Each code has an industry-standard

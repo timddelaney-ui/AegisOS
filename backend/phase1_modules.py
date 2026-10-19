@@ -120,9 +120,16 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
         team_id = user.get("team_id")
         if not team_id:
             return {"members": []}
-        members = await db.users.find({"team_id": team_id}, {"_id": 0, "user_id": 1, "email": 1, "name": 1, "role": 1, "picture": 1}).to_list(500)
+        members = await db.users.find(
+            {"team_id": team_id},
+            {"_id": 0, "user_id": 1, "email": 1, "name": 1, "role": 1, "picture": 1,
+             "position": 1, "position_label": 1, "hourly_rate": 1, "base_rate_hourly": 1,
+             "designation_updated_at": 1}
+        ).to_list(500)
         out = []
         for m in members:
+            # Normalize hourly_rate to a single top-level field (legacy support)
+            m["hourly_rate"] = m.get("hourly_rate") or m.get("base_rate_hourly") or 0.0
             out.append({
                 **m,
                 "role_plan": LEGACY_TO_PLAN.get(m.get("role") or "crew", "crew"),
@@ -1155,6 +1162,130 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
             "status": body.new_status, "updated_at": now, "history": hist,
         }})
         return ser(await db.parts_orders.find_one({"po_id": po_id}, {"_id": 0}))
+
+    # -----------------------------------------------------------------
+    # Position Designations — the promotion ladder.
+    # Replaces the bare "base_rate_hourly" with a per-team catalog of
+    # positions (CT Trainee → Operations Manager) each with a default
+    # wage. User designation = position + hourly_rate (editable). Wage
+    # pre-fills from the position's default on promotion but the field
+    # stays editable so promotions, retro raises, and per-hire
+    # negotiations never require editing the catalog.
+    # -----------------------------------------------------------------
+    DEFAULT_POSITIONS = [
+        {"position": "trainee",     "label": "CT Trainee",            "ladder": 10, "default_hourly": 22.0},
+        {"position": "operator_1",  "label": "CT Operator I",         "ladder": 20, "default_hourly": 32.0},
+        {"position": "operator_2",  "label": "CT Operator II",        "ladder": 25, "default_hourly": 38.0},
+        {"position": "senior_op",   "label": "CT Senior Operator",    "ladder": 30, "default_hourly": 45.0},
+        {"position": "supervisor_1","label": "CT Supervisor I",       "ladder": 40, "default_hourly": 55.0},
+        {"position": "supervisor_2","label": "CT Supervisor II",      "ladder": 45, "default_hourly": 62.0},
+        {"position": "field_eng",   "label": "Field Engineer",        "ladder": 50, "default_hourly": 68.0},
+        {"position": "specialist",  "label": "CT Specialist",         "ladder": 55, "default_hourly": 75.0},
+        {"position": "ops_mgr",     "label": "Operations Manager",    "ladder": 70, "default_hourly": 90.0},
+    ]
+
+    async def _ensure_positions(team_id: str) -> None:
+        existing = {d["position"] async for d in db.positions.find({"team_id": team_id}, {"position": 1, "_id": 0})}
+        now = now_utc()
+        for p in DEFAULT_POSITIONS:
+            if p["position"] not in existing:
+                await db.positions.insert_one({"team_id": team_id, **p, "is_default": True, "created_at": now, "updated_at": now})
+
+    class PositionUpsert(BaseModel):
+        position: str
+        label: str
+        ladder: Optional[int] = None
+        default_hourly: float
+
+    @api_router.get("/positions")
+    async def list_positions(user: dict = Depends(require_user)):
+        team_id = user.get("team_id")
+        if not team_id:
+            return {"positions": []}
+        await _ensure_positions(team_id)
+        docs = await db.positions.find({"team_id": team_id}, {"_id": 0}).sort("ladder", 1).to_list(100)
+        return {"positions": [ser(d) for d in docs]}
+
+    @api_router.post("/positions")
+    async def upsert_position(body: PositionUpsert, user: dict = Depends(require_user)):
+        require_supervisor(user)
+        team_id = user.get("team_id")
+        if not team_id:
+            raise HTTPException(400, "No team.")
+        pos = body.position.strip().lower().replace(" ", "_")
+        now = now_utc()
+        await db.positions.update_one(
+            {"team_id": team_id, "position": pos},
+            {"$set": {
+                "label": body.label.strip()[:80],
+                "ladder": int(body.ladder) if body.ladder is not None else 50,
+                "default_hourly": float(body.default_hourly),
+                "updated_at": now,
+            }, "$setOnInsert": {"team_id": team_id, "position": pos, "is_default": False, "created_at": now}},
+            upsert=True,
+        )
+        return ser(await db.positions.find_one({"team_id": team_id, "position": pos}, {"_id": 0}))
+
+    @api_router.delete("/positions/{position}")
+    async def delete_position(position: str, user: dict = Depends(require_user)):
+        require_supervisor(user)
+        team_id = user.get("team_id")
+        if position in {p["position"] for p in DEFAULT_POSITIONS}:
+            raise HTTPException(400, "Default positions can be edited but not deleted.")
+        await db.positions.delete_one({"team_id": team_id, "position": position})
+        return {"success": True}
+
+    # Assign designation (position + wage) to a crew member — promotion flow.
+    class DesignationSet(BaseModel):
+        user_id: str
+        position: str
+        hourly_rate: float
+
+    @api_router.post("/users/designation")
+    async def set_designation(body: DesignationSet, user: dict = Depends(require_user)):
+        require_supervisor(user)
+        team_id = user.get("team_id")
+        target = await db.users.find_one({"user_id": body.user_id, "team_id": team_id}, {"_id": 0})
+        if not target:
+            raise HTTPException(404, "User not found in your workspace.")
+        pos_doc = await db.positions.find_one({"team_id": team_id, "position": body.position}, {"_id": 0})
+        if not pos_doc:
+            raise HTTPException(400, "Unknown position. Pick one from the designation ladder.")
+        now = now_utc()
+        wage = float(body.hourly_rate)
+        prev_pos = target.get("position")
+        prev_wage = target.get("base_rate_hourly") or target.get("hourly_rate")
+        await db.users.update_one(
+            {"user_id": body.user_id},
+            {"$set": {
+                "position": body.position,
+                "position_label": pos_doc["label"],
+                "hourly_rate": wage,
+                "base_rate_hourly": wage,  # legacy alias — timecards still read this
+                "designation_updated_at": now,
+                "designation_updated_by": user["email"],
+            }},
+        )
+        # Audit trail — tracks every promotion / wage edit for payroll compliance.
+        await db.designation_log.insert_one({
+            "log_id": f"des_{uuid.uuid4().hex[:12]}",
+            "team_id": team_id,
+            "user_id": body.user_id,
+            "prev_position": prev_pos,
+            "prev_hourly": prev_wage,
+            "new_position": body.position,
+            "new_label": pos_doc["label"],
+            "new_hourly": wage,
+            "changed_by": user["email"],
+            "changed_at": now,
+        })
+        return {
+            "success": True,
+            "user_id": body.user_id,
+            "position": body.position,
+            "position_label": pos_doc["label"],
+            "hourly_rate": wage,
+        }
 
     # -----------------------------------------------------------------
     # MODULE D — Timecards + Pay Codes + Payroll
