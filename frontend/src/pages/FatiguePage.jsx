@@ -80,7 +80,7 @@ export default function FatiguePage() {
 
   return (
     <div className="min-h-screen bg-[#F3F3F3]">
-      <Phase1PageHeader title="Reel Fatigue · Palmgren-Miner" subtitle={`Driven by live traction pressure · ${spacing} ft stations`} right={<ShareLinksButton scope="fatigue" compact />} />
+      <Phase1PageHeader title="Reel Fatigue · Palmgren-Miner" subtitle={`Driven by live traction pressure · ${spacing} ft stations · [API RP 5C7 §6 / Palmgren-Miner · Manson-Coffin low-cycle]`} right={<ShareLinksButton scope="fatigue" compact />} />
       <div className="max-w-6xl mx-auto p-3 space-y-3">
         {!activeReel && (
           <div className="bg-[#FFF3CD] text-[#856404] text-sm rounded p-3 border border-[#FFE69C]">

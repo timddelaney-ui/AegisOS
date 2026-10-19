@@ -6,7 +6,7 @@ import { Phase1PageHeader } from "../components/Phase1Header";
 import { useAuth, API } from "../context/AuthContext";
 import { useActiveReel } from "../context/ActiveReelContext";
 import { MiniVonMises, MiniFatigue, LiveGauge, StripChart, RollingTrends, MiniWellbore } from "../components/LiveOpsPanels";
-import { Play, Pause, Wifi, WifiOff, Maximize2, X, Zap, Settings, Rewind, FastForward, StepBack, StepForward, History, Download, StickyNote, Clock, Star } from "lucide-react";
+import { Play, Pause, Wifi, WifiOff, Maximize2, X, Zap, Settings, Rewind, FastForward, StepBack, StepForward, History, Download, StickyNote, Clock, Star, Mail, Loader2 } from "lucide-react";
 import { postSampleResilient, drainOfflineQueue, offlineQueueLength, startOfflineDrain } from "../lib/offlineQueue";
 import { samplesToCSV, samplesToLAS, downloadBlob } from "../lib/playbackExport";
 import { triaxialVonMises, intervalAt } from "../lib/ctPhysics";
@@ -342,6 +342,53 @@ export default function LiveOpsPage() {
       toast.success(`Dossier ready · ${r.data.sample_count} samples · ${r.data.vm_alert_count} alerts · ${u.isMetric ? "SI" : "Imperial"}`);
     } catch (e) {
       toast.error(e.response?.data?.detail || "Dossier failed");
+    }
+  };
+
+  // ---- Send-to-office email ----
+  const [sendOfficeOpen, setSendOfficeOpen] = useState(false);
+  const [officeRecipients, setOfficeRecipients] = useState("");
+  const [officeNote, setOfficeNote] = useState("");
+  const [sendingOffice, setSendingOffice] = useState(false);
+
+  const sendDossierToOffice = async () => {
+    const parsed = officeRecipients
+      .split(/[,;\s]+/)
+      .map((x) => x.trim().toLowerCase())
+      .filter((x) => /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/.test(x));
+    if (!parsed.length) {
+      toast.error("Enter at least one valid office email address.");
+      return;
+    }
+    if (parsed.length > 5) {
+      toast.error("Max 5 recipients per send.");
+      return;
+    }
+    setSendingOffice(true);
+    try {
+      // Rebuild the dossier HTML in the viewer's current unit system so
+      // what the office receives matches exactly what the crew just saw.
+      const r = await axios.get(`${API}/dossier`, { withCredentials: true });
+      const html = buildDossierHtml(r.data, u);
+      const subject = officeNote.trim()
+        ? `Dossier — ${officeNote.trim().slice(0, 80)}`
+        : null;
+      const res = await axios.post(`${API}/dossier/email`, {
+        recipients: parsed,
+        html,
+        subject,
+        sample_count: r.data.sample_count || 0,
+        vm_alert_count: r.data.vm_alert_count || 0,
+        unit_system: u.isMetric ? "metric" : "imperial",
+      }, { withCredentials: true });
+      toast.success(`Dossier sent to ${res.data.recipients?.length || parsed.length} office recipient${parsed.length === 1 ? "" : "s"}.`);
+      setSendOfficeOpen(false);
+      setOfficeRecipients("");
+      setOfficeNote("");
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Office email send failed.");
+    } finally {
+      setSendingOffice(false);
     }
   };
 
@@ -728,6 +775,11 @@ export default function LiveOpsPage() {
         const skateSecondary = u.isMetric
           ? `${u.from(ps, "pressure").toFixed(1)} ${u.label("pressure")}`
           : null;
+        // 60-second mini-sparkline — assumes 1 Hz samples. We use whichever
+        // buffer is live (replay or live) and project through the
+        // skate-fixed-psi dim so the pen keeps the primary unit.
+        const skateSrc = (replaySamples.length ? replaySamples : samples).slice(-60);
+        const skateTrend = skateSrc.map((s) => u.from(s.traction_pressure_psi || 0, "pressure_psi_fixed"));
         return <LiveGauge
           title={`Skate · K_t ${sm.kt.toFixed(2)} · ${sm.label}`}
           unit={u.label("pressure_psi_fixed")}
@@ -738,6 +790,7 @@ export default function LiveOpsPage() {
           criticalAbove={u.from(2000, "pressure_psi_fixed")}
           large={large}
           secondary={skateSecondary}
+          trend={skateTrend}
           color={sm.severity === "crit" ? "#EF4444" : sm.severity === "warn" ? "#F59E0B" : "#10B981"} />;
       }
       case "wellbore":
@@ -891,6 +944,13 @@ export default function LiveOpsPage() {
             onClick={downloadDossier}
             className="flex items-center gap-1 px-3 py-1.5 rounded font-bold text-xs bg-white/5 border border-white/15 text-slate-300 hover:bg-white/10">
             <Download className="w-3.5 h-3.5" />Dossier
+          </button>
+          <button
+            data-testid="liveops-dossier-email-btn"
+            onClick={() => setSendOfficeOpen(true)}
+            title="Send the on-screen dossier to the office via Resend"
+            className="flex items-center gap-1 px-3 py-1.5 rounded font-bold text-xs bg-white/5 border border-white/15 text-slate-300 hover:bg-white/10">
+            <Mail className="w-3.5 h-3.5" />Send to office
           </button>
           <ShareLinksButton />
           {canAnnotate && (
@@ -1121,6 +1181,74 @@ export default function LiveOpsPage() {
           onDelete={deleteAnnotation}
           onOpenTreatment={() => { setViewAnnot(null); navigate("/treatment"); }}
         />
+      )}
+
+      {/* Send-to-office email modal (Resend-backed) */}
+      {sendOfficeOpen && (
+        <div
+          data-testid="liveops-dossier-email-modal"
+          className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/70 p-4"
+          onClick={(e) => { if (e.target === e.currentTarget && !sendingOffice) setSendOfficeOpen(false); }}
+        >
+          <div className="w-full max-w-md bg-[#0F172A] border border-white/15 rounded-xl shadow-2xl overflow-hidden text-slate-100">
+            <div className="px-4 py-3 border-b border-white/10 flex items-center gap-2">
+              <Mail className="w-4 h-4 text-amber-300" />
+              <div className="text-sm font-bold uppercase tracking-wider">Send Dossier to Office</div>
+              <button
+                data-testid="liveops-dossier-email-close"
+                onClick={() => !sendingOffice && setSendOfficeOpen(false)}
+                className="ml-auto text-slate-400 hover:text-white"
+                aria-label="Close"
+              ><X className="w-4 h-4" /></button>
+            </div>
+            <div className="p-4 space-y-3">
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Office recipients <span className="text-slate-500 font-normal normal-case">(up to 5, comma-separated)</span></label>
+                <textarea
+                  data-testid="liveops-dossier-email-recipients"
+                  value={officeRecipients}
+                  onChange={(e) => setOfficeRecipients(e.target.value)}
+                  placeholder="supervisor@acme.com, operations@acme.com"
+                  rows={2}
+                  disabled={sendingOffice}
+                  className="w-full bg-black/40 border border-white/15 rounded px-2 py-1.5 text-xs font-mono text-slate-100 focus:outline-none focus:border-amber-400/60"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Subject note <span className="text-slate-500 font-normal normal-case">(optional)</span></label>
+                <input
+                  data-testid="liveops-dossier-email-note"
+                  value={officeNote}
+                  onChange={(e) => setOfficeNote(e.target.value)}
+                  placeholder="e.g. Job #J-204 · milling run #4 handover"
+                  maxLength={80}
+                  disabled={sendingOffice}
+                  className="w-full bg-black/40 border border-white/15 rounded px-2 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-amber-400/60"
+                />
+              </div>
+              <div className="text-[10px] text-slate-400 bg-white/5 border border-white/10 rounded px-2 py-1.5">
+                The exact dossier HTML you see on-screen (unit system: <b className="text-amber-300">{u.isMetric ? "SI · Metric" : "Imperial (API)"}</b>) will be sent. Chain of custody is preserved — bytes delivered match the preview.
+              </div>
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  data-testid="liveops-dossier-email-cancel"
+                  onClick={() => setSendOfficeOpen(false)}
+                  disabled={sendingOffice}
+                  className="flex-1 px-3 py-1.5 rounded text-xs font-bold bg-white/5 border border-white/15 text-slate-300 hover:bg-white/10 disabled:opacity-40"
+                >Cancel</button>
+                <button
+                  data-testid="liveops-dossier-email-send"
+                  onClick={sendDossierToOffice}
+                  disabled={sendingOffice || !officeRecipients.trim()}
+                  className="flex-1 px-3 py-1.5 rounded text-xs font-bold bg-amber-400 text-black hover:bg-amber-300 disabled:opacity-40 flex items-center justify-center gap-1.5"
+                >
+                  {sendingOffice ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Mail className="w-3.5 h-3.5" />}
+                  {sendingOffice ? "Sending…" : "Send"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

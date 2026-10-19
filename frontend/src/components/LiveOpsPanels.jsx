@@ -107,7 +107,11 @@ export function MiniFatigue({ damage = [], spacing = 100, worst = 0, large = fal
 }
 
 // Radial-arc gauge for weight / pressure
-export function LiveGauge({ title, unit, value, min = 0, max = 100, criticalAbove, warnAbove, large = false, color = "#0056B3", digits = 0, secondary = null }) {
+// `trend` (optional): array of recent numeric values projected into the same
+// display units as `value` — rendered as a 60s micro-sparkline at the bottom
+// of the gauge body so the tool push can see trend direction without opening
+// the full chart.
+export function LiveGauge({ title, unit, value, min = 0, max = 100, criticalAbove, warnAbove, large = false, color = "#0056B3", digits = 0, secondary = null, trend = null }) {
   const v = Number(value) || 0;
   const pct = Math.max(0, Math.min(1, (v - min) / (max - min)));
   const angle = -120 + pct * 240; // -120° to +120°
@@ -127,7 +131,13 @@ export function LiveGauge({ title, unit, value, min = 0, max = 100, criticalAbov
   const critical = criticalAbove != null && v >= criticalAbove;
   const needle = toXY(angle);
   const W = (r + 20) * 2;
-  const H = r + 50;
+  // Trend sparkline geometry — bandY sits just under the min/max end labels,
+  // bandH is the strip height; we extend H to actually contain the band.
+  const hasTrend = Array.isArray(trend) && trend.length >= 2;
+  const bandY = cy + r + (large ? 22 : 16);
+  const bandH = large ? 14 : 8;
+  const bandBottomPad = 4;
+  const H = hasTrend ? (bandY + bandH + bandBottomPad) : (r + 50);
   // Format min/max end-labels with same precision as the center readout.
   const fmtV = (x) => x.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits });
   return (
@@ -169,6 +179,35 @@ export function LiveGauge({ title, unit, value, min = 0, max = 100, criticalAbov
           {/* Min/max */}
           <text x={toXY(-120).x} y={toXY(-120).y + 14} textAnchor="middle" fontSize="9" fill="#8B8B8B">{fmtV(min)}</text>
           <text x={toXY(120).x} y={toXY(120).y + 14} textAnchor="middle" fontSize="9" fill="#8B8B8B">{fmtV(max)}</text>
+          {/* Trend sparkline (last ~60 samples) — plotted along the bottom
+              of the gauge body. Scales to the pen's own min/max so even a
+              gentle 50-psi drift is visible. */}
+          {hasTrend && (() => {
+            const vals = trend.filter((n) => Number.isFinite(n));
+            if (vals.length < 2) return null;
+            const lo = Math.min(...vals);
+            const hi = Math.max(...vals);
+            const spread = Math.max(hi - lo, 1e-6);
+            const bandL = toXY(-120).x - 4;
+            const bandR = toXY(120).x + 4;
+            const bandW = bandR - bandL;
+            const step = bandW / (vals.length - 1);
+            const path = vals.map((val, i) => {
+              const x = bandL + i * step;
+              const y = bandY + bandH - ((val - lo) / spread) * bandH;
+              return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
+            }).join(" ");
+            const lastX = bandL + (vals.length - 1) * step;
+            const lastY = bandY + bandH - ((vals[vals.length - 1] - lo) / spread) * bandH;
+            return (
+              <g data-testid="livegauge-trend-spark" opacity="0.95">
+                <rect x={bandL} y={bandY} width={bandW} height={bandH} fill="#F8FAFC" stroke="#E2E8F0" strokeWidth="0.5" rx="1" />
+                <path d={path} stroke={critical ? "#C00000" : warn ? "#C36600" : color} strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                <circle cx={lastX} cy={lastY} r="1.5" fill={critical ? "#C00000" : warn ? "#C36600" : color} />
+                <text x={bandL - 2} y={bandY + bandH + 7} fontSize="7" fill="#64748B" textAnchor="start" className="tabular-nums">T−60s</text>
+              </g>
+            );
+          })()}
         </svg>
       </div>
     </div>

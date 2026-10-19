@@ -282,7 +282,7 @@ const CTDrillingCalculator = () => {
         </button>
         <div className="w-px h-5 bg-[#D4D4D4]" />
         <h1 className="text-[13px] sm:text-sm font-bold text-[#262626] flex-1 truncate">
-          CT Drilling Calculator <span className="hidden sm:inline text-[#595959] font-normal">— Balanced / Underbalanced</span>
+          CT Drilling Calculator <span className="hidden sm:inline text-[#595959] font-normal">— Balanced / Underbalanced · [API RP 7G §4 · ISO 10400 / Hagedorn-Brown]</span>
         </h1>
         <button
           data-testid="ctd-ai-sop-btn"

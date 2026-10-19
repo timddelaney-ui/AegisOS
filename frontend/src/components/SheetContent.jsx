@@ -223,9 +223,16 @@ const SheetContent = ({ sheetKey, unitSystem, onUnitChange, initialValues, hasTe
           </button>
         </div>
       )}
-      <div className="bg-[#FFF1E6] border-l-[3px] border-[#FF6B1A] px-2.5 py-2 text-[11px] font-semibold text-[#C44A08] rounded-r flex items-center gap-1.5">
+      <div className="bg-[#FFF1E6] border-l-[3px] border-[#FF6B1A] px-2.5 py-2 text-[11px] font-semibold text-[#C44A08] rounded-r flex items-center gap-1.5 flex-wrap">
         <Pin className="w-3 h-3 flex-shrink-0" strokeWidth={2.5} />
         <span>{data.sop}</span>
+        <span
+          data-testid="sheet-dual-citation"
+          className="ml-auto text-[9px] font-mono tracking-tight bg-[#0F172A] text-amber-300 border border-amber-400/30 rounded px-1.5 py-[1px] uppercase"
+          title="Open-domain engineering standards applied on this sheet"
+        >
+          [API RP 5C7 §4.2.1 / ISO 13628-7]
+        </span>
       </div>
 
       <div className="flex justify-between items-center bg-white px-2.5 py-1.5 border border-[#D4D4D4] rounded">

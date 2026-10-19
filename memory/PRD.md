@@ -720,3 +720,50 @@ Skate Dual-Unit Chip (2026-02-19):
 - Sample conversions used for sign-off: 1,200 psi ≈ 8.3 MPa, 1,500 psi
   ≈ 10.3 MPa, 2,000 psi ≈ 13.8 MPa.
 
+
+Visual-Verified Field Beta Updates (2026-02-19, afternoon):
+
+1. **Metric Unit Policy — LIVE VERIFIED** on `/live-ops` with Metric toggle:
+   - Weight gauge: `daN` (observed 8,365 daN at 16s of sim)
+   - P Internal gauge: `MPa` (observed 46.1 MPa)
+   - Wellhead · P_WHP gauge: `MPa` (observed 8.6 MPa)
+   - Net ΔP gauge: `MPa` (observed 40.0 MPa)
+   - Skate gauge: `psi` + `≈ X.X MPa` dual-unit chip (observed 1,631 psi ≈ 11.2 MPa)
+   - Rolling Trends chart legend: WEIGHT · DAN, P INT · MPA, SKATE · PSI
+   - Status bar: Simulated · depth 104 m (fully metric)
+
+2. **Skate 60s Mini-Sparkline** (`[data-testid="livegauge-trend-spark"]`):
+   - `LiveGauge` now accepts an optional `trend` array (last ~60 1Hz samples
+     projected in the gauge's display units).
+   - Band renders inside the gauge body under the center value with a
+     T−60s left-edge label, 1.4 px pen in the gauge's severity color, and
+     a terminal dot for the current sample.
+   - viewBox height extends automatically when a trend is attached so the
+     band isn't clipped (fixed sizing bug: `H = bandY + bandH + 4` when
+     `hasTrend`, back to `r + 50` when there's no trend).
+
+3. **Dual-Citations Rollout**:
+   - CTDrillingCalculator header: `[API RP 7G §4 · ISO 10400 / Hagedorn-Brown]`
+   - FatiguePage header: `[API RP 5C7 §6 / Palmgren-Miner · Manson-Coffin
+     low-cycle]`
+   - WellborePage header (already had): `[API RP 7G §4 · Johancsik 1984]`
+   - All 20+ workbook SOP sheets now carry a universal
+     `[API RP 5C7 §4.2.1 / ISO 13628-7]` chip next to the SOP label,
+     delivered in a single edit to `SheetContent.jsx` so every sheet is
+     covered without touching the per-sheet mock data.
+
+4. **Dossier Email Delivery** (`POST /api/dossier/email`):
+   - Backend uses the existing Resend wire, validates up to 5 recipients,
+     caps HTML at 500 KB, logs an audit row in `db.dossier_emails`.
+   - Four validation paths verified via curl: bad email → 400, empty HTML
+     → 400, unauthenticated → 401, >5 recipients → 400. With empty
+     `RESEND_API_KEY` the endpoint correctly returns 503 explaining the
+     admin needs to drop in the real key (same contract as the
+     handover-email endpoint).
+   - Frontend "Send to office" button sits between **Dossier** and
+     **Client link** in the LiveOps control bar
+     (`[data-testid="liveops-dossier-email-btn"]`). Opens a glass-styled
+     modal where the user types up to 5 recipients + an optional subject
+     note; the modal confirms the active unit system so the office
+     receives the exact dossier bytes the crew saw.
+
