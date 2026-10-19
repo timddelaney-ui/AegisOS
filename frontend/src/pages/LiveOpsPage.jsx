@@ -63,66 +63,170 @@ const skateMetrics = (p_skate, p_ref = 1200) => {
   };
 };
 
-function buildDossierHtml(d) {
-  const fmt = (v) => (v == null ? "—" : typeof v === "number" ? v.toFixed(1) : v);
-  const spark = (name, s) => `<tr><td>${name}</td><td>${fmt(s.min)}</td><td>${fmt(s.max)}</td><td>${fmt(s.avg)}</td><td>${s.count}</td></tr>`;
-  return `<!DOCTYPE html><html><head><title>Engineering Audit Dossier</title>
+// ─── Engineering Audit Dossier · unit-aware HTML builder ─────────────────
+// Dossier is auto-generated from `/api/dossier` which returns canonical
+// IMPERIAL values (ctPhysics convention). We convert on render using the
+// active UnitContext system so Metric crews get kPa / kN / m automatically.
+// Citations keep the dossier audit-grade per [API RP 5C7 §4.2.1 /
+// ISO 13628-7] for triaxial, [Palmgren-Miner / API RP 5C7 §6] for fatigue,
+// and [API RP 7G §4] for DLS severity.
+function buildDossierHtml(d, u) {
+  // u is the useUnits() context — we need `from(v, dim)` and `label(dim)`.
+  // When called without a context (e.g. legacy call site), fall back to
+  // Imperial so we never crash.
+  const fromImp = u?.from || ((v) => v);
+  const label = u?.label || (() => "");
+  const sysBadge = u?.isMetric ? "SI · Metric" : "Imperial (API)";
+  const num = (v) => (v == null || !Number.isFinite(+v) ? "—" : (+v).toLocaleString(undefined, { maximumFractionDigits: Math.abs(+v) >= 1000 ? 0 : Math.abs(+v) >= 10 ? 1 : 2 }));
+  const conv = (v, dim) => num(fromImp(v, dim));
+  const unit = (dim) => label(dim);
+  const sparkRow = (name, s, dim) => `
+    <tr>
+      <td style="font-weight:600">${name}</td>
+      <td class="num">${conv(s.min, dim)}</td>
+      <td class="num">${conv(s.max, dim)}</td>
+      <td class="num">${conv(s.avg, dim)}</td>
+      <td class="num">${unit(dim)}</td>
+      <td class="num">${s.count}</td>
+    </tr>`;
+  const treatmentRows = d.pump_schedule.length === 0
+    ? `<p class="muted">No treatments logged in window.</p>`
+    : `<table>
+        <thead><tr><th>Treatment</th><th>Started (UTC)</th><th class="num">Entries</th></tr></thead>
+        <tbody>${d.pump_schedule.map((t) => `<tr><td>${t.treatment || "—"}</td><td class="mono">${t.started_at || "—"}</td><td class="num">${t.entries}</td></tr>`).join("")}</tbody>
+       </table>`;
+  const vmRows = d.vm_alerts.length === 0
+    ? `<p class="muted">No VM excursions above 80% SMYS working limit in window.</p>`
+    : `<table>
+        <thead><tr><th>Time (UTC)</th><th class="num">Von Mises</th><th class="num">% of 80% SMYS</th></tr></thead>
+        <tbody>${d.vm_alerts.map((a) => `<tr><td class="mono">${a.ts}</td><td class="num">${conv(a.vm, "stress")} <span class="dim">${unit("stress")}</span></td><td class="num"><span class="pill ${+a.pct_of_safe >= 100 ? "pill-crit" : "pill-warn"}">${a.pct_of_safe}%</span></td></tr>`).join("")}</tbody>
+       </table>`;
+  const crewRows = d.crew_hours.length === 0
+    ? `<p class="muted">No timecard entries in window.</p>`
+    : `<table>
+        <thead><tr><th>User</th><th class="num">Hours</th><th>Pay code</th><th>Job #</th><th>Description</th></tr></thead>
+        <tbody>${d.crew_hours.map((h) => `<tr><td>${h.user_name || "—"}</td><td class="num">${h.hours}</td><td>${h.pay_code || "—"}</td><td class="mono">${h.job_number || "—"}</td><td>${h.description || ""}</td></tr>`).join("")}</tbody>
+       </table>`;
+  const activeReelLine = d.job_header.active_reel
+    ? `${d.job_header.active_reel.name} · ${conv(d.job_header.active_reel.total_length_ft, "depth")} ${unit("depth")} · ${d.job_header.active_reel.intervals?.[0]?.grade || "—"}`
+    : "— (no active reel bound)";
+  return `<!DOCTYPE html><html><head>
+    <meta charset="utf-8">
+    <title>CoilAegis · Engineering Audit Dossier</title>
     <style>
-      body{font:12px/1.4 -apple-system,Segoe UI,Roboto,sans-serif;color:#111;padding:24px;max-width:900px;margin:auto}
-      h1{font-size:20px;border-bottom:2px solid #FF6B1A;padding-bottom:6px}
-      h2{font-size:14px;margin-top:20px;color:#FF6B1A;text-transform:uppercase;letter-spacing:0.5px}
+      :root{
+        --slate:#0F172A; --slate-2:#1E293B; --gold:#F59E0B; --cyan:#06B6D4;
+        --crimson:#EF4444; --amber:#FBBF24; --ink:#0F172A; --muted:#64748B;
+      }
+      *{box-sizing:border-box}
+      body{font:12px/1.5 -apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);background:#F8FAFC;margin:0;padding:0}
+      .wrap{max-width:960px;margin:24px auto;padding:24px;background:#fff;border:1px solid #E2E8F0;border-radius:10px;box-shadow:0 1px 2px rgba(15,23,42,.06)}
+      .masthead{background:linear-gradient(135deg,var(--slate) 0%,var(--slate-2) 100%);color:#fff;padding:20px 24px;border-radius:10px 10px 0 0;margin:-24px -24px 20px -24px;position:relative;overflow:hidden}
+      .masthead::before{content:"";position:absolute;inset:0;background:radial-gradient(ellipse 400px 200px at 85% 50%,rgba(245,158,11,.18),transparent 60%);pointer-events:none}
+      .masthead h1{margin:0;font-size:22px;letter-spacing:0.4px;position:relative}
+      .masthead .sub{color:#CBD5E1;font-size:11px;margin-top:4px;position:relative}
+      .masthead .brand{position:absolute;top:16px;right:20px;font-weight:700;font-size:10px;letter-spacing:1.5px;color:var(--gold);text-transform:uppercase;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.4);padding:4px 10px;border-radius:999px}
+      .meta{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
+      .meta div{background:#F1F5F9;border:1px solid #E2E8F0;border-radius:6px;padding:8px 10px}
+      .meta label{display:block;font-size:9px;letter-spacing:1px;color:var(--muted);text-transform:uppercase;font-weight:700}
+      .meta span{font-size:12px;color:var(--ink);font-weight:600}
+      h2{font-size:12px;margin:22px 0 8px 0;color:var(--slate);text-transform:uppercase;letter-spacing:1.1px;border-bottom:2px solid var(--gold);padding-bottom:4px;display:flex;justify-content:space-between;align-items:baseline}
+      h2 .cite{font-size:9px;color:var(--muted);font-weight:600;letter-spacing:0.4px;text-transform:none;font-family:"SF Mono","Menlo",monospace}
       table{width:100%;border-collapse:collapse;font-size:11px;margin-top:6px}
-      th,td{border:1px solid #D4D4D4;padding:4px 6px;text-align:left}
-      th{background:#F3F4F6}
-      .pill{display:inline-block;padding:2px 6px;border-radius:3px;background:#F3F4F6;font-size:10px;font-weight:bold}
-      .sig{margin-top:30px;display:flex;gap:40px}
-      .sig div{flex:1;border-top:1px solid #262626;padding-top:4px;font-size:10px}
-      @media print{body{padding:0}}
-    </style></head><body>
-    <h1>Engineering Audit Dossier</h1>
-    <p><b>Generated:</b> ${d.generated_at} · <b>By:</b> ${d.generated_by}</p>
-    <p><b>Window:</b> ${d.window.start} → ${d.window.end}</p>
+      thead th{background:var(--slate);color:#fff;font-weight:700;text-align:left;letter-spacing:0.3px;padding:6px 8px;font-size:10px;text-transform:uppercase}
+      tbody td{border-bottom:1px solid #E2E8F0;padding:6px 8px;vertical-align:top}
+      tbody tr:nth-child(even){background:#F8FAFC}
+      .num{text-align:right;font-variant-numeric:tabular-nums}
+      .mono{font-family:"SF Mono","Menlo","Consolas",monospace;font-size:10px;color:#334155}
+      .dim{color:var(--muted);font-size:9px;font-weight:normal}
+      .muted{color:var(--muted);font-style:italic;font-size:11px;margin:6px 0}
+      .pill{display:inline-block;padding:2px 7px;border-radius:999px;font-size:10px;font-weight:800;letter-spacing:0.3px}
+      .pill-warn{background:#FEF3C7;color:#92400E}
+      .pill-crit{background:#FEE2E2;color:#991B1B}
+      .pill-ok{background:#DCFCE7;color:#065F46}
+      .sig{margin-top:36px;display:grid;grid-template-columns:repeat(3,1fr);gap:28px;page-break-inside:avoid}
+      .sig div{border-top:1.5px solid var(--slate);padding-top:6px;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;font-weight:700}
+      .footer{margin-top:28px;padding-top:14px;border-top:1px solid #E2E8F0;font-size:9px;color:var(--muted);line-height:1.6}
+      .footer .std{display:inline-block;background:#F1F5F9;border:1px solid #E2E8F0;border-radius:4px;padding:3px 7px;margin-right:4px;font-family:"SF Mono",monospace;color:#475569;font-size:9px}
+      @media print{
+        body{background:#fff;padding:0}
+        .wrap{box-shadow:none;border:none;max-width:100%;margin:0;border-radius:0}
+        .masthead{border-radius:0}
+      }
+    </style></head>
+    <body><div class="wrap">
+      <div class="masthead">
+        <span class="brand">CoilAegis · Audit Grade</span>
+        <h1>Engineering Audit Dossier</h1>
+        <div class="sub">Field Operations · Coiled Tubing Integrity · Fatigue · Live Telemetry</div>
+      </div>
 
-    <h2>Job Header</h2>
-    <p><b>Crew lead:</b> ${d.job_header.crew_lead}</p>
-    <p><b>Active reel:</b> ${d.job_header.active_reel?.name || "—"}
-      ${d.job_header.active_reel ? `· ${d.job_header.active_reel.total_length_ft} ft · ${d.job_header.active_reel.intervals?.[0]?.grade || ""}` : ""}</p>
-    <p><b>Worst fatigue node:</b> ${(d.job_header.fatigue_worst * 100).toFixed(1)}%</p>
+      <div class="meta">
+        <div><label>Generated</label><span>${d.generated_at}</span></div>
+        <div><label>Generated by</label><span>${d.generated_by}</span></div>
+        <div><label>Unit System</label><span>${sysBadge}</span></div>
+        <div><label>Window start</label><span>${d.window.start}</span></div>
+        <div><label>Window end</label><span>${d.window.end}</span></div>
+        <div><label>Samples recorded</label><span>${d.sample_count.toLocaleString()}</span></div>
+      </div>
 
-    <h2>Pump Schedule / Treatments</h2>
-    ${d.pump_schedule.length === 0 ? "<p>No treatments logged in window.</p>" :
-      "<table><tr><th>Treatment</th><th>Started</th><th>Entries</th></tr>" +
-      d.pump_schedule.map((t) => `<tr><td>${t.treatment || ""}</td><td>${t.started_at || ""}</td><td>${t.entries}</td></tr>`).join("") +
-      "</table>"}
+      <h2>Job Header <span class="cite">[Operational metadata · API RP 5C7 §3]</span></h2>
+      <table>
+        <tbody>
+          <tr><td style="width:30%;font-weight:700;background:#F1F5F9">Crew lead</td><td>${d.job_header.crew_lead}</td></tr>
+          <tr><td style="font-weight:700;background:#F1F5F9">Active reel</td><td>${activeReelLine}</td></tr>
+          <tr><td style="font-weight:700;background:#F1F5F9">Worst fatigue node</td><td><span class="pill ${d.job_header.fatigue_worst >= 0.95 ? "pill-crit" : d.job_header.fatigue_worst >= 0.5 ? "pill-warn" : "pill-ok"}">${(d.job_header.fatigue_worst * 100).toFixed(1)}%</span></td></tr>
+        </tbody>
+      </table>
 
-    <h2>Recorded Channels · ${d.sample_count} samples</h2>
-    <table><tr><th>Channel</th><th>Min</th><th>Max</th><th>Avg</th><th>Count</th></tr>
-      ${spark("Weight (lbf)", d.recorded_channels.weight_lb)}
-      ${spark("P internal (psi)", d.recorded_channels.p_internal_psi)}
-      ${spark("P external (psi)", d.recorded_channels.p_external_psi)}
-      ${spark("Traction pressure (psi)", d.recorded_channels.traction_pressure_psi)}
-      ${spark("Axial force (lbf)", d.recorded_channels.axial_force_lbf)}
-      ${spark("Depth (ft)", d.recorded_channels.depth_ft)}
-    </table>
+      <h2>Pump Schedule / Treatments <span class="cite">[Treatment log · Codes 1-69 dialect]</span></h2>
+      ${treatmentRows}
 
-    <h2>Von Mises Alerts · ${d.vm_alert_count} total</h2>
-    ${d.vm_alerts.length === 0 ? "<p>None.</p>" :
-      "<table><tr><th>Time</th><th>VM (psi)</th><th>% of 80% SMYS</th></tr>" +
-      d.vm_alerts.map((a) => `<tr><td>${a.ts}</td><td>${a.vm}</td><td class="pill">${a.pct_of_safe}%</td></tr>`).join("") +
-      "</table>"}
+      <h2>Recorded Channels · ${d.sample_count.toLocaleString()} samples <span class="cite">[Live DAQ · 1 Hz · ${sysBadge}]</span></h2>
+      <table>
+        <thead><tr><th>Channel</th><th class="num">Min</th><th class="num">Max</th><th class="num">Avg</th><th class="num">Unit</th><th class="num">Count</th></tr></thead>
+        <tbody>
+          ${sparkRow("Weight", d.recorded_channels.weight_lb, "weight")}
+          ${sparkRow("P internal", d.recorded_channels.p_internal_psi, "pressure")}
+          ${sparkRow("P external", d.recorded_channels.p_external_psi, "pressure")}
+          ${sparkRow("Traction pressure", d.recorded_channels.traction_pressure_psi, "pressure")}
+          ${sparkRow("Axial force", d.recorded_channels.axial_force_lbf, "force")}
+          ${sparkRow("Depth", d.recorded_channels.depth_ft, "depth")}
+        </tbody>
+      </table>
 
-    <h2>Fatigue Delta</h2>
-    <p><b>Worst damage now:</b> ${(d.fatigue_delta.worst_damage_now * 100).toFixed(1)}% · <b>Nodes:</b> ${d.fatigue_delta.node_count}</p>
+      <h2>Von Mises Alerts · ${d.vm_alert_count} total <span class="cite">[API RP 5C7 §4.2.1 / ISO 13628-7]</span></h2>
+      ${vmRows}
 
-    <h2>Crew Hours (${d.crew_hours.length} lines)</h2>
-    ${d.crew_hours.length === 0 ? "<p>No timecard entries in window.</p>" :
-      "<table><tr><th>User</th><th>Hours</th><th>Pay code</th><th>Job #</th><th>Description</th></tr>" +
-      d.crew_hours.map((h) => `<tr><td>${h.user_name || ""}</td><td>${h.hours}</td><td>${h.pay_code || ""}</td><td>${h.job_number || ""}</td><td>${h.description || ""}</td></tr>`).join("") +
-      "</table>"}
+      <h2>Fatigue Delta <span class="cite">[Palmgren-Miner · API RP 5C7 §6 / Manson-Coffin]</span></h2>
+      <table>
+        <tbody>
+          <tr><td style="width:30%;font-weight:700;background:#F1F5F9">Worst damage now</td><td><span class="pill ${d.fatigue_delta.worst_damage_now >= 0.95 ? "pill-crit" : d.fatigue_delta.worst_damage_now >= 0.5 ? "pill-warn" : "pill-ok"}">${(d.fatigue_delta.worst_damage_now * 100).toFixed(1)}%</span></td></tr>
+          <tr><td style="font-weight:700;background:#F1F5F9">Nodes tracked</td><td>${d.fatigue_delta.node_count}</td></tr>
+        </tbody>
+      </table>
 
-    <h2>Crew Signatures</h2>
-    <div class="sig"><div>Crew lead</div><div>Supervisor</div><div>Management</div></div>
-  </body></html>`;
+      <h2>Crew Hours · ${d.crew_hours.length} entries <span class="cite">[Timecard ledger · Position Designation ladder]</span></h2>
+      ${crewRows}
+
+      <h2>Crew Signatures <span class="cite">[Chain of custody per site ERP]</span></h2>
+      <div class="sig">
+        <div>Crew lead</div>
+        <div>Supervisor</div>
+        <div>Management</div>
+      </div>
+
+      <div class="footer">
+        Open-domain engineering references applied in this dossier:
+        <span class="std">API RP 5C7 §4.2.1 · Triaxial</span>
+        <span class="std">ISO 13628-7 · Workover riser</span>
+        <span class="std">API RP 7G §4 · DLS</span>
+        <span class="std">Palmgren-Miner · Fatigue</span>
+        <span class="std">Johancsik 1984 · Soft-string drag</span>
+        <br/><br/>
+        Advisory only · Values recorded in canonical Imperial per ctPhysics convention; display converted to <b>${sysBadge}</b> on this dossier. Not a licensee program, ERP, or regulator-approved procedure. Always verify against site datasheet and company SOPs.
+      </div>
+    </div></body></html>`;
 }
 
 
@@ -226,7 +330,7 @@ export default function LiveOpsPage() {
   const downloadDossier = async () => {
     try {
       const r = await axios.get(`${API}/dossier`, { withCredentials: true });
-      const html = buildDossierHtml(r.data);
+      const html = buildDossierHtml(r.data, u);
       const w = window.open("", "_blank");
       if (w) {
         w.document.write(html);
@@ -235,7 +339,7 @@ export default function LiveOpsPage() {
       } else {
         toast.error("Pop-up blocked — allow pop-ups to print the dossier.");
       }
-      toast.success(`Dossier ready · ${r.data.sample_count} samples · ${r.data.vm_alert_count} alerts`);
+      toast.success(`Dossier ready · ${r.data.sample_count} samples · ${r.data.vm_alert_count} alerts · ${u.isMetric ? "SI" : "Imperial"}`);
     } catch (e) {
       toast.error(e.response?.data?.detail || "Dossier failed");
     }

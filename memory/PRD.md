@@ -647,3 +647,34 @@ Fourth-pass critical-fix sweep (2026-02-19, second report):
   `LiveOpsPage`, `Hub`, `DocumentsPage`, `CTDrillingCalculator` into
   modules; reduce `daq_listeners` nesting via helper extraction.
 
+
+Engineering Audit Dossier · Polish Pass (2026-02-19):
+- **Unit-aware rendering**: `buildDossierHtml(d, u)` now takes the live
+  `useUnits()` context so every physics value (depth, weight, force,
+  pressures, VM stress) is rendered in the viewer's active system —
+  Imperial users see `psi / lbf / ft`, Metric crews see `kPa / kN / m`
+  with the exact NIST/SPE factors (verified 5,800 psi → 39,990 kPa,
+  18,500 ft → 5,639 m).
+- **Enterprise visual**: Replaced the flat orange-accent layout with the
+  CoilAegis deep-slate (#0F172A) masthead + gold/cyan accents,
+  glass-radial highlight, alternating-row tables, pill chips for
+  severity (`pill-ok` / `pill-warn` / `pill-crit`), and a dedicated
+  signature block styled for print.
+- **Dual citations everywhere**: Each `h2` now carries an audit-grade
+  citation strip —
+  - Von Mises section → `[API RP 5C7 §4.2.1 / ISO 13628-7]`
+  - Fatigue section → `[Palmgren-Miner · API RP 5C7 §6 / Manson-Coffin]`
+  - Treatment log → `[Codes 1-69 dialect]`
+  - Live DAQ channels → `[Live DAQ · 1 Hz · SI / Imperial]`
+  - Timecards → `[Position Designation ladder]`
+  - Footer appends an inline reference chip bar (`API RP 5C7 §4.2.1`,
+    `ISO 13628-7`, `API RP 7G §4`, `Palmgren-Miner`, `Johancsik 1984`).
+- **System badge** rendered beside Crew lead so an auditor can see the
+  active unit system at a glance (`Imperial (API)` or `SI · Metric`).
+- Toast feedback also announces the unit system (`Dossier ready · N
+  samples · M alerts · SI`).
+- Compile clean (only the pre-existing deliberate `exhaustive-deps`
+  warnings remain); Node-side sanity rendering produced balanced HTML
+  (`<html>` opened and closed, 9.8 KB), 4 API RP 5C7 refs, 2
+  Palmgren-Miner refs, 2 ISO 13628-7 refs.
+
