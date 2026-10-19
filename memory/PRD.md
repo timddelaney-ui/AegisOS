@@ -384,6 +384,27 @@ join only.
   `RESEND_API_KEY=re_xxx` to `/app/backend/.env`.
 
 ## 1 Hz Recorder & 5-Pen Rolling Trends — 2026-02-18
+
+## DLS + Contact-Drag 3D Wellbore — 2026-02-18
+- Fixed inverted DLS color scale: gentle paths are now emerald, severity
+  escalates through amber → rose → crimson. Thresholds per API RP 7G §4
+  open-domain severity classification.
+- New **Contact Drag** color mode on `/wellbore` — implements open-domain
+  Johancsik 1984 / Sheppard 1987 soft-string normal-force model:
+  `N = √((T·κ)² + (W·sinα)²)` where κ = DLS in rad/ft and α is station
+  inclination. Severity is normalized across the full string so every
+  well geometry spans the green→crimson range.
+- New **Combined** mode fuses DLS-normalized + drag-normalized severity
+  via `max()` so sticky zones from either axis light up at once.
+- Pill-switch toggle (DLS / Contact Drag / Combined) persisted in
+  `localStorage` under `coilaegis_wellbore_colormode`.
+- WellborePage fully re-skinned to the `.ca-console-shell` enterprise
+  theme — deep-slate canvas, glass panels, cyan depth scrubber,
+  color-mode legend swaps per mode, formula citation shown as footer.
+- Dynamic subtitle in `Phase1PageHeader` carries dual citation:
+  `[API RP 7G §4 · Johancsik 1984]`.
+- Depth scrubber and MD readout respect the Imp/SI toggle (`ft` ⇄ `m`).
+
 - Backend `LIVEOPS_MAX_SAMPLES` bumped **600 → 3600** (1 hour @ 1 Hz)
   and the cap is now scoped per `(team_id, rig_id)` so each rig keeps
   its own full-hour history even when the crew flips rigs.
