@@ -614,3 +614,36 @@ Third-pass critical-fix sweep (2026-02-19):
 - Console-statement reduction skipped: non-debug statements (11) are
   legitimate catch-block warnings that are useful in production.
 
+
+Fourth-pass critical-fix sweep (2026-02-19, second report):
+- **ErpTemplatePage additional_contacts** + **CrewSchedulePage members**:
+  replaced index-based React keys with stable client-generated `_rowId`
+  so controlled inputs stop bleeding state when a middle row is removed.
+  Loaded ERP contacts are back-filled with `_rowId` at hydration so edit
+  flows benefit too.
+- **WelcomeTour** progress dots and **TrainingModeBanner** preset buttons:
+  swapped bare index keys for semantic string keys (`tour-dot-{i}`,
+  `preset-{p}`). The underlying arrays (`SLIDES`, `WHAT_IF_PRESETS`)
+  are static constants so there's no bleed risk — change is lint hygiene
+  only.
+- **SheetTabs**: wrapped the `Object.keys(workbookData).filter(...)`
+  chain in a `useMemo` keyed on the service-view toggle so the tab list
+  no longer recomputes on every render.
+- **CTDrillingCalculator**: extracted the headline-cards
+  `filter().slice().map()` chain into a `useMemo` (`headlineCards`)
+  keyed on `result`.
+- Re-confirmed from the second report:
+  - "localStorage sensitive data" findings → **false alarm**: all stored
+    values are UI prefs (muted, split-view, dismissed-at, last-seen rig,
+    cached offline samples). No tokens, no secrets. Auth is httpOnly
+    cookie.
+  - Hook-dep warnings in Treatment/Wellbore/VonMises/Notification/Sheet
+    pages → already correct; the handoff warning against blind autofix
+    still applies (would cause infinite re-render loops).
+  - eval() findings → still false positives (function and URL names
+    only).
+- Deferred (large structural refactor out of scope, same reason as
+  previous passes): split `server.py`, `phase1_modules.register_phase1`,
+  `LiveOpsPage`, `Hub`, `DocumentsPage`, `CTDrillingCalculator` into
+  modules; reduce `daq_listeners` nesting via helper extraction.
+

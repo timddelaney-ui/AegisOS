@@ -178,6 +178,13 @@ const CTDrillingCalculator = () => {
     return row ? row.val : null;
   }, [result]);
 
+  // Pre-filter the headline cards once — avoids re-running filter/slice/map
+  // on every render while the calculator is open.
+  const headlineCards = useMemo(
+    () => (result.summary || []).filter((r) => r.kind !== "text").slice(0, 6),
+    [result],
+  );
+
   const onLoadScenario = ({ values, mode, unit_system }) => {
     // Restore unit system first so default keys line up, then overlay stored values
     const safeUnit = unit_system === "met" ? "met" : "imp";
@@ -438,7 +445,7 @@ const CTDrillingCalculator = () => {
 
             {/* Headline cards */}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-3 bg-[#FAFAFA]">
-              {(result.summary || []).filter((r) => r.kind !== "text").slice(0, 6).map((r, i) => {
+              {headlineCards.map((r, i) => {
                 const { value, unit } = fmtResult(r.val, r.kind, unitSystem);
                 return (
                   <div key={r.key || `sum-${i}`} data-testid={`ctd-result-${r.key || i}`} className="bg-white border border-[#E4E4E4] rounded-lg p-2.5">

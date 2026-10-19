@@ -248,7 +248,7 @@ export const WelcomeTour = ({ open, onClose }) => {
         <div className="relative flex items-center justify-center gap-1.5 pb-2">
           {SLIDES.map((_, i) => (
             <button
-              key={i}
+              key={`tour-dot-${i}`}
               data-testid={`welcome-tour-dot-${i}`}
               onClick={() => setIdx(i)}
               className={`h-1.5 rounded-full transition-all ${i === idx ? "bg-[#FF6B1A] w-6" : "bg-white/20 w-1.5"}`}

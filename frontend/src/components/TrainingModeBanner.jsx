@@ -103,10 +103,10 @@ const TrainingModeBanner = () => {
           </div>
           <div className="border-t border-white/10 p-2 space-y-1.5">
             <div className="flex flex-wrap gap-1">
-              {WHAT_IF_PRESETS.map((p, i) => (
+              {WHAT_IF_PRESETS.map((p) => (
                 <button
-                  key={i}
-                  data-testid={`training-preset-${i}`}
+                  key={`preset-${p}`}
+                  data-testid={`training-preset-${p.slice(0, 24).replace(/\s+/g, "-")}`}
                   disabled={busy}
                   onClick={() => ask(p)}
                   className="text-[10px] bg-white/5 border border-white/10 rounded px-1.5 py-0.5 hover:bg-white/10 flex items-center gap-0.5 disabled:opacity-40"

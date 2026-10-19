@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from "react";
+import React, { useRef, useEffect, useMemo } from "react";
 import { AlertTriangle, Lock } from "lucide-react";
 import { workbookData } from "../mock/workbookData";
 import { sheetInService } from "../lib/serviceCatalog";
@@ -32,12 +32,19 @@ const SheetTabs = ({ currentSheet, onSelectSheet, freeSheets = [], isPro = false
     return !freeSheets.includes(key);
   };
 
+  // Memoise the service-filtered sheet list — workbookData is static and the
+  // filter only re-runs when the service view toggle changes.
+  const visibleKeys = useMemo(
+    () => Object.keys(workbookData).filter((key) => sheetInService(key, service)),
+    [service],
+  );
+
   return (
     <nav
       ref={containerRef}
       className="bg-[#E1E1E1] h-[46px] flex items-center border-t border-[#BCBCBC] flex-shrink-0 overflow-x-auto whitespace-nowrap px-1 gap-[2px] snap-tabs scroll-fade-right"
     >
-      {Object.keys(workbookData).filter((key) => sheetInService(key, service)).map((key) => {
+      {visibleKeys.map((key) => {
         const isActive = key === currentSheet;
         const locked = isLocked(key);
         return (

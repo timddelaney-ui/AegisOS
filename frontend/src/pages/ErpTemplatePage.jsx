@@ -77,7 +77,13 @@ const ErpTemplatePage = () => {
     (async () => {
       try {
         const { data } = await axios.get(`${API}/erp-templates/${existingId}`, { withCredentials: true });
-        setVals({ ...EMPTY, ...data, additional_contacts: data.additional_contacts || [] });
+        // Ensure every loaded contact gets a stable client row id so React
+        // doesn't bleed input state when a middle contact is removed.
+        const loaded = (data.additional_contacts || []).map((c) => ({
+          _rowId: c._rowId || `ct_${Math.random().toString(36).slice(2, 10)}_${Date.now().toString(36)}`,
+          ...c,
+        }));
+        setVals({ ...EMPTY, ...data, additional_contacts: loaded });
       } catch { toast.error("Template not found"); }
     })();
   }, [existingId]);
@@ -137,7 +143,7 @@ const ErpTemplatePage = () => {
   };
 
   const addContact = () =>
-    setVals((v) => ({ ...v, additional_contacts: [...(v.additional_contacts || []), { role: "", name: "", phone: "" }] }));
+    setVals((v) => ({ ...v, additional_contacts: [...(v.additional_contacts || []), { _rowId: `ct_${Math.random().toString(36).slice(2, 10)}_${Date.now().toString(36)}`, role: "", name: "", phone: "" }] }));
   const updateContact = (i, k, val) =>
     setVals((v) => ({
       ...v,
@@ -308,7 +314,7 @@ const ErpTemplatePage = () => {
           <Section title="Additional contacts" Icon={Phone} color="bg-[#E0E7FF] text-[#5A67D8]">
             <div className="sm:col-span-2 space-y-1.5">
               {(vals.additional_contacts || []).map((c, i) => (
-                <div key={i} className="grid grid-cols-[1fr_1fr_1fr_24px] gap-1.5 items-center" data-testid={`erp-contact-${i}`}>
+                <div key={c._rowId || `erp-ct-${i}`} className="grid grid-cols-[1fr_1fr_1fr_24px] gap-1.5 items-center" data-testid={`erp-contact-${i}`}>
                   <Input placeholder="Role" value={c.role} onChange={(e) => updateContact(i, "role", e.target.value)} />
                   <Input placeholder="Name" value={c.name} onChange={(e) => updateContact(i, "name", e.target.value)} />
                   <Input placeholder="Phone" value={c.phone} onChange={(e) => updateContact(i, "phone", e.target.value)} />

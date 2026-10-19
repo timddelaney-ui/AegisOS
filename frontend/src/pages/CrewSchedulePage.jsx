@@ -144,6 +144,10 @@ const SingleShiftForm = ({ rigId, onSaved, onCancel }) => {
 // ─────────────────────────────────────────────────────────────
 // Crew Builder / Editor modal
 // ─────────────────────────────────────────────────────────────
+// Client-side row IDs so controlled inputs don't bleed state when a middle
+// crew member is removed (array-index keys would shift state up one slot).
+const newMemberRowId = () => `cm_${Math.random().toString(36).slice(2, 10)}_${Date.now().toString(36)}`;
+
 const emptyCrewDraft = () => ({
   name: "Crew A",
   tour: "day",
@@ -152,7 +156,7 @@ const emptyCrewDraft = () => ({
   rotation_days_off: 14,
   start_date: isoDate(new Date()),
   repeat_cycles: 6,
-  members: [{ name: "", role: "Supervisor" }],
+  members: [{ _rowId: newMemberRowId(), name: "", role: "Supervisor" }],
   auto_create_opposite: true,
   opposite_name: "",
   note: "",
@@ -174,7 +178,7 @@ const CrewBuilderModal = ({ open, rigId, editing, onClose, onSaved }) => {
         rotation_days_off: editing.rotation_days_off || 14,
         start_date: editing.start_date || isoDate(new Date()),
         repeat_cycles: editing.repeat_cycles || 6,
-        members: (editing.members || []).length ? editing.members.map((m) => ({ ...m })) : [{ name: "", role: "Supervisor" }],
+        members: (editing.members || []).length ? editing.members.map((m) => ({ _rowId: newMemberRowId(), ...m })) : [{ _rowId: newMemberRowId(), name: "", role: "Supervisor" }],
         auto_create_opposite: false,
         opposite_name: "",
         note: editing.note || "",
@@ -190,7 +194,7 @@ const CrewBuilderModal = ({ open, rigId, editing, onClose, onSaved }) => {
   const setMember = (i, key, v) => {
     setDraft((d) => ({ ...d, members: d.members.map((m, idx) => (idx === i ? { ...m, [key]: v } : m)) }));
   };
-  const addMember = () => setDraft((d) => ({ ...d, members: [...d.members, { name: "", role: "Operator" }] }));
+  const addMember = () => setDraft((d) => ({ ...d, members: [...d.members, { _rowId: newMemberRowId(), name: "", role: "Operator" }] }));
   const removeMember = (i) => setDraft((d) => ({ ...d, members: d.members.filter((_, idx) => idx !== i) }));
 
   const submit = async () => {
@@ -303,7 +307,7 @@ const CrewBuilderModal = ({ open, rigId, editing, onClose, onSaved }) => {
             </div>
             <div className="space-y-1.5">
               {draft.members.map((m, i) => (
-                <div key={i} className="flex items-center gap-1.5" data-testid={`crew-member-row-${i}`}>
+                <div key={m._rowId || `cm-${i}`} className="flex items-center gap-1.5" data-testid={`crew-member-row-${i}`}>
                   <span className="w-6 h-6 rounded-full text-white flex items-center justify-center text-[9px] font-bold flex-shrink-0"
                     style={{ background: crewColor(m.name || `slot-${i}`) }}>
                     {crewInitials(m.name || "?")}
