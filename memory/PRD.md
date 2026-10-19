@@ -767,3 +767,37 @@ Visual-Verified Field Beta Updates (2026-02-19, afternoon):
      note; the modal confirms the active unit system so the office
      receives the exact dossier bytes the crew saw.
 
+
+Skate OEM Chip + Dossier Address Book (2026-02-19 pm):
+
+1. **Skate OEM Range Chip**
+   - `LiveGauge` now accepts a `trendRefs` prop of `{value, color, label}`
+     objects that render as dashed horizontal reference lines across the
+     sparkline band.
+   - The Skate case passes a single ref line stamped with
+     `DEFAULT_SKATE.recommended_max_psi` (`1600 psi`) and a terminal
+     label (`OEM 1600 psi`). The line turns breach-red whenever any
+     sample in the 60s window crosses the limit; otherwise it stays
+     caution-amber. The band's lo/hi is widened to include the ref line
+     so it's never clipped off the band.
+   - DOM assertion confirmed via Playwright: a
+     `[data-testid="livegauge-trend-ref"]` node is present on the Skate
+     gauge during a running simulation.
+   - Works regardless of unit toggle — the ref line projects through the
+     `pressure_psi_fixed` dim so it stays in psi even when the viewer
+     flips to Metric.
+
+2. **Dossier Email · Address Book**
+   - Reused `GET /api/crew/contacts` on modal open; cached in state after
+     first load so repeat sends chip-in instantly.
+   - Contacts render as toggle chips above the recipients textarea
+     (`[data-testid^="liveops-dossier-email-chip-"]`). Tapping toggles
+     the email in the free-text input; the chosen set is derived from
+     the textarea so free-text additions and chip toggles stay in sync.
+   - Contacts flagged `is_default_recipient` auto-prefill the textarea
+     the first time the modal opens, turning the common handover-send
+     case into a two-tap action.
+   - Playwright confirmed: 3 seeded contacts → 1 non-default white chip,
+     2 default amber ✓ chips, textarea prefilled with both default
+     emails (`supervisor@acme.com, ops@acme.com`).
+

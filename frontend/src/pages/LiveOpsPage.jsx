@@ -9,7 +9,7 @@ import { MiniVonMises, MiniFatigue, LiveGauge, StripChart, RollingTrends, MiniWe
 import { Play, Pause, Wifi, WifiOff, Maximize2, X, Zap, Settings, Rewind, FastForward, StepBack, StepForward, History, Download, StickyNote, Clock, Star, Mail, Loader2 } from "lucide-react";
 import { postSampleResilient, drainOfflineQueue, offlineQueueLength, startOfflineDrain } from "../lib/offlineQueue";
 import { samplesToCSV, samplesToLAS, downloadBlob } from "../lib/playbackExport";
-import { triaxialVonMises, intervalAt } from "../lib/ctPhysics";
+import { triaxialVonMises, intervalAt, DEFAULT_SKATE } from "../lib/ctPhysics";
 import ShareLinksButton from "../components/ShareLinksButton";
 import JobLogPlayback from "../components/JobLogPlayback";
 import { AnnotationPins, DropAnnotationModal, ViewAnnotationModal } from "../components/AnnotationLayer";
@@ -350,6 +350,57 @@ export default function LiveOpsPage() {
   const [officeRecipients, setOfficeRecipients] = useState("");
   const [officeNote, setOfficeNote] = useState("");
   const [sendingOffice, setSendingOffice] = useState(false);
+  // Address book — reused from the Crew Contacts endpoint so office emails
+  // auto-complete instead of being typed by hand every send.
+  const [officeContacts, setOfficeContacts] = useState([]);
+  const [officeContactsLoading, setOfficeContactsLoading] = useState(false);
+
+  // Current set of chosen emails (lowercase, deduped) derived from the
+  // free-text input — used to render selected state on contact chips.
+  const chosenEmails = useMemo(() => {
+    return new Set(
+      officeRecipients
+        .split(/[,;\s]+/)
+        .map((x) => x.trim().toLowerCase())
+        .filter(Boolean)
+    );
+  }, [officeRecipients]);
+
+  const toggleContact = (email) => {
+    const e = (email || "").trim().toLowerCase();
+    if (!e) return;
+    const already = chosenEmails.has(e);
+    if (already) {
+      // Remove this email from the free-text field.
+      const next = [...chosenEmails].filter((x) => x !== e).join(", ");
+      setOfficeRecipients(next);
+    } else {
+      const next = officeRecipients.trim();
+      setOfficeRecipients(next ? `${next}, ${e}` : e);
+    }
+  };
+
+  // Load contacts the first time the modal opens; keep them cached after
+  // that so chips flash in instantly on repeat sends.
+  useEffect(() => {
+    if (!sendOfficeOpen || officeContacts.length || officeContactsLoading) return;
+    setOfficeContactsLoading(true);
+    axios.get(`${API}/crew/contacts`, { withCredentials: true })
+      .then((r) => {
+        const list = r.data?.contacts || [];
+        setOfficeContacts(list);
+        // Pre-fill the input with default recipients so the common
+        // handover-send case is a two-tap operation.
+        if (!officeRecipients.trim()) {
+          const defaults = list
+            .filter((c) => c.is_default_recipient && c.email)
+            .map((c) => c.email.toLowerCase());
+          if (defaults.length) setOfficeRecipients(defaults.join(", "));
+        }
+      })
+      .catch((e) => console.debug("[LiveOps] crew contacts load failed", e?.response?.status || e?.message))
+      .finally(() => setOfficeContactsLoading(false));
+  }, [sendOfficeOpen, officeContacts.length, officeContactsLoading, officeRecipients]);
 
   const sendDossierToOffice = async () => {
     const parsed = officeRecipients
@@ -780,6 +831,15 @@ export default function LiveOpsPage() {
         // skate-fixed-psi dim so the pen keeps the primary unit.
         const skateSrc = (replaySamples.length ? replaySamples : samples).slice(-60);
         const skateTrend = skateSrc.map((s) => u.from(s.traction_pressure_psi || 0, "pressure_psi_fixed"));
+        // OEM recommended-max line — stamped across the sparkline band so the
+        // tool push instantly sees when the pen crosses the manufacturer
+        // limit (anti-slip skate pressure per `DEFAULT_SKATE.recommended_max_psi`).
+        const oemMaxPsi = DEFAULT_SKATE.recommended_max_psi; // psi, invariant
+        const skateTrendRefs = [{
+          value: u.from(oemMaxPsi, "pressure_psi_fixed"),
+          color: "#C00000",
+          label: `OEM ${oemMaxPsi} psi`,
+        }];
         return <LiveGauge
           title={`Skate · K_t ${sm.kt.toFixed(2)} · ${sm.label}`}
           unit={u.label("pressure_psi_fixed")}
@@ -791,6 +851,7 @@ export default function LiveOpsPage() {
           large={large}
           secondary={skateSecondary}
           trend={skateTrend}
+          trendRefs={skateTrendRefs}
           color={sm.severity === "crit" ? "#EF4444" : sm.severity === "warn" ? "#F59E0B" : "#10B981"} />;
       }
       case "wellbore":
@@ -1202,6 +1263,44 @@ export default function LiveOpsPage() {
               ><X className="w-4 h-4" /></button>
             </div>
             <div className="p-4 space-y-3">
+              {/* Address-book chips — pulled from GET /api/crew/contacts.
+                  Tapping toggles the email in the free-text field, so the
+                  tool push doesn't have to type the office address every
+                  send. Defaults auto-fill on first open. */}
+              {(officeContactsLoading || officeContacts.length > 0) && (
+                <div data-testid="liveops-dossier-email-contacts">
+                  <label className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">
+                    Crew address book
+                    {officeContactsLoading && <span className="ml-1 font-normal normal-case text-slate-500">loading…</span>}
+                  </label>
+                  <div className="flex flex-wrap gap-1 max-h-[90px] overflow-y-auto">
+                    {officeContacts.map((c) => {
+                      const isOn = chosenEmails.has((c.email || "").toLowerCase());
+                      return (
+                        <button
+                          key={c.contact_id || c.email}
+                          data-testid={`liveops-dossier-email-chip-${(c.email || "").replace(/[^a-z0-9]/gi, "")}`}
+                          type="button"
+                          onClick={() => toggleContact(c.email)}
+                          disabled={sendingOffice}
+                          title={c.role ? `${c.role}` : undefined}
+                          className={`text-[10px] font-semibold rounded-full px-2 py-0.5 border transition-colors ${
+                            isOn
+                              ? "bg-amber-400 text-black border-amber-300 shadow-[0_0_0_1px_rgba(245,158,11,0.4)]"
+                              : "bg-white/5 text-slate-300 border-white/15 hover:bg-white/10"
+                          } disabled:opacity-40`}
+                        >
+                          {isOn && <span className="mr-1">✓</span>}
+                          {c.name || c.email}
+                        </button>
+                      );
+                    })}
+                    {!officeContactsLoading && officeContacts.length === 0 && (
+                      <span className="text-[10px] text-slate-500 italic">No saved crew contacts yet — add them under Team → Contacts.</span>
+                    )}
+                  </div>
+                </div>
+              )}
               <div>
                 <label className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Office recipients <span className="text-slate-500 font-normal normal-case">(up to 5, comma-separated)</span></label>
                 <textarea

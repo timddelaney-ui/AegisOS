@@ -111,7 +111,11 @@ export function MiniFatigue({ damage = [], spacing = 100, worst = 0, large = fal
 // display units as `value` — rendered as a 60s micro-sparkline at the bottom
 // of the gauge body so the tool push can see trend direction without opening
 // the full chart.
-export function LiveGauge({ title, unit, value, min = 0, max = 100, criticalAbove, warnAbove, large = false, color = "#0056B3", digits = 0, secondary = null, trend = null }) {
+// `trendRefs` (optional): array of `{value, color, label}` reference lines
+// drawn across the sparkline band — e.g. OEM recommended max-psi for the
+// injector skate so a pen crossing the manufacturer limit is instantly
+// visible without reading the number.
+export function LiveGauge({ title, unit, value, min = 0, max = 100, criticalAbove, warnAbove, large = false, color = "#0056B3", digits = 0, secondary = null, trend = null, trendRefs = null }) {
   const v = Number(value) || 0;
   const pct = Math.max(0, Math.min(1, (v - min) / (max - min)));
   const angle = -120 + pct * 240; // -120° to +120°
@@ -185,23 +189,53 @@ export function LiveGauge({ title, unit, value, min = 0, max = 100, criticalAbov
           {hasTrend && (() => {
             const vals = trend.filter((n) => Number.isFinite(n));
             if (vals.length < 2) return null;
-            const lo = Math.min(...vals);
-            const hi = Math.max(...vals);
+            const refs = Array.isArray(trendRefs) ? trendRefs.filter((rf) => Number.isFinite(rf?.value)) : [];
+            // When a ref line is given, expand the lo/hi so it's always
+            // visible in the band — otherwise a line that sits above the
+            // sample range would be clipped off the top.
+            const refVals = refs.map((rf) => rf.value);
+            const lo = Math.min(...vals, ...refVals);
+            const hi = Math.max(...vals, ...refVals);
             const spread = Math.max(hi - lo, 1e-6);
             const bandL = toXY(-120).x - 4;
             const bandR = toXY(120).x + 4;
             const bandW = bandR - bandL;
             const step = bandW / (vals.length - 1);
-            const path = vals.map((val, i) => {
-              const x = bandL + i * step;
-              const y = bandY + bandH - ((val - lo) / spread) * bandH;
-              return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
-            }).join(" ");
+            const yFor = (val) => bandY + bandH - ((val - lo) / spread) * bandH;
+            const path = vals.map((val, i) => `${i === 0 ? "M" : "L"}${(bandL + i * step).toFixed(1)},${yFor(val).toFixed(1)}`).join(" ");
             const lastX = bandL + (vals.length - 1) * step;
-            const lastY = bandY + bandH - ((vals[vals.length - 1] - lo) / spread) * bandH;
+            const lastY = yFor(vals[vals.length - 1]);
             return (
               <g data-testid="livegauge-trend-spark" opacity="0.95">
                 <rect x={bandL} y={bandY} width={bandW} height={bandH} fill="#F8FAFC" stroke="#E2E8F0" strokeWidth="0.5" rx="1" />
+                {/* Reference lines (e.g. OEM recommended max) — rendered BEHIND the sample path */}
+                {refs.map((rf, i) => {
+                  const y = yFor(rf.value);
+                  const breaches = vals.some((v) => v > rf.value);
+                  const stroke = rf.color || (breaches ? "#C00000" : "#C36600");
+                  return (
+                    <g key={`gref-${i}`} data-testid="livegauge-trend-ref">
+                      <line
+                        x1={bandL} y1={y.toFixed(1)} x2={bandR} y2={y.toFixed(1)}
+                        stroke={stroke}
+                        strokeWidth="0.8"
+                        strokeDasharray="2 2"
+                        opacity={breaches ? 0.9 : 0.6}
+                      />
+                      {rf.label && (
+                        <text
+                          x={bandR - 2}
+                          y={(y - 2).toFixed(1)}
+                          fontSize="6.5"
+                          fill={stroke}
+                          textAnchor="end"
+                          fontWeight="700"
+                          className="tabular-nums"
+                        >{rf.label}</text>
+                      )}
+                    </g>
+                  );
+                })}
                 <path d={path} stroke={critical ? "#C00000" : warn ? "#C36600" : color} strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
                 <circle cx={lastX} cy={lastY} r="1.5" fill={critical ? "#C00000" : warn ? "#C36600" : color} />
                 <text x={bandL - 2} y={bandY + bandH + 7} fontSize="7" fill="#64748B" textAnchor="start" className="tabular-nums">T−60s</text>
