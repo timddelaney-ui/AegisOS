@@ -3310,6 +3310,8 @@ class TreatmentEntryCreate(BaseModel):
     kind: Optional[str] = "note"     # 'note' | 'event' | 'npt'
     npt_category: Optional[str] = None   # equipment | weather | wait_on_well | hse | other
     npt_minutes: Optional[int] = None    # duration for NPT entries
+    operation_code: Optional[int] = None # 1..69 from the open-domain operation dialect
+    telemetry_snapshot: Optional[Dict[str, Any]] = None  # {depth_ft, weight_lb, p_internal_psi, p_external_psi, traction_pressure_psi, vm_utilization, fatigue_worst, source}
 
 
 class TreatmentEntryUpdate(BaseModel):
@@ -3318,6 +3320,7 @@ class TreatmentEntryUpdate(BaseModel):
     kind: Optional[str] = None
     npt_category: Optional[str] = None
     npt_minutes: Optional[int] = None
+    operation_code: Optional[int] = None
 
 
 @api_router.get("/treatments")
@@ -3503,6 +3506,37 @@ async def add_treatment_entry(treatment_id: str, body: TreatmentEntryCreate, use
         "event_at": event_at,
         **_validate_entry_kind(body.kind, body.npt_category, body.npt_minutes),
     }
+    # Operation Dialect code (1..69) — open-domain CT activity code library.
+    if body.operation_code is not None:
+        if not isinstance(body.operation_code, int) or not (1 <= body.operation_code <= 69):
+            raise HTTPException(400, "operation_code must be an integer between 1 and 69.")
+        doc["operation_code"] = body.operation_code
+    # Live-telemetry snapshot: either client-supplied (preferred — it's the
+    # exact tick the note was dropped on) or auto-snapped from the latest
+    # live-ops sample for this rig if the client didn't send one.
+    snap = body.telemetry_snapshot
+    if not snap and body.operation_code is not None:
+        try:
+            latest = await db.liveops_samples.find_one(
+                {"team_id": team_id, "rig_id": trt["rig_id"]},
+                {"_id": 0}, sort=[("created_at", -1)]
+            )
+            if latest:
+                snap = {
+                    k: latest.get(k) for k in (
+                        "depth_ft", "weight_lb", "pressure_psi", "p_internal_psi",
+                        "p_external_psi", "traction_pressure_psi", "axial_force_lbf",
+                        "vm_utilization", "fatigue_worst", "source",
+                    ) if latest.get(k) is not None
+                }
+                snap["sampled_at"] = latest.get("created_at")
+        except Exception:
+            logger.debug("telemetry snapshot auto-capture failed", exc_info=True)
+    if snap:
+        # Normalize datetime fields to ISO strings so the entry is JSON-safe.
+        if isinstance(snap.get("sampled_at"), datetime):
+            snap["sampled_at"] = snap["sampled_at"].astimezone(timezone.utc).isoformat()
+        doc["telemetry_snapshot"] = snap
     await db.treatment_entries.insert_one(doc)
     # Roll-up counters on the treatment doc
     await db.treatments.update_one(
@@ -3553,6 +3587,10 @@ async def edit_treatment_entry(treatment_id: str, entry_id: str, body: Treatment
         merged_cat = body.npt_category if body.npt_category is not None else entry.get("npt_category")
         merged_min = body.npt_minutes if body.npt_minutes is not None else entry.get("npt_minutes")
         update.update(_validate_entry_kind(merged_kind, merged_cat, merged_min))
+    if body.operation_code is not None:
+        if not isinstance(body.operation_code, int) or not (1 <= body.operation_code <= 69):
+            raise HTTPException(400, "operation_code must be an integer between 1 and 69.")
+        update["operation_code"] = body.operation_code
     await db.treatment_entries.update_one(
         {"entry_id": entry_id, "treatment_id": treatment_id, "team_id": team_id},
         {"$set": update},

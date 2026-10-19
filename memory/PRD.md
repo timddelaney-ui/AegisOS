@@ -390,6 +390,47 @@ join only.
 ## Mini Wellbore docked on LiveOps — 2026-02-18
 
 ## Job-Log Playback — CSV / LAS / WITS — 2026-02-18
+
+## Operation Dialect + Treatment-Log ↔ Telemetry Link — 2026-02-18
+- New `/app/frontend/src/lib/operationCodes.js` — 69-code open-domain
+  CT activity dialect grouped into 8 phases: RIG · RIH · CIRC · STIM ·
+  MECH · WELL · POOH · SAFETY · NPT. Each code has an industry-standard
+  default description editable per entry (sources: IADC phase codes,
+  SPE 68489, API RP 5C7 Appendix C).
+- Phase → palette map (`PHASE_COLOR`) ties codes to the enterprise
+  semantic colors (amber ops, cyan telemetry, purple stim, brand orange
+  mech, emerald well-control, crimson NPT).
+- Backend `TreatmentEntryCreate` / `TreatmentEntryUpdate` gain
+  `operation_code: int 1..69` and `telemetry_snapshot: dict` fields.
+  If the client doesn't supply a snapshot but does supply a code, the
+  entry route auto-queries `liveops_samples` for the latest rig-scoped
+  sample and attaches it (`depth_ft, weight_lb, p_internal_psi,
+  p_external_psi, traction_pressure_psi, axial_force_lbf,
+  vm_utilization, fatigue_worst, source, sampled_at`).
+- Drop-Note modal on LiveOps fully rebuilt:
+  * SNAPSHOT bar showing the exact live tick the note anchors to
+    (time, depth, weight, P_int, Skate, VM%).
+  * Operation code picker — searchable, grouped by phase, 2-col grid.
+  * Selecting a code pre-fills the description; user can inline-edit
+    before submit (with "· edited" chip when deviated).
+  * Codes 67 / 68 / 69 auto-set severity = critical and map to
+    `npt_category = equipment / weather / wait_on_well`.
+  * Submit button changes label to `Log #NN + Timeline` when a code is
+    attached.
+- `submitDrop()` is now dual-write: posts the annotation (as before)
+  AND, when a code is picked and a treatment is active on the rig,
+  posts a treatment entry with the telemetry snapshot. Toast reads
+  `#NN logged to treatment + timeline` on success.
+- TreatmentPage entry cards gain:
+  * `#NN · <LABEL>` phase-colored op-code chip in the author row.
+  * `● LIVE SNAPSHOT` inline strip under the entry text with Depth, Wt,
+    P_int, P_whp, Skate, VM%, Fat% — the exact field values at the
+    moment the note was dropped.
+- Smoke test confirmed end-to-end: POST entry with code=40 and manual
+  snapshot stores correctly, TreatmentPage renders the "#40 · MILLING"
+  chip + live-snapshot strip, LiveOps drop modal shows phase-grouped
+  picker + live snapshot bar.
+
 - New `/app/frontend/src/lib/jobLogParser.js` — unified parser for:
   * **CSV / TSV** with case-insensitive canonical header aliases (depth,
     md, hookload, pumppressure, skate, etc.). Auto-detects delimiter and

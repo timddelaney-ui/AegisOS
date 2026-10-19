@@ -455,13 +455,47 @@ export default function LiveOpsPage() {
     return Date.now();
   };
 
-  const submitDrop = async ({ note, severity, timestamp_ms, depth_ft }) => {
+  const submitDrop = async ({ note, severity, timestamp_ms, depth_ft, operation_code, telemetry_snapshot, kind, npt_category }) => {
     try {
+      // 1) Timeline annotation — always
       await axios.post(`${API}/liveops/annotations`, {
         timestamp_ms, note, severity, depth_ft,
       }, { withCredentials: true });
-      toast.success("Note dropped on timeline");
+
+      // 2) Treatment-log entry — only when an operation code is picked AND
+      //    there's an active treatment on this rig. The treatment entry
+      //    stores the full telemetry snapshot so it's auditable later.
+      let treatmentLogged = false;
+      if (operation_code) {
+        try {
+          const r = await axios.get(`${API}/treatments/active`, {
+            params: { rig_id: rigId }, withCredentials: true,
+          });
+          const trt = r.data?.treatment;
+          if (trt?.treatment_id) {
+            await axios.post(`${API}/treatments/${trt.treatment_id}/entries`, {
+              text: note,
+              operation_code,
+              telemetry_snapshot,
+              kind: kind || "event",
+              npt_category: npt_category || null,
+              event_at: new Date(timestamp_ms).toISOString(),
+            }, { withCredentials: true });
+            treatmentLogged = true;
+          }
+        } catch (e) {
+          console.debug("[LiveOps] dual-write treatment entry failed", e?.response?.status || e?.message);
+        }
+      }
+
+      toast.success(treatmentLogged
+        ? `#${operation_code} logged to treatment + timeline`
+        : operation_code
+          ? "Note dropped on timeline (start a treatment to also log it)"
+          : "Note dropped on timeline"
+      );
       await refreshAnnotations();
+      if (treatmentLogged) await refreshTreatmentEvents();
     } catch (e) {
       toast.error(e.response?.data?.detail || "Failed to drop note");
     }

@@ -13,6 +13,7 @@ import RigSelector from "../components/RigSelector";
 import { usePullToRefresh, PullIndicator } from "../hooks/usePullToRefresh";
 import { fmtTime as fmtClock, fmtShort as fmtTime } from "../lib/timeFormat";
 import LiveStripSidebar from "../components/LiveStripSidebar";
+import { OPERATION_CODE_BY_NUM, PHASE_COLOR } from "../lib/operationCodes";
 
 const POLL_MS = 3000;
 
@@ -338,6 +339,15 @@ const TreatmentEntryRow = ({ entry, mine, treatmentId, onPatched, onDeleted }) =
             </span>
           )}
           <User className="w-3 h-3" /> {entry.author_name}
+          {entry.operation_code && OPERATION_CODE_BY_NUM[entry.operation_code] && (
+            <span
+              data-testid={`treatment-entry-opcode-${entry.entry_id}`}
+              className="inline-flex items-center gap-1 text-[9px] font-bold uppercase px-1.5 py-0.5 rounded"
+              style={{ background: PHASE_COLOR[OPERATION_CODE_BY_NUM[entry.operation_code].phase] + "25", color: PHASE_COLOR[OPERATION_CODE_BY_NUM[entry.operation_code].phase] }}
+              title={OPERATION_CODE_BY_NUM[entry.operation_code].desc}>
+              #{String(entry.operation_code).padStart(2, "0")} · {OPERATION_CODE_BY_NUM[entry.operation_code].label}
+            </span>
+          )}
           {wasBackdated && (
             <span className="text-[9px] font-normal italic text-[#C36600]">· logged {stampBar(createdAt)}</span>
           )}
@@ -373,7 +383,23 @@ const TreatmentEntryRow = ({ entry, mine, treatmentId, onPatched, onDeleted }) =
           </div>
         ) : (
           <div className="flex items-start gap-1">
-            <div className="text-[13px] text-[#262626] whitespace-pre-wrap break-words flex-1">{entry.text}</div>
+            <div className="flex-1">
+              <div className="text-[13px] text-[#262626] whitespace-pre-wrap break-words">{entry.text}</div>
+              {entry.telemetry_snapshot && (
+                <div
+                  data-testid={`treatment-entry-snapshot-${entry.entry_id}`}
+                  className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[10px] tabular-nums text-[#595959] bg-[#F5F7FA] rounded px-1.5 py-1 border border-[#E2E8F0]">
+                  <span className="font-bold uppercase tracking-wider text-[9px] text-[#1E293B]">● Live snapshot</span>
+                  {entry.telemetry_snapshot.depth_ft != null && <span>Depth <b className="text-[#0E7490]">{Math.round(entry.telemetry_snapshot.depth_ft)} ft</b></span>}
+                  {entry.telemetry_snapshot.weight_lb != null && <span>Wt <b>{Math.round(entry.telemetry_snapshot.weight_lb)} lbs</b></span>}
+                  {entry.telemetry_snapshot.p_internal_psi != null && <span>P_int <b className="text-[#B91C1C]">{Math.round(entry.telemetry_snapshot.p_internal_psi)} psi</b></span>}
+                  {entry.telemetry_snapshot.p_external_psi != null && <span>P_whp <b>{Math.round(entry.telemetry_snapshot.p_external_psi)} psi</b></span>}
+                  {entry.telemetry_snapshot.traction_pressure_psi != null && <span>Skate <b className="text-[#B45309]">{Math.round(entry.telemetry_snapshot.traction_pressure_psi)} psi</b></span>}
+                  {entry.telemetry_snapshot.vm_utilization != null && <span>VM <b className="text-[#6D28D9]">{(entry.telemetry_snapshot.vm_utilization * 100 * 0.8).toFixed(1)}%</b></span>}
+                  {entry.telemetry_snapshot.fatigue_worst != null && <span>Fat <b>{(entry.telemetry_snapshot.fatigue_worst * 100).toFixed(2)}%</b></span>}
+                </div>
+              )}
+            </div>
             {mine && (
               <div className="flex gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                 <button data-testid={`treatment-entry-edit-btn-${entry.entry_id}`} onClick={() => setEditing(true)} className="p-0.5 text-[#FF6B1A] hover:bg-[#FFF7EF] rounded tap-44" aria-label="Edit"><Pencil className="w-3 h-3" /></button>

@@ -1,5 +1,6 @@
-import React, { useState } from "react";
-import { AlertTriangle, Info, Zap, X, Edit2, Trash2, Cpu, Star } from "lucide-react";
+import React, { useMemo, useState } from "react";
+import { AlertTriangle, Info, Zap, X, Edit2, Trash2, Cpu, Star, Hash, ChevronDown, ChevronRight } from "lucide-react";
+import { OPERATION_CODES, OPERATION_CODE_BY_NUM, OPERATION_PHASES, PHASE_COLOR, OPERATION_CODE_NPT_CATEGORY } from "../lib/operationCodes";
 
 const SEVERITY_COLOR = {
   info:     { bg: "#0056B3", ring: "#60A5FA", label: "INFO" },
@@ -69,12 +70,50 @@ export function AnnotationPins({ annotations, samples, onPinClick }) {
 }
 
 /**
- * Modal: drop a new annotation at the current timestamp.
+ * Modal: drop a new annotation at the current timestamp. If an operation
+ * code (1..69) is picked from the open-domain CT dialect, we also push a
+ * treatment-log entry with the live-telemetry snapshot so the official
+ * job report is kept in sync without extra keystrokes.
  */
 export function DropAnnotationModal({ open, onClose, onSubmit, timestampMs, snapshot }) {
   const [note, setNote] = useState("");
   const [severity, setSeverity] = useState("warn");
   const [busy, setBusy] = useState(false);
+  // Operation Dialect state
+  const [codeNum, setCodeNum] = useState(null);
+  const [query, setQuery] = useState("");
+  const [showPicker, setShowPicker] = useState(false);
+
+  const activeCode = codeNum != null ? OPERATION_CODE_BY_NUM[codeNum] : null;
+  const descriptionEdited = useMemo(() => {
+    if (!activeCode) return false;
+    return note.trim() !== activeCode.desc.trim();
+  }, [note, activeCode]);
+
+  const groupedCodes = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const filtered = OPERATION_CODES.filter((c) =>
+      !q ||
+      c.label.toLowerCase().includes(q) ||
+      c.desc.toLowerCase().includes(q) ||
+      String(c.code).startsWith(q) ||
+      c.phase.toLowerCase().includes(q)
+    );
+    const by = {};
+    for (const c of filtered) (by[c.phase] = by[c.phase] || []).push(c);
+    return by;
+  }, [query]);
+
+  const pickCode = (c) => {
+    setCodeNum(c.code);
+    setNote(c.desc);
+    setShowPicker(false);
+    setQuery("");
+    // If the picked code is an NPT category, lift severity to critical
+    if (OPERATION_CODE_NPT_CATEGORY[c.code]) setSeverity("critical");
+  };
+
+  const clearCode = () => { setCodeNum(null); setNote(""); };
 
   if (!open) return null;
 
@@ -82,9 +121,32 @@ export function DropAnnotationModal({ open, onClose, onSubmit, timestampMs, snap
     if (!note.trim()) return;
     setBusy(true);
     try {
-      await onSubmit({ note: note.trim(), severity, timestamp_ms: timestampMs, depth_ft: snapshot?.depth_ft });
+      // Build the telemetry snapshot in the Pydantic-friendly shape used by the backend
+      const snap = {
+        depth_ft: snapshot?.depth_ft,
+        weight_lb: snapshot?.weight_lb,
+        p_internal_psi: snapshot?.p_internal_psi || snapshot?.pressure_psi,
+        p_external_psi: snapshot?.p_external_psi,
+        traction_pressure_psi: snapshot?.traction_pressure_psi,
+        axial_force_lbf: snapshot?.axial_force_lbf,
+        vm_utilization: snapshot?.vm_utilization,
+        fatigue_worst: snapshot?.fatigue_worst,
+        source: snapshot?.source || "live",
+      };
+      const nptCat = OPERATION_CODE_NPT_CATEGORY[codeNum];
+      await onSubmit({
+        note: note.trim(),
+        severity,
+        timestamp_ms: timestampMs,
+        depth_ft: snapshot?.depth_ft,
+        operation_code: codeNum,
+        telemetry_snapshot: snap,
+        kind: nptCat ? "npt" : (codeNum ? "event" : "note"),
+        npt_category: nptCat || null,
+      });
       setNote("");
       setSeverity("warn");
+      setCodeNum(null);
       onClose();
     } finally { setBusy(false); }
   };
@@ -95,27 +157,109 @@ export function DropAnnotationModal({ open, onClose, onSubmit, timestampMs, snap
       className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4"
       onClick={onClose}
     >
-      <div onClick={(e) => e.stopPropagation()} className="bg-[#111827] border border-white/20 text-white rounded-lg w-full max-w-md p-4">
+      <div onClick={(e) => e.stopPropagation()} className="ca-glass ca-glass-amber text-white rounded-lg w-full max-w-xl p-4 relative">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="font-bold text-sm uppercase tracking-wider">Drop timeline note</h3>
+          <h3 className="font-bold text-sm uppercase tracking-wider text-[#F59E0B] flex items-center gap-2">
+            <Hash className="w-4 h-4" /> Operation Dialect · Drop Note
+          </h3>
           <button data-testid="annotation-drop-close" onClick={onClose} className="text-white/60 hover:text-white"><X className="w-4 h-4" /></button>
         </div>
-        <p className="text-[11px] text-white/60 mb-3">
-          Timestamp: <span className="tabular-nums text-amber-300">{new Date(timestampMs).toLocaleTimeString()}</span>
-          {snapshot?.depth_ft != null && <span className="ml-2">Depth: <span className="tabular-nums text-white">{Math.round(snapshot.depth_ft)} ft</span></span>}
-        </p>
+
+        {/* Telemetry snapshot preview — this is the live tick this note is anchored to */}
+        <div data-testid="drop-telemetry-snapshot" className="bg-[#0A1220] border border-white/10 rounded px-2 py-1.5 mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] ca-telemetry">
+          <span className="ca-eyebrow ca-eyebrow-cyan">Snapshot</span>
+          <span className="text-slate-400">{new Date(timestampMs).toLocaleTimeString()}</span>
+          {snapshot?.depth_ft != null  && <span>DEPTH <b className="text-[#06B6D4]">{Math.round(snapshot.depth_ft)} ft</b></span>}
+          {snapshot?.weight_lb != null && <span>WT <b className="text-white">{Math.round(snapshot.weight_lb)} lbs</b></span>}
+          {snapshot?.p_internal_psi != null && <span>P_int <b className="text-[#EF4444]">{Math.round(snapshot.p_internal_psi)} psi</b></span>}
+          {snapshot?.traction_pressure_psi != null && <span>SKATE <b className="text-[#F59E0B]">{Math.round(snapshot.traction_pressure_psi)} psi</b></span>}
+          {snapshot?.vm_utilization != null && <span>VM <b className="text-[#A78BFA]">{(snapshot.vm_utilization * 100 * 0.8).toFixed(1)}%</b></span>}
+        </div>
+
+        {/* Operation code picker */}
+        <div className="mb-3">
+          <label className="ca-eyebrow mb-1 block">Operation Code (1–69)</label>
+          {activeCode ? (
+            <div className="flex items-center gap-2 bg-[#0A1220] border border-white/15 rounded px-2 py-1.5">
+              <span
+                className="text-[10px] font-bold px-1.5 py-0.5 rounded text-black"
+                style={{ background: PHASE_COLOR[activeCode.phase] }}>
+                #{String(activeCode.code).padStart(2, "0")} · {activeCode.phase}
+              </span>
+              <span className="text-xs font-bold text-white">{activeCode.label}</span>
+              <button
+                data-testid="drop-op-change"
+                onClick={() => setShowPicker(!showPicker)}
+                className="ml-auto text-[10px] font-bold text-[#F59E0B] hover:text-white uppercase tracking-wider">
+                Change <ChevronDown className="inline w-3 h-3" />
+              </button>
+              <button
+                data-testid="drop-op-clear"
+                onClick={clearCode}
+                className="text-[10px] font-bold text-slate-400 hover:text-[#EF4444]"><X className="w-3.5 h-3.5" /></button>
+            </div>
+          ) : (
+            <button
+              data-testid="drop-op-open"
+              onClick={() => setShowPicker(true)}
+              className="w-full text-left bg-[#0A1220] border border-white/15 rounded px-2 py-1.5 text-xs text-slate-400 hover:border-[#F59E0B] hover:text-white">
+              Pick a code to auto-fill the description →
+            </button>
+          )}
+
+          {showPicker && (
+            <div data-testid="drop-op-picker" className="mt-2 bg-[#0A1220] border border-[#F59E0B]/40 rounded max-h-[280px] overflow-y-auto p-2">
+              <input
+                data-testid="drop-op-search"
+                autoFocus
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search codes · milling · N2 · NPT…"
+                className="w-full bg-black/40 border border-white/10 rounded px-2 py-1 text-xs mb-2 placeholder:text-slate-500" />
+              {OPERATION_PHASES.map((phase) => {
+                const codes = groupedCodes[phase];
+                if (!codes?.length) return null;
+                return (
+                  <div key={phase} className="mb-2">
+                    <div className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest mb-1" style={{ color: PHASE_COLOR[phase] }}>
+                      <ChevronRight className="w-3 h-3" />{phase}
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+                      {codes.map((c) => (
+                        <button
+                          key={c.code}
+                          data-testid={`drop-op-${c.code}`}
+                          onClick={() => pickCode(c)}
+                          className="text-left px-2 py-1 rounded border border-white/5 hover:border-[#F59E0B]/60 hover:bg-white/5">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[9px] font-mono text-slate-500">#{String(c.code).padStart(2, "0")}</span>
+                            <span className="text-[11px] font-bold text-white">{c.label}</span>
+                          </div>
+                          <p className="text-[10px] text-slate-400 truncate leading-tight">{c.desc}</p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Editable description */}
+        <label className="ca-eyebrow mb-1 block">Description {descriptionEdited && <span className="text-[9px] text-[#F59E0B] ml-1">· edited</span>}</label>
         <textarea
           data-testid="annotation-note-input"
           value={note}
           onChange={(e) => setNote(e.target.value)}
-          placeholder='e.g. "pressure spike here — pump failure at surface"'
+          placeholder={activeCode ? activeCode.desc : 'e.g. "pressure spike here — pump failure at surface"'}
           rows={3}
-          maxLength={500}
-          className="w-full bg-black/40 border border-white/20 rounded px-2 py-1.5 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-amber-400"
-          autoFocus
+          maxLength={2000}
+          className="w-full bg-black/40 border border-white/15 rounded px-2 py-1.5 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-[#F59E0B]"
         />
+
         <div className="mt-3 flex items-center gap-1">
-          <span className="text-[10px] uppercase tracking-wider text-white/50 mr-1">Severity:</span>
+          <span className="ca-eyebrow mr-1">Severity</span>
           {["info", "warn", "critical"].map((s) => {
             const c = SEVERITY_COLOR[s];
             return (
@@ -135,8 +279,8 @@ export function DropAnnotationModal({ open, onClose, onSubmit, timestampMs, snap
             data-testid="annotation-submit"
             disabled={!note.trim() || busy}
             onClick={submit}
-            className="text-xs font-bold px-3 py-1.5 rounded bg-amber-500 text-black disabled:opacity-40">
-            {busy ? "Saving…" : "Drop note"}
+            className="text-xs font-bold px-3 py-1.5 rounded bg-[#F59E0B] text-black disabled:opacity-40 shadow-[0_0_0_1px_rgba(245,158,11,0.5)]">
+            {busy ? "Saving…" : codeNum ? `Log #${codeNum} + Timeline` : "Drop note"}
           </button>
         </div>
       </div>
