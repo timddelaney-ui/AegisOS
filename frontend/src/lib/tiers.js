@@ -75,6 +75,7 @@ export const TIER_SPECS = {
       "Von Mises & CT Drilling calculators",
       "Document vault",
       "Jobs ledger",
+      "Security & Compliance (TLS badge, encrypted notes, AI privacy, audit log)",
     ],
     accent: "#EF4444",     // crimson
     glow: "rgba(239,68,68,0.3)",
@@ -108,17 +109,18 @@ export const FEATURE_SPECS = {
   team_mgmt:        { minTier: TIER_SMALLMED, visibility: "teaser",  label: "Team management" },
 
   // --- Enterprise tier (completely hidden from lower tiers) ---
-  live_ops:         { minTier: TIER_ENTERPRISE, visibility: "hidden", label: "Live Ops console" },
-  daq_ingest:       { minTier: TIER_ENTERPRISE, visibility: "hidden", label: "Live DAQ ingest" },
-  wellbore_3d:      { minTier: TIER_ENTERPRISE, visibility: "hidden", label: "3D Wellbore" },
-  reel_fatigue:     { minTier: TIER_ENTERPRISE, visibility: "hidden", label: "Reel Fatigue" },
-  treatment_log:    { minTier: TIER_ENTERPRISE, visibility: "hidden", label: "Treatment log" },
-  dossier:          { minTier: TIER_ENTERPRISE, visibility: "hidden", label: "Audit Dossier + email" },
-  von_mises:        { minTier: TIER_ENTERPRISE, visibility: "hidden", label: "Von Mises stress" },
-  ct_drill_calc:    { minTier: TIER_ENTERPRISE, visibility: "hidden", label: "CT Drilling calculator" },
-  reels_mgmt:       { minTier: TIER_ENTERPRISE, visibility: "hidden", label: "Reels management" },
-  documents:        { minTier: TIER_ENTERPRISE, visibility: "hidden", label: "Document vault" },
-  jobs_ledger:      { minTier: TIER_ENTERPRISE, visibility: "hidden", label: "Jobs ledger" },
+  live_ops:           { minTier: TIER_ENTERPRISE, visibility: "hidden", label: "Live Ops console" },
+  daq_ingest:         { minTier: TIER_ENTERPRISE, visibility: "hidden", label: "Live DAQ ingest" },
+  wellbore_3d:        { minTier: TIER_ENTERPRISE, visibility: "hidden", label: "3D Wellbore" },
+  reel_fatigue:       { minTier: TIER_ENTERPRISE, visibility: "hidden", label: "Reel Fatigue" },
+  treatment_log:      { minTier: TIER_ENTERPRISE, visibility: "hidden", label: "Treatment log" },
+  dossier:            { minTier: TIER_ENTERPRISE, visibility: "hidden", label: "Audit Dossier + email" },
+  von_mises:          { minTier: TIER_ENTERPRISE, visibility: "hidden", label: "Von Mises stress" },
+  ct_drill_calc:      { minTier: TIER_ENTERPRISE, visibility: "hidden", label: "CT Drilling calculator" },
+  reels_mgmt:         { minTier: TIER_ENTERPRISE, visibility: "hidden", label: "Reels management" },
+  documents:          { minTier: TIER_ENTERPRISE, visibility: "hidden", label: "Document vault" },
+  jobs_ledger:        { minTier: TIER_ENTERPRISE, visibility: "hidden", label: "Jobs ledger" },
+  security_compliance:{ minTier: TIER_ENTERPRISE, visibility: "hidden", label: "Security & Compliance" },
 };
 
 // Routes → feature. `/pricing`, `/login`, `/auth-callback` and `/share/*` are
@@ -146,6 +148,7 @@ export const ROUTE_FEATURES = {
   "/crew-admin":        "rbac_admin",
   "/live-ops":          "live_ops",
   "/daq":               "daq_ingest",
+  "/security":          "security_compliance",
 };
 
 export const tierIndex = (tier) => {
