@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Phase1PageHeader } from "../components/Phase1Header";
 import { useAuth, API } from "../context/AuthContext";
 import { useActiveReel } from "../context/ActiveReelContext";
-import { MiniVonMises, MiniFatigue, LiveGauge, StripChart, RollingTrends } from "../components/LiveOpsPanels";
+import { MiniVonMises, MiniFatigue, LiveGauge, StripChart, RollingTrends, MiniWellbore } from "../components/LiveOpsPanels";
 import { Play, Pause, Wifi, WifiOff, Maximize2, X, Zap, Settings, Rewind, FastForward, StepBack, StepForward, History, Download, StickyNote, Clock, Star } from "lucide-react";
 import { postSampleResilient, drainOfflineQueue, offlineQueueLength, startOfflineDrain } from "../lib/offlineQueue";
 import { samplesToCSV, samplesToLAS, downloadBlob } from "../lib/playbackExport";
@@ -44,6 +44,7 @@ const PANELS = [
   { id: "whp",      label: "Wellhead · P_whp" },
   { id: "dpnet",    label: "Net ΔP" },
   { id: "skate",    label: "Injector Skate · K_t" },
+  { id: "wellbore", label: "Mini Wellbore · DLS/Drag" },
   { id: "chart",    label: "Rolling Trends · 5-pen" },
 ];
 
@@ -133,8 +134,19 @@ export default function LiveOpsPage() {
   const [connected, setConnected] = useState(false); // "connected to unit" toggle (DAQ)
   const [enlarged, setEnlarged] = useState(null);     // panel id for full-screen
   const [fatigue, setFatigue] = useState({ damage: [], spacing: 100, worst_damage: 0 });
-  const [layout, setLayout] = useState(["vm", "fatigue", "weight", "pressure", "whp", "dpnet", "skate", "chart"]);
+  const [layout, setLayout] = useState(["vm", "fatigue", "weight", "pressure", "whp", "dpnet", "skate", "wellbore", "chart"]);
   const [showPrefs, setShowPrefs] = useState(false);
+  // Mini-wellbore state
+  const [miniSurvey, setMiniSurvey] = useState(null);
+  const [wbColorMode, setWbColorMode] = useState(() => {
+    try { return localStorage.getItem("coilaegis_wellbore_colormode") || "dls"; } catch { return "dls"; }
+  });
+  const cycleWbMode = () => {
+    const order = ["dls", "drag", "combined"];
+    const next = order[(order.indexOf(wbColorMode) + 1) % order.length];
+    setWbColorMode(next);
+    try { localStorage.setItem("coilaegis_wellbore_colormode", next); } catch (e) { console.debug("[LiveOps] wb mode persist failed", e?.message); }
+  };
   // Playback mode: scrub backwards through the recorded buffer.
   const [mode, setMode] = useState("live");           // 'live' | 'playback'
   const [playbackIdx, setPlaybackIdx] = useState(0);  // index into samples[]
@@ -185,6 +197,21 @@ export default function LiveOpsPage() {
   }, [rigId]);
 
   useEffect(() => { startOfflineDrain(); }, []);
+
+  // Load active directional survey for the Mini Wellbore panel
+  useEffect(() => {
+    let alive = true;
+    axios.get(`${API}/surveys`, { withCredentials: true })
+      .then((r) => {
+        if (!alive) return;
+        const list = r.data?.surveys || [];
+        const activeId = r.data?.active_survey_id;
+        const survey = list.find((s) => s.survey_id === activeId) || list[0] || null;
+        setMiniSurvey(survey);
+      })
+      .catch((e) => console.debug("[LiveOps] mini-wellbore survey load failed", e?.response?.status || e?.message));
+    return () => { alive = false; };
+  }, []);
 
   const downloadDossier = async () => {
     try {
@@ -544,6 +571,13 @@ export default function LiveOpsPage() {
           large={large}
           color={sm.severity === "crit" ? "#EF4444" : sm.severity === "warn" ? "#F59E0B" : "#10B981"} />;
       }
+      case "wellbore":
+        return <MiniWellbore
+          survey={miniSurvey}
+          depth={latest.depth_ft || currentDepth || 0}
+          colorMode={wbColorMode}
+          onCycleMode={cycleWbMode}
+          large={large} />;
       case "chart": {
         // Project each sample into display-unit space so pens respect Imp/SI
         const projected = chartSamples.map((s) => ({
@@ -833,7 +867,7 @@ export default function LiveOpsPage() {
               key={id}
               data-testid={`panel-${id}`}
               onClick={() => setEnlarged(id)}
-              className={`group relative cursor-pointer ca-glass overflow-hidden hover:ca-glass-orange transition-all ${id === "chart" ? "sm:col-span-2 lg:col-span-3 h-[360px]" : "h-[260px]"}`}>
+              className={`group relative cursor-pointer ca-glass overflow-hidden hover:ca-glass-orange transition-all ${id === "chart" ? "sm:col-span-2 lg:col-span-3 h-[360px]" : id === "wellbore" ? "h-[320px]" : "h-[260px]"}`}>
               <div className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 rounded p-1 backdrop-blur">
                 <Maximize2 className="w-3.5 h-3.5 text-white" />
               </div>

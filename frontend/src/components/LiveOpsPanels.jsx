@@ -1,6 +1,9 @@
 import React from "react";
 import { thinWallVonMises, vmEnvelope, intervalAt, damageColor } from "../lib/ctPhysics";
-import { Activity, Gauge as GaugeIcon } from "lucide-react";
+import { Activity, Gauge as GaugeIcon, Compass } from "lucide-react";
+import { Canvas } from "@react-three/fiber";
+import { OrbitControls, Line, Grid } from "@react-three/drei";
+import * as THREE from "three";
 
 const PAD = 20;
 
@@ -346,6 +349,132 @@ export function RollingTrends({ samples = [], series = [], cursorIndex = null, o
             </text>
           )}
         </svg>
+      </div>
+    </div>
+  );
+}
+
+/*────────────────────────────────────────────────────────────────────
+  MiniWellbore — glanceable 3D trajectory with DLS/Drag coloring and
+  animated BHA tip at the current depth. Lives in the LiveOps grid so
+  sticky zones (colored segments) correlate visually with the exact
+  strip-chart tick on the Rolling Trends panel.
+────────────────────────────────────────────────────────────────────*/
+const _dlsColor = (dls) => {
+  if (dls == null) return "#64748B";
+  if (dls < 3)  return "#10B981";
+  if (dls < 6)  return "#F59E0B";
+  if (dls < 10) return "#FB7185";
+  return "#EF4444";
+};
+const _dragRaw = (st) => {
+  const dls = Number(st?.dls_deg_per_100ft) || 0;
+  const k = (dls * Math.PI / 180) / 100;
+  const inc = (Number(st?.inc_deg) || 0) * Math.PI / 180;
+  return k * k + Math.sin(inc) * Math.sin(inc);
+};
+const _dragColor = (sev) => {
+  if (sev == null) return "#64748B";
+  if (sev < 0.25) return "#10B981";
+  if (sev < 0.50) return "#F59E0B";
+  if (sev < 0.75) return "#FB7185";
+  return "#EF4444";
+};
+const _WB_SCALE = 1 / 60;
+
+function _WellboreLines({ survey, depth, colorMode }) {
+  const pts = React.useMemo(() => {
+    if (!survey?.stations?.length) return [];
+    return survey.stations.map((s) => new THREE.Vector3(
+      (s.east_ft || 0) * _WB_SCALE,
+      -(s.tvd_ft || 0) * _WB_SCALE,
+      (s.north_ft || 0) * _WB_SCALE,
+    ));
+  }, [survey]);
+  const dragNorm = React.useMemo(() => {
+    if (!survey?.stations?.length) return [];
+    const raws = survey.stations.map(_dragRaw);
+    const hi = Math.max(1e-9, ...raws);
+    return raws.map((r) => r / hi);
+  }, [survey]);
+  const tip = React.useMemo(() => {
+    if (!survey?.stations?.length || !pts.length) return null;
+    const sts = survey.stations;
+    let i = 0;
+    while (i < sts.length - 1 && sts[i + 1].md_ft < depth) i++;
+    if (i >= sts.length - 1) return pts[pts.length - 1];
+    const a = sts[i], b = sts[i + 1];
+    const t = Math.max(0, Math.min(1, (depth - a.md_ft) / Math.max(1, b.md_ft - a.md_ft)));
+    return new THREE.Vector3().lerpVectors(pts[i], pts[i + 1], t);
+  }, [survey, depth, pts]);
+  if (!pts.length) return null;
+  const segs = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const st = survey.stations[i + 1];
+    const dls = st?.dls_deg_per_100ft ?? 0;
+    let color;
+    if (colorMode === "drag") color = _dragColor(dragNorm[i + 1] ?? 0);
+    else if (colorMode === "combined") color = _dragColor(Math.max(Math.min(1, dls / 12), dragNorm[i + 1] ?? 0));
+    else color = _dlsColor(dls);
+    segs.push({ a: pts[i], b: pts[i + 1], color });
+  }
+  return (
+    <group>
+      {segs.map((s, i) => (
+        <Line key={`mws-${i}`} points={[s.a, s.b]} color={s.color} lineWidth={2.3} />
+      ))}
+      {tip && (
+        <mesh position={tip}>
+          <sphereGeometry args={[0.45, 16, 16]} />
+          <meshStandardMaterial color="#FF6B1A" emissive="#FF6B1A" emissiveIntensity={0.9} />
+        </mesh>
+      )}
+    </group>
+  );
+}
+
+export function MiniWellbore({ survey, depth = 0, colorMode = "dls", onCycleMode, large = false }) {
+  const stations = survey?.stations?.length || 0;
+  const hasData = stations > 1;
+  const maxMD = hasData ? survey.stations[stations - 1].md_ft : 0;
+  const modeLabel = colorMode === "drag" ? "DRAG · JOHANCSIK 1984"
+                  : colorMode === "combined" ? "COMBINED SEVERITY"
+                  : "DLS · API RP 7G §4";
+  return (
+    <div className="relative w-full h-full flex flex-col">
+      <div className="flex items-center gap-1.5 px-2 py-1 bg-[#0D1A24] text-white rounded-t border-b border-white/5">
+        <Compass className="w-3.5 h-3.5 text-[#06B6D4]" />
+        <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-300">Wellbore · {stations} stn</span>
+        {hasData && (
+          <button
+            data-testid="mini-wellbore-cycle"
+            onClick={(e) => { e.stopPropagation(); onCycleMode && onCycleMode(); }}
+            className="ml-auto text-[9px] font-bold tracking-wider px-1.5 py-0.5 rounded bg-white/5 border border-white/15 text-[#F59E0B] hover:bg-white/10"
+            title="Cycle DLS / Drag / Combined coloring">
+            {modeLabel}
+          </button>
+        )}
+      </div>
+      <div className="flex-1 bg-[#0A1220] rounded-b overflow-hidden relative">
+        {!hasData ? (
+          <div className="w-full h-full flex items-center justify-center text-slate-500 text-[11px] px-3 text-center">
+            Upload a directional survey on the <b className="text-[#06B6D4]"> Wellbore</b> page to light this panel up.
+          </div>
+        ) : (
+          <>
+            <Canvas camera={{ position: [20, 10, 20], fov: 50 }} dpr={[1, 2]}>
+              <ambientLight intensity={0.65} />
+              <directionalLight position={[20, 30, 20]} intensity={0.75} />
+              <Grid args={[30, 30]} position={[0, 0, 0]} cellColor="#1E293B" sectionColor="#334155" />
+              <_WellboreLines survey={survey} depth={depth} colorMode={colorMode} />
+              <OrbitControls enablePan={false} enableZoom={large} enableRotate autoRotate autoRotateSpeed={0.6} />
+            </Canvas>
+            <div className="absolute bottom-1.5 left-2 right-2 flex items-center justify-between text-[9px] font-mono text-slate-500 pointer-events-none">
+              <span>MD <b className="text-[#06B6D4]">{Math.round(depth)} ft</b> / {Math.round(maxMD)}</span>
+              <span className="text-[#FF6B1A]">● BHA tip</span>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

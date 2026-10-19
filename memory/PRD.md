@@ -386,6 +386,26 @@ join only.
 ## 1 Hz Recorder & 5-Pen Rolling Trends — 2026-02-18
 
 ## DLS + Contact-Drag 3D Wellbore — 2026-02-18
+
+## Mini Wellbore docked on LiveOps — 2026-02-18
+- New `MiniWellbore` component in `LiveOpsPanels.jsx` — glanceable 3D
+  trajectory with DLS / Drag / Combined coloring, animated gold BHA tip
+  that tracks `latest.depth_ft`, auto-rotating `OrbitControls`, and a
+  bottom-strip MD readout + BHA tip legend.
+- Added `wellbore` panel id to `PANELS` array; rendered at 320 px height
+  between the Skate gauge and the full-width Rolling Trends.
+- Shares the `coilaegis_wellbore_colormode` localStorage key with the
+  full `/wellbore` page so cycling the mode on either surface keeps them
+  in sync.
+- Clickable chip in the panel header cycles DLS → Drag → Combined
+  without opening the fullscreen enlarge view (`e.stopPropagation()`).
+- Mini-wellbore survey loaded once on mount via `/api/surveys` (uses
+  active survey, falls back to first available); empty state shows a
+  cyan prompt directing crews to the Wellbore page.
+- Result: colored wellbore segments visually correlate with the exact
+  tick on the Rolling Trends scrubber — sticky zones literally light up
+  next to the chart peak that caused them.
+
 - Fixed inverted DLS color scale: gentle paths are now emerald, severity
   escalates through amber → rose → crimson. Thresholds per API RP 7G §4
   open-domain severity classification.
