@@ -40,6 +40,7 @@ import { UnitProvider } from "./context/UnitContext";
 import { TierProvider, useTier } from "./context/TierContext";
 import TierTutorial, { useTierTutorial } from "./components/TierTutorial";
 import { UpgradeModal, TierProtectedRoute } from "./components/TierGate";
+import AdminTierSwitcher from "./components/AdminTierSwitcher";
 import { ROUTE_FEATURES } from "./lib/tiers";
 import ManagerGreeting from "./components/ManagerGreeting";
 import RedeemDialog from "./components/RedeemDialog";
@@ -276,6 +277,7 @@ const AppRouter = () => {
       <NotificationCenter />
       <UpgradeModal />
       <TierTutorialMount />
+      <AdminTierSwitcher />
       <ResponsiveToaster />
     </>
   );

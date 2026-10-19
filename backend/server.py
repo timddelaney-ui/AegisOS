@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
+import re
 import logging
 import asyncio
 import uuid
@@ -1382,6 +1383,75 @@ async def admin_whoami(user: dict = Depends(require_user)):
     return {"is_admin": _is_admin(user), "email": user["email"]}
 
 
+# ============ ADMIN TIER MANAGEMENT ============
+class AdminTierUpdate(BaseModel):
+    email: str
+    tier: str  # "personal" | "smallmed" | "enterprise"
+
+
+@api_router.get("/admin/users/search")
+async def admin_user_search(q: str = "", user: dict = Depends(require_user)):
+    """Fuzzy-match users by email/name for the Admin Tier Switcher."""
+    if not _is_admin(user):
+        raise HTTPException(403, "Admin only")
+    q = (q or "").strip().lower()
+    if len(q) < 2:
+        return {"users": []}
+    cursor = db.users.find(
+        {"$or": [
+            {"email": {"$regex": re.escape(q), "$options": "i"}},
+            {"name": {"$regex": re.escape(q), "$options": "i"}},
+        ]},
+    ).limit(10)
+    results = []
+    async for u in cursor:
+        results.append({
+            "email": u.get("email"),
+            "name": u.get("name"),
+            "tier": _resolve_user_tier(u),
+            "subscription_status": u.get("subscription_status", "free"),
+            "subscription_plan": u.get("subscription_plan"),
+        })
+    return {"users": results}
+
+
+@api_router.post("/admin/users/tier")
+async def admin_set_tier(body: AdminTierUpdate, user: dict = Depends(require_user)):
+    """Reassign a user's plan tier. Logs an audit row so sales-demo tier
+    flips don't quietly rewrite production records.
+    """
+    if not _is_admin(user):
+        raise HTTPException(403, "Admin only")
+    tier = (body.tier or "").strip().lower()
+    if tier not in _VALID_TIERS:
+        raise HTTPException(400, f"tier must be one of {sorted(_VALID_TIERS)}")
+    email = (body.email or "").strip().lower()
+    if not email:
+        raise HTTPException(400, "email required")
+    target = await db.users.find_one({"email": email})
+    if not target:
+        raise HTTPException(404, "User not found")
+    prev_tier = _resolve_user_tier(target)
+    await db.users.update_one(
+        {"user_id": target["user_id"]},
+        {"$set": {"subscription_tier": tier, "updated_at": datetime.now(timezone.utc)}},
+    )
+    # Audit so a sales-demo tier flip isn't invisible to the team.
+    try:
+        await db.tier_change_log.insert_one({
+            "actor_user_id": user["user_id"],
+            "actor_email": user["email"],
+            "target_user_id": target["user_id"],
+            "target_email": email,
+            "from_tier": prev_tier,
+            "to_tier": tier,
+            "at": datetime.now(timezone.utc),
+        })
+    except Exception:
+        pass
+    return {"success": True, "email": email, "tier": tier, "previous_tier": prev_tier}
+
+
 # ============ INVITE CODE ROUTES ============
 def _new_invite_code():
     # Human-friendly: CT-XXXX-XXXX, avoids ambiguous chars. Cryptographically-secure.
@@ -2066,7 +2136,6 @@ async def crew_handover_summary(rig_id: str, hours: int = 12, user: dict = Depen
 
 
 # ============ HANDOVER EMAIL (Resend) ============
-import re
 import html as _html
 
 _EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")

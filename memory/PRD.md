@@ -863,3 +863,41 @@ teasers, 3 personal tiles rendered unlocked.
   plans offer in-app — upgrade to reveal" disclosure at bottom.
 - Smallmed marked `popular: true` → auto-highlighted when no deep-link.
 
+
+Admin Tier Switcher + BETA_UNLOCK Enforcement (2026-02-19 pm):
+
+1. **BETA_UNLOCK flipped OFF** (`backend/.env`): tiering is now enforced
+   across every route guard and Hub tile. Field Test Beta's 100%-unlocked
+   posture ends; from this point forward lower tiers see hybrid-hidden
+   nav as documented in TIER_SPECS. Flip back to `true` any time to
+   suspend gating globally.
+
+2. **Admin tier management** (`/api/admin/users/*`):
+   - `GET /api/admin/users/search?q=` → fuzzy match by email/name,
+     returns up to 10 users with their current tier.
+   - `POST /api/admin/users/tier` → `{email, tier}` reassigns a user's
+     `subscription_tier`, logs the change in `db.tier_change_log`
+     (`actor_user_id`, `target_email`, `from_tier`, `to_tier`, `at`).
+   - Both routes are admin-only (`_is_admin(user)` gate). Validates
+     `tier` ∈ `{personal, smallmed, enterprise}` with a clear 400.
+   - Verified: flipping tier returned expected `previous_tier` in
+     response, invalid tier returned the validation message.
+
+3. **Admin Tier Switcher UI** (`components/AdminTierSwitcher.jsx`):
+   - Floating shield-FAB docked bottom-right. Only renders when
+     `/api/admin/whoami` reports admin.
+   - Expands to a glass panel with a debounced search box (240 ms),
+     seeded with the viewer themselves so "demo my own account" is a
+     1-tap flow.
+   - Each result row shows name + email + current tier chip + 3-way
+     toggle (Personal / Small-Med / Enterprise) with the active tier
+     highlighted in its accent color.
+   - On flip: green success toast "`email → NewTier (was OldTier)`",
+     row re-badges instantly, and if the admin flipped their OWN tier
+     the `TierContext.refresh()` fires so the Hub re-gates in real
+     time without reloading.
+   - Playwright-verified end-to-end: FAB visible → panel opened → 3
+     demo users returned on "demo" search → clicked Enterprise on
+     `demo.free@example.com` → toast + row re-badge + backend
+     responded `previous_tier: "smallmed"`. Reset after the test.
+
