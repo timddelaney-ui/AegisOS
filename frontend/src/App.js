@@ -37,6 +37,10 @@ import DaqConfigPage from "./pages/DaqConfigPage";
 import ShareRedeemPage from "./pages/ShareRedeemPage";
 import { ActiveReelProvider } from "./context/ActiveReelContext";
 import { UnitProvider } from "./context/UnitContext";
+import { TierProvider, useTier } from "./context/TierContext";
+import TierTutorial, { useTierTutorial } from "./components/TierTutorial";
+import { UpgradeModal, TierProtectedRoute } from "./components/TierGate";
+import { ROUTE_FEATURES } from "./lib/tiers";
 import ManagerGreeting from "./components/ManagerGreeting";
 import RedeemDialog from "./components/RedeemDialog";
 import NotificationCenter from "./components/NotificationCenter";
@@ -203,7 +207,7 @@ const Workbook = () => {
   );
 };
 
-const ProtectedRoute = ({ children }) => {
+const ProtectedRoute = ({ children, feature }) => {
   const { user, loading } = useAuth();
   if (loading) {
     return (
@@ -213,6 +217,9 @@ const ProtectedRoute = ({ children }) => {
     );
   }
   if (!user) return <Navigate to="/login" replace />;
+  // When a feature id is supplied, delegate to the tier-aware guard so
+  // lower-tier users land on /pricing (teaser features) or /hub (hidden).
+  if (feature) return <TierProtectedRoute feature={feature}>{children}</TierProtectedRoute>;
   return children;
 };
 
@@ -233,32 +240,32 @@ const AppRouter = () => {
         <Route path="/pricing" element={<Pricing />} />
         <Route path="/payment/success" element={<PaymentSuccess />} />
         <Route path="/payment/cancel" element={<PaymentCancel />} />
-        <Route path="/app" element={<ProtectedRoute><Workbook /></ProtectedRoute>} />
-        <Route path="/hub" element={<ProtectedRoute><Hub /></ProtectedRoute>} />
-        <Route path="/team" element={<ProtectedRoute><TeamPage /></ProtectedRoute>} />
-        <Route path="/jobs" element={<ProtectedRoute><JobsPage /></ProtectedRoute>} />
+        <Route path="/app" element={<ProtectedRoute feature="workbooks"><Workbook /></ProtectedRoute>} />
+        <Route path="/hub" element={<ProtectedRoute feature="hub"><Hub /></ProtectedRoute>} />
+        <Route path="/team" element={<ProtectedRoute feature="team_mgmt"><TeamPage /></ProtectedRoute>} />
+        <Route path="/jobs" element={<ProtectedRoute feature="jobs_ledger"><JobsPage /></ProtectedRoute>} />
         <Route path="/admin/feedback" element={<ProtectedRoute><AdminFeedback /></ProtectedRoute>} />
         <Route path="/admin/invites" element={<ProtectedRoute><AdminInvites /></ProtectedRoute>} />
         <Route path="/manager" element={<ProtectedRoute><ManagerDashboard /></ProtectedRoute>} />
-        <Route path="/equipment" element={<ProtectedRoute><EquipmentPage /></ProtectedRoute>} />
-        <Route path="/schedule" element={<ProtectedRoute><CrewSchedulePage /></ProtectedRoute>} />
-        <Route path="/treatment" element={<ProtectedRoute><TreatmentPage /></ProtectedRoute>} />
-        <Route path="/ctd-calculator" element={<ProtectedRoute><CTDrillingCalculator /></ProtectedRoute>} />
-        <Route path="/documents" element={<ProtectedRoute><DocumentsPage /></ProtectedRoute>} />
-        <Route path="/erp-template" element={<ProtectedRoute><ErpTemplatePage /></ProtectedRoute>} />
-        <Route path="/erp-template/:templateId" element={<ProtectedRoute><ErpTemplatePage /></ProtectedRoute>} />
-        <Route path="/crew-contacts" element={<ProtectedRoute><CrewContactsPage /></ProtectedRoute>} />
-        <Route path="/reels" element={<ProtectedRoute><ReelsPage /></ProtectedRoute>} />
-        <Route path="/stress" element={<ProtectedRoute><VonMisesPage /></ProtectedRoute>} />
-        <Route path="/fatigue" element={<ProtectedRoute><FatiguePage /></ProtectedRoute>} />
-        <Route path="/wellbore" element={<ProtectedRoute><WellborePage /></ProtectedRoute>} />
-        <Route path="/certs" element={<ProtectedRoute><CertificationsPage /></ProtectedRoute>} />
-        <Route path="/tasks" element={<ProtectedRoute><TasksPage /></ProtectedRoute>} />
-        <Route path="/parts-orders" element={<ProtectedRoute><PartsOrdersPage /></ProtectedRoute>} />
-        <Route path="/timecards" element={<ProtectedRoute><TimecardsPage /></ProtectedRoute>} />
-        <Route path="/crew-admin" element={<ProtectedRoute><RbacAdminPage /></ProtectedRoute>} />
-        <Route path="/live-ops" element={<ProtectedRoute><LiveOpsPage /></ProtectedRoute>} />
-        <Route path="/daq" element={<ProtectedRoute><DaqConfigPage /></ProtectedRoute>} />
+        <Route path="/equipment" element={<ProtectedRoute feature="equipment_assets"><EquipmentPage /></ProtectedRoute>} />
+        <Route path="/schedule" element={<ProtectedRoute feature="crew_schedule"><CrewSchedulePage /></ProtectedRoute>} />
+        <Route path="/treatment" element={<ProtectedRoute feature="treatment_log"><TreatmentPage /></ProtectedRoute>} />
+        <Route path="/ctd-calculator" element={<ProtectedRoute feature="ct_drill_calc"><CTDrillingCalculator /></ProtectedRoute>} />
+        <Route path="/documents" element={<ProtectedRoute feature="documents"><DocumentsPage /></ProtectedRoute>} />
+        <Route path="/erp-template" element={<ProtectedRoute feature="erp_templates"><ErpTemplatePage /></ProtectedRoute>} />
+        <Route path="/erp-template/:templateId" element={<ProtectedRoute feature="erp_templates"><ErpTemplatePage /></ProtectedRoute>} />
+        <Route path="/crew-contacts" element={<ProtectedRoute feature="crew_contacts"><CrewContactsPage /></ProtectedRoute>} />
+        <Route path="/reels" element={<ProtectedRoute feature="reels_mgmt"><ReelsPage /></ProtectedRoute>} />
+        <Route path="/stress" element={<ProtectedRoute feature="von_mises"><VonMisesPage /></ProtectedRoute>} />
+        <Route path="/fatigue" element={<ProtectedRoute feature="reel_fatigue"><FatiguePage /></ProtectedRoute>} />
+        <Route path="/wellbore" element={<ProtectedRoute feature="wellbore_3d"><WellborePage /></ProtectedRoute>} />
+        <Route path="/certs" element={<ProtectedRoute feature="certifications"><CertificationsPage /></ProtectedRoute>} />
+        <Route path="/tasks" element={<ProtectedRoute feature="daily_tasks"><TasksPage /></ProtectedRoute>} />
+        <Route path="/parts-orders" element={<ProtectedRoute feature="parts_orders"><PartsOrdersPage /></ProtectedRoute>} />
+        <Route path="/timecards" element={<ProtectedRoute feature="timecards"><TimecardsPage /></ProtectedRoute>} />
+        <Route path="/crew-admin" element={<ProtectedRoute feature="rbac_admin"><RbacAdminPage /></ProtectedRoute>} />
+        <Route path="/live-ops" element={<ProtectedRoute feature="live_ops"><LiveOpsPage /></ProtectedRoute>} />
+        <Route path="/daq" element={<ProtectedRoute feature="daq_ingest"><DaqConfigPage /></ProtectedRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <AdvisoryFooter />
@@ -267,9 +274,22 @@ const AppRouter = () => {
       <RedeemDialog />
       <InstallAppPrompt />
       <NotificationCenter />
+      <UpgradeModal />
+      <TierTutorialMount />
       <ResponsiveToaster />
     </>
   );
+};
+
+// Auto-opens the tier tutorial on first-login for the viewer's tier. The
+// hook stores a per-tier "seen" flag in localStorage so repeat visits are
+// quiet. Users can re-open it from their user menu.
+const TierTutorialMount = () => {
+  const { user } = useAuth();
+  const { loaded } = useTier();
+  const { open, close } = useTierTutorial();
+  if (!user || !loaded) return null;
+  return <TierTutorial open={open} onClose={close} />;
 };
 
 // Toast position adapts to viewport: top-center on desktop (easy to see), top-right on mobile
@@ -309,7 +329,9 @@ function App() {
   return (
     <UnitProvider>
       <ActiveReelProvider>
-        <AppRouter />
+        <TierProvider>
+          <AppRouter />
+        </TierProvider>
       </ActiveReelProvider>
     </UnitProvider>
   );

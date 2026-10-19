@@ -254,6 +254,44 @@ async def subscription_status(user: dict = Depends(require_user)):
     }
 
 
+# ============ PLAN TIER (Personal / Small-Med / Enterprise) ============
+BETA_UNLOCK = (os.environ.get("BETA_UNLOCK", "false").strip().lower() in {"1", "true", "yes", "on"})
+_VALID_TIERS = {"personal", "smallmed", "enterprise"}
+
+
+def _resolve_user_tier(user: dict) -> str:
+    """Return the viewer's active plan tier.
+
+    Precedence:
+      1. explicit `subscription_tier` on the user doc (set by webhooks or
+         admin assignment)
+      2. derive from legacy `subscription_status`/`subscription_plan`
+      3. default to `personal`
+    """
+    explicit = (user.get("subscription_tier") or "").strip().lower()
+    if explicit in _VALID_TIERS:
+        return explicit
+    # Legacy mapping: active Pro subscribers from the Free/Pro era are
+    # treated as Small-Med Crew — that's what the Pro bundle covered.
+    if user.get("subscription_status") == "active":
+        return "smallmed"
+    return "personal"
+
+
+@api_router.get("/me/tier")
+async def my_tier(user: dict = Depends(require_user)):
+    """Returns the viewer's active plan tier plus the global BETA_UNLOCK
+    flag so the client can disable paywalls uniformly during Field Beta.
+    """
+    tier = _resolve_user_tier(user)
+    return {
+        "tier": tier,
+        "beta_unlock": BETA_UNLOCK,
+        "subscription_status": user.get("subscription_status", "free"),
+        "subscription_plan": user.get("subscription_plan"),
+    }
+
+
 @api_router.post("/payments/checkout")
 async def create_checkout(req: CheckoutRequest, user: dict = Depends(require_user)):
     prices = stripe.Price.list(lookup_keys=[req.lookup_key], active=True, limit=1).data

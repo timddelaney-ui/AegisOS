@@ -1,255 +1,164 @@
-import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { Check, Zap, Shield, Users, ArrowLeft, Sparkles, Flame } from "lucide-react";
+import React, { useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { Check, ArrowLeft, Sparkles, Lock } from "lucide-react";
 import CoilAegisLogo from "../components/CoilAegisLogo";
+import { TIER_SPECS, TIER_ORDER } from "../lib/tiers";
 
 /**
- * CoilAegis Pricing — Field Beta edition.
- * All pricing is advertised but DORMANT: no checkout, no card capture. Every
- * tier CTA either continues into the app (returning user) or routes to the
- * Google sign-up (new user). A persistent amber banner at the top makes the
- * 100%-unlocked beta posture clear.
+ * CoilAegis Pricing — three-tier edition.
+ *   • Personal        — individual engineer
+ *   • Small-Med Crew  — teams up to 15 (default highlight)
+ *   • Enterprise      — full ops stack, custom quote
+ *
+ * All checkout is dormant during Field Test Beta (banner at the top makes
+ * that explicit). The `?highlight=<tier>` query param scrolls / underlines
+ * the tier a user was deep-linked for (from an upgrade CTA).
  */
-
-const PLANS = {
-  monthly: {
-    pro_hand: 19.99,
-    ct_unit: 99,
-  },
-  annual: {
-    pro_hand: 179,    // 2 months free
-    ct_unit: 999,     // 2 months + change
-  },
-};
 
 const Pricing = () => {
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const highlight = params.get("highlight") || "smallmed";
+  const fromFeature = params.get("from");
   const [billing, setBilling] = useState("annual");  // default to the better value
 
   const isMonthly = billing === "monthly";
-  const period = isMonthly ? "/mo" : "/yr";
-  const price = isMonthly ? PLANS.monthly : PLANS.annual;
 
-  // Yearly savings badge computed from the monthly list price × 12
-  const savings = (yr, mo) => {
-    const full = mo * 12;
-    const save = full - yr;
-    const pct = Math.round((save / full) * 100);
-    return { save, pct };
-  };
-  const proSave = savings(PLANS.annual.pro_hand, PLANS.monthly.pro_hand);
-  const unitSave = savings(PLANS.annual.ct_unit, PLANS.monthly.ct_unit);
-
-  const start = () => navigate("/hub");
+  const tiers = useMemo(() => TIER_ORDER.map((id) => TIER_SPECS[id]), []);
 
   return (
-    <div className="min-h-screen bg-[#0F172A] text-white">
-      {/* Field Beta banner */}
-      <div
-        data-testid="field-beta-banner"
-        className="bg-[#F59E0B] text-[#0F172A] text-center py-1.5 px-3 text-[11px] font-bold uppercase tracking-[0.15em] flex items-center justify-center gap-2"
-      >
-        <Flame className="w-3.5 h-3.5" strokeWidth={2.8} />
-        Field Test Beta · 100% unlocked · no card required
+    <div className="min-h-screen bg-[#0F172A] text-slate-100">
+      {/* Beta banner */}
+      <div className="bg-amber-400 text-black text-center py-2 text-[11px] font-bold tracking-wide uppercase">
+        Field Test Beta — all tiers 100% unlocked · paywalls dormant · pricing is advertised only
       </div>
 
       {/* Header */}
-      <header className="max-w-6xl mx-auto px-5 py-5 flex items-center justify-between">
+      <div className="max-w-6xl mx-auto px-6 py-6 flex items-center gap-4">
         <button
-          data-testid="pricing-back"
           onClick={() => navigate(-1)}
-          className="flex items-center gap-1.5 text-sm font-semibold text-white/70 hover:text-white"
+          data-testid="pricing-back"
+          className="text-slate-400 hover:text-white flex items-center gap-1 text-xs font-bold"
         >
-          <ArrowLeft className="w-4 h-4" />Back
+          <ArrowLeft className="w-4 h-4" /> Back
         </button>
-        <CoilAegisLogo size={26} variant="full" tone="light" />
-      </header>
-
-      {/* Hero */}
-      <section className="relative overflow-hidden">
-        <div
-          aria-hidden
-          className="absolute inset-0 opacity-[0.06] pointer-events-none"
-          style={{
-            backgroundImage:
-              "linear-gradient(rgba(245,158,11,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(245,158,11,0.5) 1px, transparent 1px)",
-            backgroundSize: "48px 48px",
-          }}
-        />
-        <div
-          aria-hidden
-          className="absolute -top-32 left-1/2 -translate-x-1/2 w-[700px] h-[700px] rounded-full pointer-events-none"
-          style={{ background: "radial-gradient(circle, rgba(245,158,11,0.18) 0%, transparent 60%)" }}
-        />
-        <div className="relative max-w-5xl mx-auto px-5 pt-10 pb-6 text-center">
-          <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#F59E0B] mb-3">Simple pricing · rig-grade value</p>
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold leading-[1.05] tracking-tight mb-4">
-            Priced for the <span className="text-[#F59E0B]">doghouse</span>, built for the fleet.
-          </h1>
-          <p className="text-base text-white/60 max-w-2xl mx-auto leading-relaxed">
-            Every tier includes the full CoilAegis platform — triaxial stress, Palmgren-Miner fatigue, live telemetry, SOPs, crew hub, timecards, and the AI assistant. The difference is scale.
-          </p>
+        <div className="flex-1 flex items-center justify-center">
+          <CoilAegisLogo className="w-7 h-7 text-amber-300" />
+          <span className="ml-2 font-bold text-base tracking-wide">CoilAegis</span>
         </div>
+        <div className="w-16" />
+      </div>
+
+      {fromFeature && (
+        <div className="max-w-6xl mx-auto px-6 pb-4">
+          <div data-testid="pricing-from-feature" className="rounded-lg bg-amber-400/10 border border-amber-300/30 px-4 py-2 text-amber-200 text-xs flex items-center gap-2">
+            <Sparkles className="w-3.5 h-3.5" />
+            <span><b>{decodeURIComponent(fromFeature)}</b> is included in the <b className="text-amber-300">{TIER_SPECS[highlight]?.label || "upgraded"}</b> plan and above.</span>
+          </div>
+        </div>
+      )}
+
+      <div className="max-w-6xl mx-auto px-6 pb-10">
+        <h1 className="text-3xl sm:text-4xl font-bold text-center">Pick the plan that fits your crew</h1>
+        <p className="text-slate-400 text-sm text-center mt-2">Three tiers · lower plans never see what the next tier offers until you upgrade.</p>
 
         {/* Billing toggle */}
-        <div className="relative flex items-center justify-center gap-2 pb-10">
-          <button
-            data-testid="pricing-toggle-monthly"
-            onClick={() => setBilling("monthly")}
-            className={`text-sm font-bold px-4 py-2 rounded-lg transition-all ${isMonthly ? "bg-white text-[#0F172A]" : "bg-white/5 text-white/60 hover:bg-white/10"}`}
-          >
-            Monthly
-          </button>
-          <button
-            data-testid="pricing-toggle-annual"
-            onClick={() => setBilling("annual")}
-            className={`text-sm font-bold px-4 py-2 rounded-lg transition-all flex items-center gap-2 ${!isMonthly ? "bg-white text-[#0F172A]" : "bg-white/5 text-white/60 hover:bg-white/10"}`}
-          >
-            Annual
-            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${!isMonthly ? "bg-[#F59E0B] text-[#0F172A]" : "bg-[#F59E0B]/20 text-[#F59E0B]"}`}>
-              Save 25%
-            </span>
-          </button>
-        </div>
-      </section>
-
-      {/* Pricing cards */}
-      <section className="max-w-6xl mx-auto px-5 pb-20">
-        <div className="grid md:grid-cols-3 gap-5" data-testid="pricing-cards">
-          {/* Card 1 — Pro Hand */}
-          <article
-            data-testid="plan-pro-hand"
-            className="relative bg-[#111827] border border-white/10 rounded-2xl p-6 flex flex-col hover:border-[#F59E0B]/60 transition-colors"
-          >
-            <div className="flex items-center gap-2 mb-1">
-              <Zap className="w-5 h-5 text-[#F59E0B]" strokeWidth={2.5} />
-              <h2 className="text-lg font-extrabold tracking-tight">Pro Hand</h2>
-            </div>
-            <p className="text-xs text-white/55 mb-5">Solo hand or lead operator on a single rig.</p>
-            <div className="mb-5">
-              <div className="flex items-baseline gap-1">
-                <span className="text-5xl font-extrabold tabular-nums tracking-tight">${isMonthly ? price.pro_hand : price.pro_hand}</span>
-                <span className="text-sm text-white/60 font-bold">{period}</span>
-              </div>
-              {!isMonthly && (
-                <p className="text-[11px] text-[#F59E0B] font-bold mt-1">
-                  Save ${proSave.save.toFixed(0)} / year ({proSave.pct}% off)
-                </p>
-              )}
-            </div>
+        <div className="flex items-center justify-center mt-6">
+          <div className="inline-flex rounded-full border border-white/15 p-1 bg-black/40">
             <button
-              data-testid="plan-pro-hand-cta"
-              onClick={start}
-              className="w-full py-2.5 px-4 rounded-lg font-bold text-sm bg-[#F59E0B] hover:bg-[#C36600] text-[#0F172A] transition-colors mb-5"
-            >
-              Start free · no card
-            </button>
-            <ul className="space-y-2 text-xs text-white/75">
-              {[
-                "Every tool, every SOP, every AI mode",
-                "17 calculation sheets + 3D wellbore",
-                "Treatment log + playback annotations",
-                "Live telemetry · 1 rig",
-                "7-day guest share links",
-              ].map((f) => (
-                <li key={f} className="flex gap-2"><Check className="w-3.5 h-3.5 text-[#F59E0B] flex-shrink-0 mt-0.5" /><span>{f}</span></li>
-              ))}
-            </ul>
-          </article>
-
-          {/* Card 2 — CT Unit Package (highlighted) */}
-          <article
-            data-testid="plan-ct-unit"
-            className="relative bg-gradient-to-b from-[#0E7490]/40 to-[#111827] border-2 border-[#06B6D4] rounded-2xl p-6 flex flex-col shadow-[0_25px_80px_-20px_rgba(6,182,212,0.35)]"
-          >
-            <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-[#06B6D4] text-[#0F172A] text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full flex items-center gap-1">
-              <Sparkles className="w-3 h-3" strokeWidth={3} />Most popular
-            </span>
-            <div className="flex items-center gap-2 mb-1">
-              <Users className="w-5 h-5 text-[#06B6D4]" strokeWidth={2.5} />
-              <h2 className="text-lg font-extrabold tracking-tight">CT Unit Package</h2>
-            </div>
-            <p className="text-xs text-white/55 mb-5">Whole crew — tool push, day/night, swamper, trainee.</p>
-            <div className="mb-5">
-              <div className="flex items-baseline gap-1">
-                <span className="text-5xl font-extrabold tabular-nums tracking-tight">${isMonthly ? price.ct_unit : price.ct_unit}</span>
-                <span className="text-sm text-white/60 font-bold">{period}</span>
-              </div>
-              {!isMonthly && (
-                <p className="text-[11px] text-[#06B6D4] font-bold mt-1">
-                  Save ${unitSave.save.toFixed(0)} / year ({unitSave.pct}% off)
-                </p>
-              )}
-            </div>
+              data-testid="pricing-billing-monthly"
+              onClick={() => setBilling("monthly")}
+              className={`px-4 py-1.5 rounded-full text-xs font-bold transition-colors ${isMonthly ? "bg-amber-400 text-black" : "text-slate-400 hover:text-white"}`}
+            >Monthly</button>
             <button
-              data-testid="plan-ct-unit-cta"
-              onClick={start}
-              className="w-full py-2.5 px-4 rounded-lg font-bold text-sm bg-[#06B6D4] hover:bg-[#0891B2] text-[#0F172A] transition-colors mb-5"
-            >
-              Start free · no card
-            </button>
-            <ul className="space-y-2 text-xs text-white/80">
-              {[
-                "Everything in Pro Hand",
-                "Unlimited crew seats on 1 CT unit",
-                "Shift Composer + batched timecards",
-                "Rig-scoped chat, tasks, parts, certs",
-                "Real DAQ listeners (WITS 0 / Modbus)",
-                "Engineering job audit dossier",
-              ].map((f) => (
-                <li key={f} className="flex gap-2"><Check className="w-3.5 h-3.5 text-[#06B6D4] flex-shrink-0 mt-0.5" /><span>{f}</span></li>
-              ))}
-            </ul>
-          </article>
-
-          {/* Card 3 — Enterprise */}
-          <article
-            data-testid="plan-enterprise"
-            className="relative bg-[#111827] border border-white/10 rounded-2xl p-6 flex flex-col hover:border-[#06B6D4]/40 transition-colors"
-          >
-            <div className="flex items-center gap-2 mb-1">
-              <Shield className="w-5 h-5 text-[#06B6D4]" strokeWidth={2.5} />
-              <h2 className="text-lg font-extrabold tracking-tight">Enterprise</h2>
-            </div>
-            <p className="text-xs text-white/55 mb-5">Multi-fleet operators, country-wide ops centres.</p>
-            <div className="mb-5">
-              <div className="flex items-baseline gap-1">
-                <span className="text-4xl font-extrabold tracking-tight">Let&apos;s talk</span>
-              </div>
-              <p className="text-[11px] text-white/50 mt-1">Custom per-unit pricing · annual contract</p>
-            </div>
-            <button
-              data-testid="plan-enterprise-cta"
-              onClick={() => { window.location.href = "mailto:sales@coilaegis.com?subject=CoilAegis%20Enterprise%20Inquiry"; }}
-              className="w-full py-2.5 px-4 rounded-lg font-bold text-sm bg-white/10 border border-white/20 hover:bg-white/20 transition-colors mb-5"
-            >
-              Contact sales
-            </button>
-            <ul className="space-y-2 text-xs text-white/75">
-              {[
-                "Everything in CT Unit",
-                "Unlimited rigs & crews",
-                "Fleet-view admin dashboard",
-                "SSO (SAML / OIDC) + SCIM provisioning",
-                "99.9% SLA · dedicated success rep",
-                "Custom SOP / ERP training on the AI",
-                "On-prem option for sensitive customers",
-              ].map((f) => (
-                <li key={f} className="flex gap-2"><Check className="w-3.5 h-3.5 text-[#06B6D4] flex-shrink-0 mt-0.5" /><span>{f}</span></li>
-              ))}
-            </ul>
-          </article>
+              data-testid="pricing-billing-annual"
+              onClick={() => setBilling("annual")}
+              className={`px-4 py-1.5 rounded-full text-xs font-bold transition-colors ${!isMonthly ? "bg-amber-400 text-black" : "text-slate-400 hover:text-white"}`}
+            >Annual <span className="opacity-70 ml-1">(save 2 mo)</span></button>
+          </div>
         </div>
 
-        {/* Fine print */}
-        <div className="max-w-3xl mx-auto mt-10 text-center text-[11px] text-white/40">
-          <p>
-            During Field Test Beta, every plan is <span className="text-[#F59E0B] font-bold">100% unlocked and free</span> while we validate against your crews.
-            Pricing goes live at commercial relaunch. No card captured, no auto-charge, no surprise invoice.
-          </p>
-          <p className="mt-2">Advisory only — CoilAegis is an educational and computational aid. It does not supersede company policy, licensee program, or site ERP.</p>
+        {/* Tier cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mt-8">
+          {tiers.map((t) => {
+            const isHighlighted = highlight === t.id || t.popular;
+            const isCustom = t.price_monthly_usd == null;
+            const price = isCustom ? null : (isMonthly ? t.price_monthly_usd : t.price_yearly_usd);
+            return (
+              <div
+                key={t.id}
+                data-testid={`pricing-tier-${t.id}`}
+                className={`relative rounded-2xl overflow-hidden border-2 transition-transform ${isHighlighted ? "scale-[1.02] shadow-2xl" : "border-white/10"}`}
+                style={isHighlighted ? {
+                  borderColor: t.accent,
+                  boxShadow: `0 10px 40px -10px ${t.glow}, 0 0 0 1px ${t.accent}30`,
+                } : undefined}
+              >
+                {t.popular && (
+                  <div className="absolute top-0 right-0 bg-amber-400 text-black text-[9px] font-bold uppercase tracking-wider px-3 py-1 rounded-bl-lg">
+                    Most popular
+                  </div>
+                )}
+                <div className="p-5 relative"
+                     style={{ background: `linear-gradient(180deg, #1E293B 0%, #0F172A 100%)` }}>
+                  <div className="absolute inset-0 opacity-20 pointer-events-none"
+                       style={{ background: `radial-gradient(ellipse 300px 160px at 80% 20%, ${t.glow}, transparent 60%)` }} />
+                  <div className="relative">
+                    <div className="text-[10px] font-bold uppercase tracking-wider" style={{ color: t.accent }}>{t.label}</div>
+                    <div className="text-xs text-slate-400 mt-1">{t.tagline}</div>
+                    <div className="mt-4 min-h-[48px]">
+                      {isCustom ? (
+                        <div className="text-2xl font-bold text-white">Custom quote</div>
+                      ) : (
+                        <>
+                          <span className="text-4xl font-bold text-white tabular-nums">${price}</span>
+                          <span className="text-xs text-slate-400 ml-1">{isMonthly ? "/mo" : "/yr"}</span>
+                          {!isMonthly && (
+                            <div className="text-[10px] text-slate-500 mt-1">That's ~${(t.price_yearly_usd / 12).toFixed(2)}/mo billed yearly</div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-slate-500 mt-1">{t.seats}</div>
+                    <button
+                      data-testid={`pricing-tier-cta-${t.id}`}
+                      onClick={() => {
+                        if (isCustom) {
+                          window.location.href = "mailto:sales@coilaegis.com?subject=Enterprise%20plan%20inquiry";
+                        } else {
+                          // Beta posture: just send them into the app — paywalls are dormant.
+                          navigate("/hub");
+                        }
+                      }}
+                      className="w-full mt-5 px-4 py-2.5 rounded-lg font-bold text-sm text-black hover:brightness-110"
+                      style={{ background: t.accent }}
+                    >
+                      {isCustom ? "Talk to sales" : "Continue"}
+                    </button>
+                  </div>
+                </div>
+                <div className="p-5 bg-[#0A1120] space-y-2">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                    What's included
+                  </div>
+                  {t.highlights.map((h) => (
+                    <div key={h} className="flex items-start gap-2 text-xs text-slate-300">
+                      <Check className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" style={{ color: t.accent }} />
+                      <span>{h}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </div>
-      </section>
+
+        {/* Hide-behavior disclosure */}
+        <div className="mt-8 max-w-3xl mx-auto text-center text-[11px] text-slate-500 flex items-center justify-center gap-1.5">
+          <Lock className="w-3 h-3" />
+          Lower-tier plans never see what higher-tier plans offer in-app — upgrade to reveal.
+        </div>
+      </div>
     </div>
   );
 };

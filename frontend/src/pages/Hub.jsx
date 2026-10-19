@@ -16,6 +16,8 @@ import { usePullToRefresh, PullIndicator } from "../hooks/usePullToRefresh";
 import { HubCustomizeButton } from "../components/HubCustomize";
 import { DEFAULT_TILE_ORDER } from "../lib/hubRegistry";
 import { planRole, isGuest } from "../lib/roles";
+import { useTier } from "../context/TierContext";
+import { Lock } from "lucide-react";
 
 // Tiles hidden from guests (client-view-only). Internal company data.
 const GUEST_HIDDEN_TILES = new Set([
@@ -33,18 +35,55 @@ const proTips = [
   "Ask the AI 'Troubleshoot' about surface symptoms and it'll walk you through diagnosis.",
 ];
 
-const HubCard = ({ Icon, title, subtitle, onClick, accent, badge, gradient, tileId, tilePrefs, guestBlocked, "data-testid": testId }) => {
+// Map Hub tileId → the feature id in TIER_SPECS so lower-tier users
+// automatically see the hybrid hide / teaser treatment without the caller
+// having to pass a feature prop at every site.
+const TILE_FEATURE_MAP = {
+  "live-ops": "live_ops",
+  "daq": "daq_ingest",
+  "ctd-calculator": "ct_drill_calc",
+  "reels": "reels_mgmt",
+  "stress": "von_mises",
+  "fatigue": "reel_fatigue",
+  "wellbore": "wellbore_3d",
+  "certs": "certifications",
+  "tasks": "daily_tasks",
+  "parts-orders": "parts_orders",
+  "timecards": "timecards",
+  "crew-admin": "rbac_admin",
+  "schedule": "crew_schedule",
+  "team-hub": "team_mgmt",
+  "equipment": "equipment_assets",
+  "treatment": "treatment_log",
+  "documents": "documents",
+  "erp-template": "erp_templates",
+  "crew-contacts": "crew_contacts",
+  "jobs": "jobs_ledger",
+};
+
+const HubCard = ({ Icon, title, subtitle, onClick, accent, badge, gradient, tileId, tilePrefs, guestBlocked, feature, "data-testid": testId }) => {
+  // Hooks MUST be called before any early returns to satisfy React rules.
+  const tier = useTier();
   if (tilePrefs && tileId && tilePrefs.hidden?.has(tileId)) return null;
   if (guestBlocked) return null;
+  const resolvedFeature = feature || TILE_FEATURE_MAP[tileId];
+  // Tier gating. If the tileId maps to a known feature, apply the hybrid
+  // hide rule from TIER_SPECS:
+  //   • `hidden`  → remove the tile entirely for lower tiers
+  //   • `teaser`  → render a locked tile that prompts upgrade on click
+  const tierLocked = resolvedFeature && !tier.canAccess(resolvedFeature);
+  if (tierLocked && tier.hidesCompletely(resolvedFeature)) return null;
   const order = tilePrefs?.order?.indexOf(tileId);
   const style = order >= 0 ? { order } : undefined;
+  const effectiveClick = tierLocked ? (() => tier.promptUpgrade(resolvedFeature)) : onClick;
   return (
   <button
     data-testid={testId}
     data-tile-id={tileId}
-    onClick={onClick}
+    data-tier-locked={tierLocked ? "true" : undefined}
+    onClick={effectiveClick}
     style={style}
-    className={`group relative overflow-hidden rounded-xl border border-[#D4D4D4] bg-white p-4 text-left shadow-sm hover:shadow-md hover:border-[#FF6B1A] transition-all hover:-translate-y-0.5 ${gradient || ""}`}
+    className={`group relative overflow-hidden rounded-xl border ${tierLocked ? "border-dashed border-amber-400/50 bg-amber-50" : "border-[#D4D4D4] bg-white"} p-4 text-left shadow-sm hover:shadow-md hover:border-[#FF6B1A] transition-all hover:-translate-y-0.5 ${gradient || ""}`}
   >
     <div className="flex items-start gap-3">
       <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${accent || "bg-[#FFF1E6] text-[#FF6B1A]"}`}>
@@ -54,8 +93,15 @@ const HubCard = ({ Icon, title, subtitle, onClick, accent, badge, gradient, tile
         <div className="flex items-center gap-1.5 flex-wrap">
           <h3 className="text-sm font-bold text-[#262626]">{title}</h3>
           {badge && <span className="text-[9px] font-bold px-1.5 py-[2px] bg-[#FFF3CD] text-[#856404] rounded">{badge}</span>}
+          {tierLocked && (
+            <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-[2px] bg-amber-100 text-amber-800 border border-amber-300 rounded uppercase tracking-wide">
+              <Lock className="w-2.5 h-2.5" strokeWidth={3} /> Upgrade
+            </span>
+          )}
         </div>
-        <p className="text-[11px] text-[#595959] mt-0.5 leading-snug">{subtitle}</p>
+        <p className="text-[11px] text-[#595959] mt-0.5 leading-snug">
+          {tierLocked ? "Tap to see what's included on a higher plan." : subtitle}
+        </p>
       </div>
       <ChevronRight className="w-4 h-4 text-[#C4C4C4] group-hover:text-[#FF6B1A] flex-shrink-0" />
     </div>

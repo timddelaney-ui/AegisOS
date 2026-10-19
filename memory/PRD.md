@@ -801,3 +801,65 @@ Skate OEM Chip + Dossier Address Book (2026-02-19 pm):
      2 default amber ✓ chips, textarea prefilled with both default
      emails (`supervisor@acme.com, ops@acme.com`).
 
+
+Three-Tier Pricing + Tutorials (2026-02-19 pm):
+
+**Tier Catalog** (`/app/frontend/src/lib/tiers.js`):
+- `TIER_PERSONAL` ($9.99/mo · $79/yr · cyan) — individual engineer: AI,
+  Training, Workbooks, SOP, Daily tasks, Parts orders, ERP, Equipment &
+  Assets, Certifications.
+- `TIER_SMALLMED` ($29.99/mo · $249/yr · gold · "Most popular") — all of
+  Personal + Timecards, Payroll, Position Designation (RBAC), Crew
+  Schedule, Crew Contacts, Team Management.
+- `TIER_ENTERPRISE` (custom · crimson) — all of Small-Med + Live Ops,
+  Live DAQ, 3D Wellbore, Reel Fatigue, Treatment Log, Dossier + email,
+  Von Mises, CT Drilling calc, Document vault, Jobs ledger.
+
+**Visibility model** per user request:
+- `visibility: "teaser"` — core locked features render a locked tile
+  that prompts upgrade on click (e.g. Timecards shown to Personal).
+- `visibility: "hidden"` — enterprise-only features are **completely
+  removed** from navigation for lower tiers so they can't even see what
+  they're missing (e.g. Live Ops hidden from Personal + Small-Med).
+
+**BETA_UNLOCK flag** (`backend/.env`): single switch. When `true` all
+gating is bypassed — Field Test Beta posture. When `false` the tier
+rules apply across every route guard and Hub tile. Verified end-to-end
+by flipping to `false` + setting demo user to `personal`: 7 enterprise
+tiles disappeared completely, 3 small-med tiles rendered as locked
+teasers, 3 personal tiles rendered unlocked.
+
+**Backend wiring:**
+- `GET /api/me/tier` → `{tier, beta_unlock, subscription_status,
+  subscription_plan}`. Resolves tier via explicit `subscription_tier`
+  field, falls back to legacy `subscription_status=active` → `smallmed`.
+
+**Frontend wiring:**
+- `TierProvider` wraps `AppRouter` so every route and tile has `tier`,
+  `canAccess`, `showsLockedTeaser`, `hidesCompletely`, `promptUpgrade`.
+- `TierProtectedRoute` guards every route (routes get a `feature` prop
+  on `ProtectedRoute` now). Teaser routes bounce to `/pricing?highlight`;
+  hidden routes bounce to `/hub` silently.
+- `UpgradeModal` renders globally via `promptUpgrade(featureId)`.
+- `HubCard` auto-derives feature from `tileId` via `TILE_FEATURE_MAP`
+  so no call-site changes were needed to gate 22 Hub tiles.
+
+**Tutorials** (`TierTutorial.jsx`):
+- Per-tier 5-step walkthrough — content aligned with TIER_SPECS
+  highlights so the Pricing page and tutorial copy stay in sync.
+- Auto-opens on first login via `useTierTutorial()` keyed on
+  `coilaegis_tier_tutorial_seen_v1` localStorage flag (per-tier flag so
+  a user who upgrades gets the new-tier walkthrough automatically).
+- Always available via the user menu → "Show plan tutorial" (chip
+  shows current tier label + accent color).
+- Playwright-verified: auto-opened with "Welcome to CoilAegis ·
+  Personal" after flipping the demo user to `personal` tier.
+
+**Pricing page** rebuilt:
+- Three cards side-by-side (Monthly/Annual toggle, deep-link
+  `?highlight=<tier>&from=<feature>` shows a banner explaining which
+  tier unlocks the clicked feature).
+- Beta banner at top, "lower-tier plans never see what higher-tier
+  plans offer in-app — upgrade to reveal" disclosure at bottom.
+- Smallmed marked `popular: true` → auto-highlighted when no deep-link.
+

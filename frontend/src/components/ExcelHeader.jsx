@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Menu, LogOut, Users, FolderOpen, Sparkles, X, Crown, MessageSquarePlus, ShieldAlert, Gift, Ticket, Home, RefreshCw, HelpCircle } from "lucide-react";
+import { Menu, LogOut, Users, FolderOpen, Sparkles, X, Crown, MessageSquarePlus, ShieldAlert, Gift, Ticket, Home, RefreshCw, HelpCircle, GraduationCap } from "lucide-react";
 import axios from "axios";
 import { useAuth, API, isProUser } from "../context/AuthContext";
+import { useTier } from "../context/TierContext";
+import { TIER_SPECS } from "../lib/tiers";
+import TierTutorial from "./TierTutorial";
 import CoilAegisLogo from "./CoilAegisLogo";
 import WelcomeTour, { useWelcomeTour } from "./WelcomeTour";
 
@@ -32,6 +35,9 @@ const AppHeader = () => {
   const navigate = useNavigate();
   const isPro = isProUser(user);
   const { open: tourOpen, openTour, closeTour } = useWelcomeTour();
+  const [tierTutOpen, setTierTutOpen] = useState(false);
+  const { tier } = useTier();
+  const tierSpec = TIER_SPECS[tier];
 
   useEffect(() => {
     if (!user) return;
@@ -125,6 +131,18 @@ const AppHeader = () => {
               )}
               <div className="border-t border-white/10 my-2"></div>
               <button
+                data-testid="menu-plan-tutorial"
+                onClick={() => { setMenuOpen(false); setTierTutOpen(true); }}
+                className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 rounded text-sm font-medium"
+              >
+                <GraduationCap className="w-4 h-4" style={{ color: tierSpec?.accent || "#FF6B1A" }} />
+                <span className="flex-1 text-left">Show plan tutorial</span>
+                <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded"
+                      style={{ background: `${tierSpec?.accent || "#FF6B1A"}20`, color: tierSpec?.accent || "#FF6B1A" }}>
+                  {tierSpec?.label || "Personal"}
+                </span>
+              </button>
+              <button
                 data-testid="menu-replay-tour"
                 onClick={() => { setMenuOpen(false); openTour(); }}
                 className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 rounded text-sm font-medium"
@@ -150,6 +168,7 @@ const AppHeader = () => {
         </div>
       )}
       <WelcomeTour open={tourOpen} onClose={closeTour} />
+      <TierTutorial open={tierTutOpen} onClose={() => setTierTutOpen(false)} />
     </>
   );
 };
