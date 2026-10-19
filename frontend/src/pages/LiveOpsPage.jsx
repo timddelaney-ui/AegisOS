@@ -13,6 +13,7 @@ import ShareLinksButton from "../components/ShareLinksButton";
 import { AnnotationPins, DropAnnotationModal, ViewAnnotationModal } from "../components/AnnotationLayer";
 import { isSupervisorOrHigher, isManagement } from "../lib/roles";
 import { useRig } from "../context/RigContext";
+import { useUnits } from "../context/UnitContext";
 
 const RING = 600;             // seconds of history (10 min @ 1 Hz)
 const TICK_MS = 1000;         // 1 Hz
@@ -38,9 +39,26 @@ const PANELS = [
   { id: "vm",       label: "Von Mises" },
   { id: "fatigue",  label: "Reel Fatigue" },
   { id: "weight",   label: "Weight" },
-  { id: "pressure", label: "Pressure" },
+  { id: "pressure", label: "P Internal" },
+  { id: "whp",      label: "Wellhead · P_whp" },
+  { id: "dpnet",    label: "Net ΔP" },
+  { id: "skate",    label: "Injector Skate · K_t" },
   { id: "chart",    label: "Live Chart" },
 ];
+
+// Skate penalty + stress-concentration from hydraulic clamping pressure.
+// K_t = 1 + α · ((p_skate - p_ref) / p_ref)^β, clipped to [1.0, 1.5]
+// [API RP 5C7 §8 / Tipton 1994 · open-domain injector-ovality scaler].
+const skateMetrics = (p_skate, p_ref = 1200) => {
+  const ratio = Math.max(0, (p_skate - p_ref) / p_ref);
+  const kt = Math.min(1.5, 1 + 0.35 * Math.pow(ratio, 1.1));
+  return {
+    kt,
+    penalty: kt,  // damage-rate multiplier
+    label: kt < 1.05 ? "NORMAL" : kt < 1.2 ? "ELEVATED" : "EXCESSIVE",
+    severity: kt < 1.05 ? "ok" : kt < 1.2 ? "warn" : "crit",
+  };
+};
 
 function buildDossierHtml(d) {
   const fmt = (v) => (v == null ? "—" : typeof v === "number" ? v.toFixed(1) : v);
@@ -108,12 +126,13 @@ function buildDossierHtml(d) {
 export default function LiveOpsPage() {
   const { user } = useAuth();
   const { activeReel, currentDepth, setCurrentDepth } = useActiveReel();
+  const u = useUnits();
   const [samples, setSamples] = useState([]);         // ring buffer of recent samples
   const [running, setRunning] = useState(false);
   const [connected, setConnected] = useState(false); // "connected to unit" toggle (DAQ)
   const [enlarged, setEnlarged] = useState(null);     // panel id for full-screen
   const [fatigue, setFatigue] = useState({ damage: [], spacing: 100, worst_damage: 0 });
-  const [layout, setLayout] = useState(["vm", "fatigue", "weight", "pressure", "chart"]);
+  const [layout, setLayout] = useState(["vm", "fatigue", "weight", "pressure", "whp", "dpnet", "skate", "chart"]);
   const [showPrefs, setShowPrefs] = useState(false);
   // Playback mode: scrub backwards through the recorded buffer.
   const [mode, setMode] = useState("live");           // 'live' | 'playback'
@@ -184,11 +203,18 @@ export default function LiveOpsPage() {
     }
   };
 
-  // Load prefs (liveops layout)
+  // Load prefs (liveops layout) — merge any new panel ids from PANELS so
+  // we don't drop newly-added gauges (skate / whp / dpnet) for users with
+  // saved layouts from earlier builds.
   useEffect(() => {
     axios.get(`${API}/me/prefs`, { withCredentials: true })
       .then((r) => {
-        if (r.data?.liveops_layout?.length) setLayout(r.data.liveops_layout.filter((id) => PANELS.find((p) => p.id === id)));
+        const saved = r.data?.liveops_layout;
+        if (saved?.length) {
+          const kept = saved.filter((id) => PANELS.find((p) => p.id === id));
+          const missing = PANELS.map((p) => p.id).filter((id) => !kept.includes(id));
+          setLayout([...kept, ...missing]);
+        }
       }).catch(() => {});
   }, []);
 
@@ -440,14 +466,58 @@ export default function LiveOpsPage() {
       case "fatigue":
         return <MiniFatigue damage={fatigue.damage} spacing={fatigue.spacing_ft || fatigue.spacing || 100} worst={fatigue.worst_damage || 0} large={large} />;
       case "weight":
-        return <LiveGauge title="Weight" unit="lbf" value={latest.weight_lb || 0} min={0} max={30000} warnAbove={22000} criticalAbove={27000} large={large} color="#0056B3" />;
+        return <LiveGauge title="Weight" unit={u.label("weight")}
+          value={u.from(latest.weight_lb || 0, "weight")}
+          min={0}
+          max={u.from(30000, "weight")}
+          warnAbove={u.from(22000, "weight")}
+          criticalAbove={u.from(27000, "weight")}
+          large={large} color="#06B6D4" />;
       case "pressure":
-        return <LiveGauge title="Pressure" unit="psi" value={latest.pressure_psi || latest.p_internal_psi || 0} min={0} max={10000} warnAbove={7500} criticalAbove={9000} large={large} color="#C00000" />;
+        return <LiveGauge title="P Internal" unit={u.label("pressure")}
+          value={u.from(latest.pressure_psi || latest.p_internal_psi || 0, "pressure")}
+          min={0}
+          max={u.from(10000, "pressure")}
+          warnAbove={u.from(7500, "pressure")}
+          criticalAbove={u.from(9000, "pressure")}
+          large={large} color="#EF4444" />;
+      case "whp":
+        return <LiveGauge title="Wellhead · P_whp [API RP 5C7]" unit={u.label("pressure")}
+          value={u.from(latest.p_external_psi || 0, "pressure")}
+          min={0}
+          max={u.from(8000, "pressure")}
+          warnAbove={u.from(5500, "pressure")}
+          criticalAbove={u.from(7000, "pressure")}
+          large={large} color="#06B6D4" />;
+      case "dpnet": {
+        const dp = (latest.p_internal_psi || 0) - (latest.p_external_psi || 0);
+        return <LiveGauge title="Net ΔP [ISO 13628-7]" unit={u.label("pressure")}
+          value={u.from(dp, "pressure")}
+          min={u.from(-2000, "pressure")}
+          max={u.from(10000, "pressure")}
+          warnAbove={u.from(7500, "pressure")}
+          criticalAbove={u.from(9000, "pressure")}
+          large={large} color="#F59E0B" />;
+      }
+      case "skate": {
+        const ps = latest.traction_pressure_psi || 0;
+        const sm = skateMetrics(ps);
+        return <LiveGauge
+          title={`Skate · K_t ${sm.kt.toFixed(2)} · ${sm.label}`}
+          unit={u.label("pressure")}
+          value={u.from(ps, "pressure")}
+          min={0}
+          max={u.from(2500, "pressure")}
+          warnAbove={u.from(1500, "pressure")}
+          criticalAbove={u.from(2000, "pressure")}
+          large={large}
+          color={sm.severity === "crit" ? "#EF4444" : sm.severity === "warn" ? "#F59E0B" : "#10B981"} />;
+      }
       case "chart":
         return <StripChart samples={chartSamples} series={[
-          { key: "weight_lb", color: "#0056B3", label: "Weight" },
-          { key: "p_internal_psi", color: "#C00000", label: "P int" },
-          { key: "traction_pressure_psi", color: "#C36600", label: "Traction" },
+          { key: "weight_lb", color: "#06B6D4", label: "Weight" },
+          { key: "p_internal_psi", color: "#EF4444", label: "P int" },
+          { key: "traction_pressure_psi", color: "#F59E0B", label: "Traction" },
         ]} large={large} />;
       default:
         return null;
@@ -482,41 +552,57 @@ export default function LiveOpsPage() {
   const subtitle = mode === "playback"
     ? `PLAYBACK · T${scrubRelativeSec(playbackIdx) >= 0 ? "+" : ""}${scrubRelativeSec(playbackIdx)}s · ${samples.length}s buffered`
     : running
-      ? `${liveSource === "simulated" ? "Simulated" : `LIVE · ${liveSource.toUpperCase()}`} · ${samples.length}/${RING}s · depth ${Math.round(latest.depth_ft || 0)} ft`
+      ? `${liveSource === "simulated" ? "Simulated" : `LIVE · ${liveSource.toUpperCase()}`} · ${samples.length}/${RING}s · depth ${u.fmt(latest.depth_ft || 0, "depth", { digits: 0 })}`
       : "Idle";
 
   return (
-    <div className="min-h-screen bg-[#0D1A24]">
+    <div className="min-h-screen ca-console-shell relative">
       <Phase1PageHeader title="Live Ops" subtitle={subtitle} />
 
-      <div className="max-w-7xl mx-auto p-2 space-y-2">
+      <div className="relative z-10 max-w-7xl mx-auto p-3 space-y-3">
+        {/* Operations status strip */}
+        <div className="ca-glass px-3 py-2 flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-3">
+            <span className={`ca-dot ${running ? (connected ? "ca-dot-telem" : "ca-dot-live") : "ca-dot-standby"}`} />
+            <div className="flex flex-col">
+              <span className="ca-eyebrow ca-eyebrow-orange">Live Ops Console</span>
+              <span className="ca-telemetry text-[11px] text-slate-300">{subtitle}</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="ca-chip ca-chip-cyan">{liveSource === "simulated" ? "SIM" : liveSource.toUpperCase()}</span>
+            <span className="ca-chip">{mode === "playback" ? "PLAYBACK" : running ? "LIVE" : "STANDBY"}</span>
+            {activeReel?.intervals?.[0]?.grade && <span className="ca-chip ca-chip-amber">{activeReel.intervals[0].grade}</span>}
+          </div>
+        </div>
+
         {/* Controls */}
-        <div className="flex items-center gap-2 bg-[#111827] text-white rounded-lg p-2 flex-wrap">
+        <div className="ca-glass flex items-center gap-2 p-2 flex-wrap">
           <button
             data-testid="liveops-run-btn"
             onClick={() => setRunning(!running)}
-            className={`flex items-center gap-1 px-3 py-1 rounded font-bold text-xs ${running ? "bg-[#C00000]" : "bg-[#FF6B1A]"}`}>
+            className={`flex items-center gap-1 px-3 py-1.5 rounded font-bold text-xs transition-all ${running ? "bg-[#EF4444] hover:bg-[#DC2626] text-white shadow-[0_0_0_1px_rgba(239,68,68,0.5)]" : "bg-[#FF6B1A] hover:bg-[#E55A0F] text-white shadow-[0_0_0_1px_rgba(255,107,26,0.5)]"}`}>
             {running ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
             {running ? "Pause feed" : "Start feed"}
           </button>
           <button
             data-testid="liveops-connect-btn"
             onClick={() => setConnected(!connected)}
-            className={`flex items-center gap-1 px-3 py-1 rounded font-bold text-xs ${connected ? "bg-[#0056B3]" : "bg-white/10 border border-white/20"}`}>
+            className={`flex items-center gap-1 px-3 py-1.5 rounded font-bold text-xs transition-all ${connected ? "bg-[#06B6D4] text-white shadow-[0_0_0_1px_rgba(6,182,212,0.5)]" : "bg-white/5 border border-white/15 text-slate-300 hover:bg-white/10"}`}>
             {connected ? <Wifi className="w-3.5 h-3.5" /> : <WifiOff className="w-3.5 h-3.5" />}
-            {connected ? "Connected to unit" : "Not connected"}
+            {connected ? "Unit connected" : "Not connected"}
           </button>
           <button
             data-testid="liveops-playback-btn"
             onClick={mode === "playback" ? exitPlayback : enterPlayback}
-            className={`flex items-center gap-1 px-3 py-1 rounded font-bold text-xs ${mode === "playback" ? "bg-amber-500 text-black" : "bg-white/10 border border-white/20"}`}>
+            className={`flex items-center gap-1 px-3 py-1.5 rounded font-bold text-xs transition-all ${mode === "playback" ? "bg-[#F59E0B] text-black shadow-[0_0_0_1px_rgba(245,158,11,0.5)]" : "bg-white/5 border border-white/15 text-slate-300 hover:bg-white/10"}`}>
             <History className="w-3.5 h-3.5" />
             {mode === "playback" ? "Exit playback" : "Playback"}
           </button>
           <button
             data-testid="liveops-dossier-btn"
             onClick={downloadDossier}
-            className="flex items-center gap-1 px-3 py-1 rounded font-bold text-xs bg-white/10 border border-white/20">
+            className="flex items-center gap-1 px-3 py-1.5 rounded font-bold text-xs bg-white/5 border border-white/15 text-slate-300 hover:bg-white/10">
             <Download className="w-3.5 h-3.5" />Dossier
           </button>
           <ShareLinksButton />
@@ -524,31 +610,31 @@ export default function LiveOpsPage() {
             <button
               data-testid="liveops-drop-note-btn"
               onClick={() => setDropOpen(true)}
-              className="flex items-center gap-1 px-3 py-1 rounded font-bold text-xs bg-amber-500 text-black hover:bg-amber-400">
+              className="flex items-center gap-1 px-3 py-1.5 rounded font-bold text-xs bg-[#F59E0B] text-black hover:bg-[#FBBF24] shadow-[0_0_0_1px_rgba(245,158,11,0.5)]">
               <StickyNote className="w-3.5 h-3.5" />Drop note
             </button>
           )}
           <button
             data-testid="liveops-customize-btn"
             onClick={() => setShowPrefs(!showPrefs)}
-            className="flex items-center gap-1 px-3 py-1 rounded font-bold text-xs bg-white/10 border border-white/20">
+            className="flex items-center gap-1 px-3 py-1.5 rounded font-bold text-xs bg-white/5 border border-white/15 text-slate-300 hover:bg-white/10">
             <Settings className="w-3.5 h-3.5" />Customize
           </button>
-          <div className="ml-auto flex items-center gap-3 text-[11px] text-white/70">
+          <div className="ml-auto flex items-center gap-3 text-[11px] text-slate-400 ca-telemetry">
             {activeReel ? (
               <>
-                <span>Reel: <b className="text-white">{activeReel.name}</b></span>
-                <span>Depth: <b className="text-white tabular-nums">{Math.round(currentDepth)} ft</b></span>
-                <span>Grade: <b className="text-white">{activeReel.intervals?.[0]?.grade || "—"}</b></span>
+                <span>Reel · <b className="text-white">{activeReel.name}</b></span>
+                <span className="text-[#06B6D4]">Depth · <b className="tabular-nums text-[#06B6D4]">{u.fmt(currentDepth, "depth", { digits: 0 })}</b></span>
+                <span className="text-[#F59E0B]">Grade · <b className="text-[#F59E0B]">{activeReel.intervals?.[0]?.grade || "—"}</b></span>
               </>
-            ) : <span className="text-amber-300">No active reel · set one in Reels</span>}
+            ) : <span className="text-[#F59E0B]">No active reel · set one in Reels</span>}
           </div>
         </div>
 
         {/* Playback scrubber */}
         {mode === "playback" && (
-          <div data-testid="liveops-scrubber" className="bg-amber-500/15 border border-amber-500/40 text-white rounded-lg p-2 flex items-center gap-2 flex-wrap">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-300">Playback</span>
+          <div data-testid="liveops-scrubber" className="ca-glass ca-glass-amber text-white p-2.5 flex items-center gap-2 flex-wrap">
+            <span className="ca-eyebrow ca-eyebrow-amber">Playback</span>
             <button
               data-testid="playback-step-back"
               onClick={() => setPlaybackIdx((i) => Math.max(0, i - 1))}
@@ -655,19 +741,19 @@ export default function LiveOpsPage() {
         )}
 
         {showPrefs && (
-          <div data-testid="liveops-customize-panel" className="bg-[#111827] text-white rounded-lg p-2 text-xs">
-            <p className="font-bold uppercase text-[10px] text-white/60 mb-1">Panels — toggle & reorder</p>
+          <div data-testid="liveops-customize-panel" className="ca-glass p-2.5 text-xs">
+            <p className="ca-eyebrow mb-1.5">Panels — toggle & reorder</p>
             <div className="flex flex-wrap gap-2">
               {PANELS.map((p) => {
                 const on = layout.includes(p.id);
                 return (
-                  <div key={p.id} className={`flex items-center gap-1 rounded px-2 py-1 ${on ? "bg-[#FF6B1A]/30 border border-[#FF6B1A]/50" : "bg-white/5 border border-white/10"}`}>
+                  <div key={p.id} className={`flex items-center gap-1.5 rounded px-2 py-1 transition-all ${on ? "bg-[#FF6B1A]/20 border border-[#FF6B1A]/60 shadow-[0_0_0_1px_rgba(255,107,26,0.3)]" : "bg-white/5 border border-white/10"}`}>
                     <input data-testid={`toggle-${p.id}`} type="checkbox" checked={on} onChange={() => togglePanel(p.id)} />
-                    <span className="font-bold">{p.label}</span>
+                    <span className="font-bold text-slate-200">{p.label}</span>
                     {on && (
                       <>
-                        <button data-testid={`up-${p.id}`} onClick={() => movePanel(p.id, -1)} className="text-white/70 hover:text-white font-bold">↑</button>
-                        <button data-testid={`down-${p.id}`} onClick={() => movePanel(p.id, 1)} className="text-white/70 hover:text-white font-bold">↓</button>
+                        <button data-testid={`up-${p.id}`} onClick={() => movePanel(p.id, -1)} className="text-slate-400 hover:text-white font-bold">↑</button>
+                        <button data-testid={`down-${p.id}`} onClick={() => movePanel(p.id, 1)} className="text-slate-400 hover:text-white font-bold">↓</button>
                       </>
                     )}
                   </div>
@@ -678,30 +764,31 @@ export default function LiveOpsPage() {
         )}
 
         {/* Grid */}
-        <div className={`grid gap-2 ${layout.length <= 2 ? "grid-cols-1 sm:grid-cols-2" : layout.length <= 4 ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"}`}>
+        <div className={`grid gap-3 ${layout.length <= 2 ? "grid-cols-1 sm:grid-cols-2" : layout.length <= 4 ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"}`}>
           {layout.map((id) => (
             <div
               key={id}
               data-testid={`panel-${id}`}
               onClick={() => setEnlarged(id)}
-              className="group relative cursor-pointer bg-[#111827] rounded-lg overflow-hidden hover:ring-2 hover:ring-amber-300 transition-all h-[260px]">
-              <div className="absolute top-1 right-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 rounded p-1">
+              className="group relative cursor-pointer ca-glass overflow-hidden hover:ca-glass-orange transition-all h-[260px]">
+              <div className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 rounded p-1 backdrop-blur">
                 <Maximize2 className="w-3.5 h-3.5 text-white" />
               </div>
+              <div className="ca-scanline" />
               {renderPanel(id, false)}
             </div>
           ))}
           {layout.length === 0 && (
-            <div className="col-span-full text-center py-16 text-white/60 text-sm">
-              No panels enabled. Open <b>Customize</b> to turn panels on.
+            <div className="col-span-full text-center py-16 text-slate-400 text-sm ca-glass">
+              No panels enabled. Open <b className="text-[#FF6B1A]">Customize</b> to turn panels on.
             </div>
           )}
         </div>
 
         {!running && samples.length === 0 && (
-          <div className="bg-amber-500/10 border border-amber-500/30 text-amber-200 rounded-lg p-3 flex items-center gap-2 text-xs">
-            <Zap className="w-4 h-4" />
-            Click <b>Start feed</b> to animate the dashboard. In Phase 1 the feed is a jittered simulator; in Phase 2, flip <b>Connected to unit</b> to pull WITS 0 / Modbus TCP from the live CT unit.
+          <div className="ca-glass ca-glass-amber text-amber-100 p-3 flex items-center gap-2 text-xs">
+            <Zap className="w-4 h-4 text-[#F59E0B]" />
+            Click <b className="text-[#F59E0B]">Start feed</b> to animate the dashboard. In Phase 1 the feed is a jittered simulator; in Phase 2, flip <b className="text-[#06B6D4]">Unit connected</b> to pull WITS 0 / Modbus TCP from the live CT unit.
           </div>
         )}
       </div>

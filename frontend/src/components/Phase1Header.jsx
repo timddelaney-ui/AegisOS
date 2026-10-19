@@ -4,12 +4,15 @@ import { ChevronLeft, Layers } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { planRole, ROLE_LABEL } from "../lib/roles";
 import { useActiveReel } from "../context/ActiveReelContext";
+import { useUnits } from "../context/UnitContext";
 import CoilAegisLogo from "./CoilAegisLogo";
+import UnitSwitcher from "./UnitSwitcher";
 
 export const Phase1PageHeader = ({ title, subtitle, right, "data-testid": testId }) => {
   const nav = useNavigate();
   const { user } = useAuth();
   const { activeReel, currentDepth } = useActiveReel();
+  const { fmt } = useUnits();
   const role = planRole(user);
   return (
     <div
@@ -35,10 +38,11 @@ export const Phase1PageHeader = ({ title, subtitle, right, "data-testid": testId
           <span className="hidden md:inline-flex items-center gap-1 text-[10px] text-white/70 whitespace-nowrap">
             <Layers className="w-3 h-3 text-[#FF6B1A]" />
             <span className="font-bold text-white">{activeReel.name}</span>
-            <span className="tabular-nums">· {currentDepth} ft</span>
+            <span className="tabular-nums">· {fmt(currentDepth, "depth", { digits: 0 })}</span>
           </span>
         )}
         {right}
+        <UnitSwitcher compact />
         <span
           className="hidden sm:inline-flex items-center text-[9px] font-bold uppercase bg-[#FF6B1A]/15 text-[#FF6B1A] border border-[#FF6B1A]/30 px-1.5 py-0.5 rounded tracking-wider"
         >

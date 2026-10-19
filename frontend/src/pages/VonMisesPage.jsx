@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect, useRef } from "react";
 import { Phase1PageHeader } from "../components/Phase1Header";
 import { useActiveReel } from "../context/ActiveReelContext";
+import { useUnits } from "../context/UnitContext";
 import { triaxialVonMises, vmEnvelope, intervalAt } from "../lib/ctPhysics";
 import { AlertTriangle, Volume2, VolumeX, Zap } from "lucide-react";
 import ShareLinksButton from "../components/ShareLinksButton";
@@ -15,6 +16,7 @@ const num = (v, def = 0) => {
 
 export default function VonMisesPage() {
   const { activeReel, currentDepth, setCurrentDepth } = useActiveReel();
+  const u = useUnits();
   const [depth, setDepth] = useState(currentDepth || 0);
   const [p_i, setPi] = useState(5000);
   const [p_o, setPo] = useState(0);
@@ -92,8 +94,9 @@ export default function VonMisesPage() {
   }, [yMin, yMax]);
 
   return (
-    <div className="min-h-screen bg-[#F3F3F3]">
-      <Phase1PageHeader title="API RP 5C7 Triaxial · Von Mises Egg" subtitle="Thick-wall Lamé · 80 % SMYS working limit · 100 % SMYS yield" right={
+    <div className="min-h-screen ca-console-shell relative">
+      <div className="relative z-10">
+      <Phase1PageHeader title="API RP 5C7 Triaxial · Von Mises Egg" subtitle="Thick-wall Lamé · 80 % SMYS working limit · 100 % SMYS yield · [API RP 5C7 §4.2.1 / ISO 13628-7]" right={
         <div className="flex items-center gap-1">
           <button
             data-testid="vm-mute-toggle"
@@ -120,21 +123,33 @@ export default function VonMisesPage() {
         {/* Combined input + metric strip */}
         <div className="bg-white border border-[#D4D4D4] rounded-lg p-2">
           <div className="grid gap-2 sm:grid-cols-8 text-[11px]">
-            <label className="flex flex-col"><span className="font-bold text-[#595959] text-[10px] uppercase">Depth ft</span>
-              <input data-testid="vm-depth" type="number" value={depth} onChange={(e) => setDepth(num(e.target.value))} className="border rounded px-1.5 py-0.5" />
+            <label className="flex flex-col"><span className="font-bold text-[#595959] text-[10px] uppercase">Depth {u.label("depth")}</span>
+              <input data-testid="vm-depth" type="number"
+                value={Number(u.from(depth, "depth").toFixed(1))}
+                onChange={(e) => setDepth(u.to(num(e.target.value), "depth"))}
+                className="border rounded px-1.5 py-0.5" />
             </label>
-            <label className="flex flex-col"><span className="font-bold text-[#595959] text-[10px] uppercase">P int (psi)</span>
-              <input data-testid="vm-pi" type="number" value={p_i} onChange={(e) => setPi(e.target.value)} className="border rounded px-1.5 py-0.5" />
+            <label className="flex flex-col"><span className="font-bold text-[#595959] text-[10px] uppercase">P int ({u.label("pressure")})</span>
+              <input data-testid="vm-pi" type="number"
+                value={Number(u.from(num(p_i), "pressure").toFixed(1))}
+                onChange={(e) => setPi(u.to(num(e.target.value), "pressure"))}
+                className="border rounded px-1.5 py-0.5" />
             </label>
-            <label className="flex flex-col"><span className="font-bold text-[#595959] text-[10px] uppercase">P ext (psi)</span>
-              <input data-testid="vm-po" type="number" value={p_o} onChange={(e) => setPo(e.target.value)} className="border rounded px-1.5 py-0.5" />
+            <label className="flex flex-col"><span className="font-bold text-[#595959] text-[10px] uppercase">P ext ({u.label("pressure")})</span>
+              <input data-testid="vm-po" type="number"
+                value={Number(u.from(num(p_o), "pressure").toFixed(1))}
+                onChange={(e) => setPo(u.to(num(e.target.value), "pressure"))}
+                className="border rounded px-1.5 py-0.5" />
             </label>
-            <label className="flex flex-col"><span className="font-bold text-[#595959] text-[10px] uppercase">F axial (lbf)</span>
-              <input data-testid="vm-fax" type="number" value={F_axial} onChange={(e) => setF(e.target.value)} className="border rounded px-1.5 py-0.5" />
+            <label className="flex flex-col"><span className="font-bold text-[#595959] text-[10px] uppercase">F axial ({u.label("force")})</span>
+              <input data-testid="vm-fax" type="number"
+                value={Number(u.from(num(F_axial), "force").toFixed(1))}
+                onChange={(e) => setF(u.to(num(e.target.value), "force"))}
+                className="border rounded px-1.5 py-0.5" />
             </label>
             <div className={`flex flex-col rounded px-1.5 py-0.5 ${alert ? "bg-[#F8D7DA] animate-pulse" : warn ? "bg-[#FFF3CD]" : "bg-[#FFF7EF]"}`}>
               <span className="font-bold text-[9px] uppercase text-[#595959]">Von Mises</span>
-              <span className="font-bold tabular-nums text-[12px]" data-testid="vm-value">{stress?.von_mises?.toFixed(0) || "—"} psi</span>
+              <span className="font-bold tabular-nums text-[12px]" data-testid="vm-value">{stress?.von_mises != null ? u.fmt(stress.von_mises, "stress", { digits: 0 }) : "—"}</span>
             </div>
             <div className={`flex flex-col rounded px-1.5 py-0.5 ${alert ? "bg-[#F8D7DA]" : warn ? "bg-[#FFF3CD]" : "bg-[#FFF7EF]"}`}>
               <span className="font-bold text-[9px] uppercase text-[#595959]">% 80% SMYS</span>
@@ -142,15 +157,15 @@ export default function VonMisesPage() {
             </div>
             <div className="flex flex-col">
               <span className="font-bold text-[9px] uppercase text-[#595959]">Δp · σh · σa</span>
-              <span className="tabular-nums text-[11px]">{dp.toFixed(0)} · {stress?.sigma_h?.toFixed(0)} · {stress?.sigma_a?.toFixed(0)}</span>
+              <span className="tabular-nums text-[11px]">{u.fmt(dp, "pressure", { digits: 0, suffix: false })} · {u.fmt(stress?.sigma_h || 0, "stress", { digits: 0, suffix: false })} · {u.fmt(stress?.sigma_a || 0, "stress", { digits: 0, suffix: false })}</span>
             </div>
             <div className="flex flex-col">
               <span className="font-bold text-[9px] uppercase text-[#595959]">Pipe</span>
-              <span className="text-[11px]">OD {seg.od_in}" WT {seg.wt_in}" {seg.grade || "QT-900"}</span>
+              <span className="text-[11px]">OD {u.fmt(seg.od_in, "od", { digits: u.isMetric ? 1 : 3 })} · WT {u.fmt(seg.wt_in, "wt", { digits: u.isMetric ? 2 : 3 })} · {seg.grade || "QT-900"}</span>
             </div>
           </div>
           {alert && (
-            <p className="mt-1 text-[11px] font-bold text-[#C00000] flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5" />Operating point crossed 95% of 80% SMYS working limit.</p>
+            <p className="mt-1 text-[11px] font-bold text-[#C00000] flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5" />Operating point crossed 95% of 80% SMYS working limit. [API RP 5C7 §4.2.1 / ISO 13628-7]</p>
           )}
         </div>
 
@@ -185,6 +200,7 @@ export default function VonMisesPage() {
             <text x={W - PAD} y={PAD + 10} textAnchor="end" fontSize="10" fill="#8B0000">100% SMYS yield</text>
           </svg>
         </div>
+      </div>
       </div>
     </div>
   );

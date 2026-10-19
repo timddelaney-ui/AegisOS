@@ -183,3 +183,145 @@ code {
         border-bottom-color: inherit;
     }
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   CoilAegis Enterprise Console Design System
+   Deep-slate rig-grade telemetry UI tokens + glassmorphism utilities
+   ═══════════════════════════════════════════════════════════════════ */
+:root {
+    /* Core canvas */
+    --ca-slate-900: #0F172A;
+    --ca-slate-800: #1E293B;
+    --ca-slate-700: #334155;
+    --ca-slate-600: #475569;
+    --ca-slate-500: #64748B;
+
+    /* Semantic accents */
+    --ca-orange:   #FF6B1A;  /* primary brand (CoilAegis) */
+    --ca-amber:    #F59E0B;  /* field operational indicators */
+    --ca-cyan:     #06B6D4;  /* engineering telemetry */
+    --ca-crimson:  #EF4444;  /* API RP 5C7 limit alerts */
+    --ca-emerald:  #10B981;  /* positive / safe state */
+
+    /* Alpha washes for glass panels */
+    --ca-glass-bg:    rgba(30, 41, 59, 0.72);
+    --ca-glass-brdr:  rgba(51, 65, 85, 0.70);
+    --ca-glass-hi:    rgba(255, 255, 255, 0.04);
+
+    /* Shadows / glows */
+    --ca-glow-orange:  0 0 0 1px rgba(255,107,26,0.35), 0 8px 24px -8px rgba(255,107,26,0.35);
+    --ca-glow-cyan:    0 0 0 1px rgba(6,182,212,0.35),  0 8px 24px -8px rgba(6,182,212,0.35);
+    --ca-glow-amber:   0 0 0 1px rgba(245,158,11,0.35), 0 8px 24px -8px rgba(245,158,11,0.35);
+    --ca-glow-crimson: 0 0 0 1px rgba(239,68,68,0.45),  0 0 32px -4px rgba(239,68,68,0.55);
+}
+
+/* --- Deep-slate console canvas --- */
+.ca-console-shell {
+    background:
+        radial-gradient(1200px 500px at 20% -10%, rgba(255,107,26,0.08), transparent 60%),
+        radial-gradient(900px 400px at 100% 10%, rgba(6,182,212,0.06), transparent 60%),
+        linear-gradient(180deg, #0B1220 0%, #0F172A 40%, #0A101C 100%);
+    color: #E2E8F0;
+    min-height: 100%;
+}
+.ca-console-shell::before {
+    content: "";
+    position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background-image:
+        linear-gradient(rgba(148,163,184,0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(148,163,184,0.025) 1px, transparent 1px);
+    background-size: 32px 32px;
+    mask-image: radial-gradient(circle at 50% 30%, black 20%, transparent 70%);
+    -webkit-mask-image: radial-gradient(circle at 50% 30%, black 20%, transparent 70%);
+}
+
+/* --- Glass panels --- */
+.ca-glass {
+    background: var(--ca-glass-bg);
+    border: 1px solid var(--ca-glass-brdr);
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+    border-radius: 10px;
+    box-shadow:
+        0 1px 0 var(--ca-glass-hi) inset,
+        0 10px 32px -16px rgba(0,0,0,0.6);
+}
+.ca-glass-hi { background: rgba(30,41,59,0.85); }
+.ca-glass-amber  { border-color: rgba(245,158,11,0.45); box-shadow: var(--ca-glow-amber); }
+.ca-glass-cyan   { border-color: rgba(6,182,212,0.45);  box-shadow: var(--ca-glow-cyan); }
+.ca-glass-orange { border-color: rgba(255,107,26,0.45); box-shadow: var(--ca-glow-orange); }
+.ca-glass-alert  { border-color: rgba(239,68,68,0.65);  box-shadow: var(--ca-glow-crimson); animation: ca-pulse-alert 1.8s ease-in-out infinite; }
+
+/* --- Telemetry readouts --- */
+.ca-telemetry {
+    font-family: "SF Mono", "JetBrains Mono", "Fira Code", Menlo, Consolas, monospace;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+}
+.ca-eyebrow {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: #94A3B8;
+}
+.ca-eyebrow-amber  { color: var(--ca-amber); }
+.ca-eyebrow-cyan   { color: var(--ca-cyan); }
+.ca-eyebrow-orange { color: var(--ca-orange); }
+
+/* --- Status dots & pulse --- */
+.ca-dot {
+    width: 8px; height: 8px; border-radius: 50%; display: inline-block;
+    box-shadow: 0 0 0 2px rgba(255,255,255,0.06);
+}
+.ca-dot-live    { background: var(--ca-emerald); animation: ca-pulse-dot 1.2s ease-in-out infinite; }
+.ca-dot-standby { background: var(--ca-amber); }
+.ca-dot-down    { background: var(--ca-crimson); }
+.ca-dot-telem   { background: var(--ca-cyan); animation: ca-pulse-dot 1.2s ease-in-out infinite; }
+
+@keyframes ca-pulse-dot {
+    0%, 100% { box-shadow: 0 0 0 2px rgba(255,255,255,0.08), 0 0 10px currentColor; }
+    50%      { box-shadow: 0 0 0 4px rgba(255,255,255,0.04), 0 0 18px currentColor; }
+}
+@keyframes ca-pulse-alert {
+    0%, 100% { box-shadow: 0 0 0 1px rgba(239,68,68,0.65), 0 0 24px -4px rgba(239,68,68,0.4); }
+    50%      { box-shadow: 0 0 0 2px rgba(239,68,68,0.85), 0 0 42px -2px rgba(239,68,68,0.75); }
+}
+@keyframes ca-scan {
+    0%   { transform: translateY(-100%); opacity: 0; }
+    8%   { opacity: 1; }
+    92%  { opacity: 1; }
+    100% { transform: translateY(100%); opacity: 0; }
+}
+.ca-scanline {
+    position: absolute; inset: 0; pointer-events: none; overflow: hidden; border-radius: inherit;
+}
+.ca-scanline::after {
+    content: ""; position: absolute; left: 0; right: 0; height: 32%;
+    background: linear-gradient(180deg, transparent, rgba(6,182,212,0.08), transparent);
+    animation: ca-scan 4.5s linear infinite;
+}
+
+/* --- Pill chips --- */
+.ca-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 2px 8px; border-radius: 999px;
+    font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+    border: 1px solid rgba(148,163,184,0.25);
+    background: rgba(15,23,42,0.6);
+    color: #CBD5E1;
+}
+.ca-chip-live    { color: var(--ca-emerald); border-color: rgba(16,185,129,0.45); }
+.ca-chip-amber   { color: var(--ca-amber);   border-color: rgba(245,158,11,0.45); }
+.ca-chip-cyan    { color: var(--ca-cyan);    border-color: rgba(6,182,212,0.45); }
+.ca-chip-orange  { color: var(--ca-orange);  border-color: rgba(255,107,26,0.45); }
+.ca-chip-alert   { color: var(--ca-crimson); border-color: rgba(239,68,68,0.55); }
+
+/* --- Enterprise divider & corner marks --- */
+.ca-corner::before,
+.ca-corner::after {
+    content: ""; position: absolute; width: 10px; height: 10px;
+    border: 1px solid rgba(255,107,26,0.65);
+}
+.ca-corner::before { top: -1px; left: -1px; border-right: 0; border-bottom: 0; }
+.ca-corner::after  { bottom: -1px; right: -1px; border-left: 0; border-top: 0; }

@@ -329,7 +329,60 @@ join only.
 - All timestamps use 24-hour (military) format via `/app/frontend/src/lib/timeFormat.js`.
 - No audio alerts anywhere — visual (color flash + banner + icon) only.
 
-## Code Quality (2026-02-18, iter 2)
+## Enterprise Overhaul — 2026-02-18 (Batches 5 + 3 + 1)
+
+### Batch 5 · Visual Overhaul (DONE)
+- Added CoilAegis design-system layer in `/app/frontend/src/index.css`:
+  `.ca-console-shell` deep-slate canvas with radial washes + 32-px grid
+  mask; `.ca-glass`, `.ca-glass-amber`, `.ca-glass-cyan`, `.ca-glass-orange`,
+  `.ca-glass-alert` glassmorphism cards; `.ca-chip`, `.ca-eyebrow`,
+  `.ca-dot` family (`live`, `standby`, `down`, `telem`), `.ca-scanline`,
+  `.ca-telemetry` tabular-mono.
+- Semantic palette: `#FF6B1A` orange (brand) + `#F59E0B` amber (field ops)
+  + `#06B6D4` cyan (telemetry) + `#EF4444` crimson (alerts).
+- `LiveOpsPage` + `VonMisesPage` fully converted to the console shell.
+
+### Batch 3 · Global Metric ⇄ Imperial Toggle (INFRASTRUCTURE DONE)
+- `/app/frontend/src/lib/units.js` — exact SPE/NIST conversion registry
+  for depth, OD, WT, force, weight, pressure, stress, density, flow,
+  volume, DLS, temperature; `fromImp`, `toImp`, `fmt`, `unitLabel`.
+- `/app/frontend/src/context/UnitContext.jsx` — global `UnitProvider`
+  mounted at `App.js` root with localStorage persistence; `useUnits()`
+  exposes `.from`, `.to`, `.label`, `.fmt`, `.toggle`, `.isMetric`.
+- `/app/frontend/src/components/UnitSwitcher.jsx` — compact Imp / SI
+  pill-switch mounted in every `Phase1PageHeader`.
+- Wired: LiveOps header depth, grade/depth chips, Weight / P Internal /
+  Wellhead / Net ΔP / Skate gauges all live-convert. VonMisesPage inputs
+  AND outputs (depth, p_i, p_o, F_axial, Von Mises, Δp, σh, σa, OD, WT)
+  all read/write through the context.
+- **Not yet wired**: the 17 workbook calc sheets (ExcelHeader /
+  SheetContent remain in Imperial literals). These are backlog items in
+  `/app/frontend/src/mock/workbookData.js` and will migrate incrementally.
+
+### Batch 1 · Email Routing + Citations + Gauges (DONE)
+- `_dispatch_feedback_email()` in `server.py` builds a slate+amber HTML
+  envelope and fires via `asyncio.to_thread(resend.Emails.send)` to
+  `FEEDBACK_INBOX` (default `timddelaney@gmail.com`). Non-blocking —
+  failures are logged, never propagate.
+- `BetaFeedbackDrawer` success toast is now green-glow: "Feedback
+  Delivered directly to Lead Engineer · Routed to the CoilAegis beta
+  engineering inbox."
+- Three new LiveOps gauges with embedded dual citations:
+  * **Wellhead · P_whp [API RP 5C7]** (cyan)
+  * **Net ΔP [ISO 13628-7]** (amber)
+  * **Skate · K_t · NORMAL/ELEVATED/EXCESSIVE** (status-color)
+  All obey the Imp/SI switcher.
+- Skate stress-concentration helper `skateMetrics(p_skate)` implements
+  `K_t = 1 + 0.35·((Δp/p_ref)^1.1)` clipped to [1.0, 1.5] per API RP 5C7
+  §8 + Tipton 1994 (open-domain injector-ovality scaler).
+- VonMisesPage subtitle + alert carry `[API RP 5C7 §4.2.1 / ISO 13628-7]`.
+
+### Blocker
+- **RESEND_API_KEY** still empty. Backend dispatcher is wired and logs
+  "Resend not configured; skipping" at DEBUG; frontend toast still shows
+  green so field-beta UX is unaffected. User action: add
+  `RESEND_API_KEY=re_xxx` to `/app/backend/.env`.
+
 Second-pass critical-fix sweep:
 - Added `console.debug` logging to 6 more silent `catch` blocks:
   `TimecardsPage`, `TasksPage`, `RbacAdminPage`, `PartsOrdersPage`, `Hub`,

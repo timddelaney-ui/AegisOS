@@ -36,6 +36,7 @@ import LiveOpsPage from "./pages/LiveOpsPage";
 import DaqConfigPage from "./pages/DaqConfigPage";
 import ShareRedeemPage from "./pages/ShareRedeemPage";
 import { ActiveReelProvider } from "./context/ActiveReelContext";
+import { UnitProvider } from "./context/UnitContext";
 import ManagerGreeting from "./components/ManagerGreeting";
 import RedeemDialog from "./components/RedeemDialog";
 import NotificationCenter from "./components/NotificationCenter";
@@ -306,9 +307,11 @@ const LandingRedirect = () => {
 function App() {
   useEffect(() => { registerServiceWorker(); }, []);
   return (
-    <ActiveReelProvider>
-      <AppRouter />
-    </ActiveReelProvider>
+    <UnitProvider>
+      <ActiveReelProvider>
+        <AppRouter />
+      </ActiveReelProvider>
+    </UnitProvider>
   );
 }
 

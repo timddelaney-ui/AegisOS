@@ -964,12 +964,62 @@ GEMINI_MODEL = "gemini-2.5-flash"
 # ============ Email (Resend) ============
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 RESEND_FROM_EMAIL = os.environ.get("RESEND_FROM_EMAIL", "onboarding@resend.dev")
+FEEDBACK_INBOX = os.environ.get("FEEDBACK_INBOX", "timddelaney@gmail.com")
 try:
     import resend as _resend
     if RESEND_API_KEY:
         _resend.api_key = RESEND_API_KEY
 except Exception:  # pragma: no cover
     _resend = None
+
+
+async def _dispatch_feedback_email(doc: dict) -> None:
+    """Fire-and-forget Resend dispatch for a new beta feedback entry.
+    Never raises — failures are logged and the feedback POST still returns OK.
+    """
+    if not RESEND_API_KEY or _resend is None:
+        logger.debug("Resend not configured; skipping feedback email dispatch")
+        return
+    try:
+        chip = (doc.get("category") or "other").upper()
+        subj = f"[CoilAegis Beta · {chip}] {doc.get('subject') or '(no subject)'}"
+        html = f"""
+        <div style="font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;color:#0F172A;max-width:640px;margin:auto;padding:16px;">
+          <div style="background:#0F172A;color:#F59E0B;padding:12px 16px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;border-radius:8px 8px 0 0;">
+            CoilAegis · Field Beta Feedback
+          </div>
+          <div style="background:#1E293B;color:#E2E8F0;padding:16px;border-radius:0 0 8px 8px;">
+            <table style="width:100%;font-size:12px;color:#CBD5E1;margin-bottom:12px;">
+              <tr><td style="padding:2px 0;color:#94A3B8;width:110px;">Category</td><td><b style="color:#F59E0B;">{chip}</b></td></tr>
+              <tr><td style="padding:2px 0;color:#94A3B8;">Sentiment</td><td>{(doc.get('sentiment') or '—').upper()}</td></tr>
+              <tr><td style="padding:2px 0;color:#94A3B8;">From</td><td>{doc.get('user_name') or '—'} &lt;{doc.get('user_email') or '—'}&gt;</td></tr>
+              <tr><td style="padding:2px 0;color:#94A3B8;">Page</td><td>{doc.get('page') or '—'}</td></tr>
+              <tr><td style="padding:2px 0;color:#94A3B8;">Workspace</td><td>{doc.get('team_id') or '—'}</td></tr>
+              <tr><td style="padding:2px 0;color:#94A3B8;">Submitted</td><td>{doc.get('created_at')}</td></tr>
+              <tr><td style="padding:2px 0;color:#94A3B8;">Feedback ID</td><td><code style="color:#06B6D4;">{doc.get('feedback_id')}</code></td></tr>
+            </table>
+            <div style="background:#0F172A;padding:12px;border-radius:6px;border-left:3px solid #FF6B1A;">
+              <div style="font-size:11px;color:#F59E0B;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:6px;font-weight:700;">{doc.get('subject') or '(no subject)'}</div>
+              <div style="white-space:pre-wrap;color:#E2E8F0;font-size:13px;">{(doc.get('message') or '')[:5000]}</div>
+            </div>
+            <p style="margin-top:14px;font-size:11px;color:#64748B;">
+              Delivered by the CoilAegis Field Beta Drawer · routed directly to the Lead Engineer inbox.
+            </p>
+          </div>
+        </div>
+        """
+        params = {
+            "from": f"CoilAegis Beta <{RESEND_FROM_EMAIL}>",
+            "to": [FEEDBACK_INBOX],
+            "subject": subj,
+            "html": html,
+            "reply_to": doc.get("user_email") or None,
+        }
+        # Resend SDK is synchronous — bounce to a thread so FastAPI loop stays free.
+        await asyncio.to_thread(_resend.Emails.send, {k: v for k, v in params.items() if v is not None})
+        logger.info("Feedback email dispatched to %s (fb=%s)", FEEDBACK_INBOX, doc.get("feedback_id"))
+    except Exception:
+        logger.exception("Feedback email dispatch failed (non-fatal) for fb=%s", doc.get("feedback_id"))
 
 def _parse_utc(value) -> Optional[datetime]:
     """Coerce a datetime or ISO string to a timezone-aware UTC datetime."""
@@ -1225,6 +1275,7 @@ async def submit_feedback(body: FeedbackCreate, user: dict = Depends(require_use
         "user_id": user["user_id"],
         "user_email": user["email"],
         "user_name": user.get("name"),
+        "team_id": user.get("team_id"),
         "category": body.category,
         "sentiment": body.sentiment or None,
         "subject": body.subject.strip()[:200],
@@ -1237,6 +1288,9 @@ async def submit_feedback(body: FeedbackCreate, user: dict = Depends(require_use
         "updated_at": datetime.now(timezone.utc),
     }
     await db.feedback.insert_one(doc)
+    # Fire-and-forget email dispatch to the Lead Engineer inbox. Never
+    # fails the feedback POST — the drawer always sees a green toast.
+    asyncio.create_task(_dispatch_feedback_email(doc))
     return _serialize({k: v for k, v in doc.items() if k != "_id"})
 
 

@@ -85,7 +85,16 @@ const BetaFeedbackDrawer = () => {
         user_agent: `${navigator.userAgent}`.slice(0, 290),
       };
       const r = await axios.post(`${API}/feedback`, payload, { withCredentials: true });
-      toast.success("Thanks — logged to the beta queue");
+      toast.success("Feedback Delivered directly to Lead Engineer", {
+        description: "Routed to the CoilAegis beta engineering inbox.",
+        duration: 4500,
+        style: {
+          background: "linear-gradient(135deg,#064E3B 0%,#065F46 100%)",
+          color: "#D1FAE5",
+          border: "1px solid #10B981",
+          boxShadow: "0 0 0 1px rgba(16,185,129,0.4), 0 8px 24px -8px rgba(16,185,129,0.4)",
+        },
+      });
       const next = [{
         at: new Date().toISOString(),
         category, subject: payload.subject, message: payload.message,
