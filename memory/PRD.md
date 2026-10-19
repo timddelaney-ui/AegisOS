@@ -388,6 +388,35 @@ join only.
 ## DLS + Contact-Drag 3D Wellbore — 2026-02-18
 
 ## Mini Wellbore docked on LiveOps — 2026-02-18
+
+## Job-Log Playback — CSV / LAS / WITS — 2026-02-18
+- New `/app/frontend/src/lib/jobLogParser.js` — unified parser for:
+  * **CSV / TSV** with case-insensitive canonical header aliases (depth,
+    md, hookload, pumppressure, skate, etc.). Auto-detects delimiter and
+    auto-imperializes metric columns (depth_m → ft, weight_n → lbf,
+    pressure_kpa / bar / mpa → psi) on the fly.
+  * **LAS 2.0 / 3.0** — Canadian Well Log Society open spec. Walks
+    `~Curve` and `~Ascii` sections, skips `-999.25` nulls.
+  * **WITS 0** — standard surface record IDs: `0108/0130` depth,
+    `0146/0157` hookload (klbs → lbs), `0101/0103` pump pressure,
+    `0106` casing/annulus, `0115` traction, `0127` axial.
+  * Format auto-detect by extension + content sniffing.
+- New `JobLogPlayback` component — floating drag-and-drop zone that
+  transforms into a transport bar once a file loads:
+  * Jump-start / Step-back / Play-Pause / Step-forward / Jump-end
+  * **1× / 5× / 10×** speed pills (cyan when active)
+  * Scrubbable progress bar, % readout, live sample preview
+  * Green `"${format} loaded"` toast with sample count
+  * Close (×) tears down replay and restores live mode
+- LiveOps wiring: when a file is loaded, `replaySample` fully overrides
+  the dashboard's `latest`, `chartSamples` reads from the replay buffer,
+  `setCurrentDepth` tracks the replay depth so the Mini Wellbore BHA tip
+  animates. The status strip chip switches `LIVE → REPLAY`.
+- Verified end-to-end with a hand-crafted 20-sample CSV: Weight,
+  Pressure, Von Mises %, Skate K_t (incl. "EXCESSIVE" penalty label),
+  Reel Fatigue heatmap, Net ΔP, and Mini Wellbore all scrub through the
+  recorded run at 5×. Phase2 pytest 15/15 pass.
+
 - New `MiniWellbore` component in `LiveOpsPanels.jsx` — glanceable 3D
   trajectory with DLS / Drag / Combined coloring, animated gold BHA tip
   that tracks `latest.depth_ft`, auto-rotating `OrbitControls`, and a

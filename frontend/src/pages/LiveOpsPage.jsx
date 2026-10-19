@@ -11,6 +11,7 @@ import { postSampleResilient, drainOfflineQueue, offlineQueueLength, startOfflin
 import { samplesToCSV, samplesToLAS, downloadBlob } from "../lib/playbackExport";
 import { triaxialVonMises, intervalAt } from "../lib/ctPhysics";
 import ShareLinksButton from "../components/ShareLinksButton";
+import JobLogPlayback from "../components/JobLogPlayback";
 import { AnnotationPins, DropAnnotationModal, ViewAnnotationModal } from "../components/AnnotationLayer";
 import { isSupervisorOrHigher, isManagement } from "../lib/roles";
 import { useRig } from "../context/RigContext";
@@ -147,6 +148,15 @@ export default function LiveOpsPage() {
     setWbColorMode(next);
     try { localStorage.setItem("coilaegis_wellbore_colormode", next); } catch (e) { console.debug("[LiveOps] wb mode persist failed", e?.message); }
   };
+
+  // ── Job-log replay state ──
+  // When a CSV / LAS / WITS file is loaded, `replaySample` becomes the
+  // dashboard's `latest` sample override and `replaySamples` becomes the
+  // samples that drive the strip chart. Playback transport lives inside
+  // the floating JobLogPlayback bar.
+  const [replaySample, setReplaySample] = useState(null);
+  const [replaySamples, setReplaySamples] = useState([]);
+  const [replayCursor, setReplayCursor] = useState(0);
   // Playback mode: scrub backwards through the recorded buffer.
   const [mode, setMode] = useState("live");           // 'live' | 'playback'
   const [playbackIdx, setPlaybackIdx] = useState(0);  // index into samples[]
@@ -354,19 +364,28 @@ export default function LiveOpsPage() {
     // eslint-disable-next-line
   }, [running, connected, activeReel?.reel_id]);
 
-  // Mode-aware "current sample": in playback, we read from the scrubber;
-  // in live, we read the newest.
-  const latest = mode === "playback"
-    ? (samples[Math.min(playbackIdx, samples.length - 1)] || {})
-    : (samples[samples.length - 1] || {});
+  // Mode-aware "current sample": in replay (job-log playback), that
+  // sample fully overrides; otherwise playback = scrubbed sample; live =
+  // newest sample from the ring.
+  const latest = replaySample
+    ? replaySample
+    : mode === "playback"
+      ? (samples[Math.min(playbackIdx, samples.length - 1)] || {})
+      : (samples[samples.length - 1] || {});
 
-  // What the strip chart shows: live = all samples; playback = window ending at scrubber.
+  // What the strip chart shows: replay = all replay samples up to cursor;
+  // live = all live samples; playback = window ending at scrubber.
   const chartSamples = useMemo(() => {
+    if (replaySamples.length > 0) {
+      const end = Math.min(replayCursor + 1, replaySamples.length);
+      const start = Math.max(0, end - CHART_WINDOW);
+      return replaySamples.slice(start, end);
+    }
     if (mode !== "playback") return samples;
     const end = Math.min(playbackIdx + 1, samples.length);
     const start = Math.max(0, end - CHART_WINDOW);
     return samples.slice(start, end);
-  }, [mode, samples, playbackIdx]);
+  }, [mode, samples, playbackIdx, replaySamples, replayCursor]);
 
   // Playback tick loop
   useEffect(() => {
@@ -668,10 +687,31 @@ export default function LiveOpsPage() {
           </div>
           <div className="flex items-center gap-2">
             <span className="ca-chip ca-chip-cyan">{liveSource === "simulated" ? "SIM" : liveSource.toUpperCase()}</span>
-            <span className="ca-chip">{mode === "playback" ? "PLAYBACK" : running ? "LIVE" : "STANDBY"}</span>
+            <span className="ca-chip">{replaySamples.length > 0 ? "REPLAY" : mode === "playback" ? "PLAYBACK" : running ? "LIVE" : "STANDBY"}</span>
             {activeReel?.intervals?.[0]?.grade && <span className="ca-chip ca-chip-amber">{activeReel.intervals[0].grade}</span>}
           </div>
         </div>
+
+        {/* Job-log playback — CSV / LAS / WITS drag-and-drop replay bar */}
+        <JobLogPlayback
+          onLoad={({ samples: parsed }) => {
+            setReplaySamples(parsed);
+            setReplayCursor(0);
+            // Pause live feed so replay drives the dashboard cleanly
+            setRunning(false);
+            setMode("live");
+          }}
+          onSampleTick={(sample, i) => {
+            setReplaySample(sample);
+            setReplayCursor(i);
+            if (sample?.depth_ft != null) setCurrentDepth(Math.round(sample.depth_ft));
+          }}
+          onClose={() => {
+            setReplaySample(null);
+            setReplaySamples([]);
+            setReplayCursor(0);
+          }}
+        />
 
         {/* Controls */}
         <div className="ca-glass flex items-center gap-2 p-2 flex-wrap">
