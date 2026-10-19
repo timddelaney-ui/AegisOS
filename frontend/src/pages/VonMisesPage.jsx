@@ -157,7 +157,7 @@ export default function VonMisesPage() {
             </div>
             <div className="flex flex-col">
               <span className="font-bold text-[9px] uppercase text-[#595959]">Δp · σh · σa</span>
-              <span className="tabular-nums text-[11px]">{u.fmt(dp, "pressure", { digits: 0, suffix: false })} · {u.fmt(stress?.sigma_h || 0, "stress", { digits: 0, suffix: false })} · {u.fmt(stress?.sigma_a || 0, "stress", { digits: 0, suffix: false })}</span>
+              <span className="tabular-nums text-[11px]">{u.fmt(dp, "pressure", { digits: u.isMetric ? 1 : 0, suffix: false })} · {u.fmt(stress?.sigma_h || 0, "stress", { digits: 0, suffix: false })} · {u.fmt(stress?.sigma_a || 0, "stress", { digits: 0, suffix: false })}</span>
             </div>
             <div className="flex flex-col">
               <span className="font-bold text-[9px] uppercase text-[#595959]">Pipe</span>

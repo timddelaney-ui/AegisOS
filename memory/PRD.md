@@ -678,3 +678,30 @@ Engineering Audit Dossier · Polish Pass (2026-02-19):
   (`<html>` opened and closed, 9.8 KB), 4 API RP 5C7 refs, 2
   Palmgren-Miner refs, 2 ISO 13628-7 refs.
 
+
+Metric Unit Policy Update (2026-02-19):
+Field crew requested Metric readings follow operational O&G convention,
+not generic SI defaults:
+- **Wellhead · P_whp** and **P internal** gauges → `MPa` in Metric
+  (verified 5,000 psi → 34.5 MPa, 3,000 psi → 20.7 MPa). Also applied
+  to Net ΔP (same semantic group) and the strip-chart `_pint` pen.
+- **Weight / hook load** → `daN` (deca-newton) in Metric so the digit
+  scale matches lbs for the tool push (verified 15,000 lbs → 6,672
+  daN). Also carried through to the chart `_weight` pen and dossier
+  Weight channel.
+- **Injector-skate pressure** → always `psi`, regardless of toggle.
+  OEM-published recommended ranges for hydraulic skate cylinders are
+  only expressed in psi, so a global switch would obscure safe-work
+  limits. Implemented via a new `pressure_psi_fixed` dimension that
+  no-ops conversion on both Imperial and Metric branches.
+- `pressure_kpa` is retained as an opt-in dim for low-pressure annulus
+  readings that still want kPa resolution.
+- `LiveGauge` component now accepts a `digits` prop; MPa gauges pass
+  `digits=1` so decimals aren't lost at the gauge face / min-max end
+  labels.
+- Von Mises Δp readout now auto-picks 1 decimal in Metric (MPa) and
+  stays at 0 in Imperial (psi).
+- Node-side sanity: 5,800 psi → 39.99 MPa, 1,200 psi (skate) → 1,200 psi
+  (no conversion applied), both chart and gauge readouts honour the new
+  dims.
+

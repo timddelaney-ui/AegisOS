@@ -107,7 +107,7 @@ export function MiniFatigue({ damage = [], spacing = 100, worst = 0, large = fal
 }
 
 // Radial-arc gauge for weight / pressure
-export function LiveGauge({ title, unit, value, min = 0, max = 100, criticalAbove, warnAbove, large = false, color = "#0056B3" }) {
+export function LiveGauge({ title, unit, value, min = 0, max = 100, criticalAbove, warnAbove, large = false, color = "#0056B3", digits = 0 }) {
   const v = Number(value) || 0;
   const pct = Math.max(0, Math.min(1, (v - min) / (max - min)));
   const angle = -120 + pct * 240; // -120° to +120°
@@ -128,13 +128,15 @@ export function LiveGauge({ title, unit, value, min = 0, max = 100, criticalAbov
   const needle = toXY(angle);
   const W = (r + 20) * 2;
   const H = r + 50;
+  // Format min/max end-labels with same precision as the center readout.
+  const fmtV = (x) => x.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits });
   return (
     <div className="relative w-full h-full flex flex-col">
       <div className="flex items-center gap-1.5 px-2 py-1 bg-[#0D1A24] text-white rounded-t">
         <GaugeIcon className="w-3.5 h-3.5 text-amber-300" />
         <span className="text-[10px] font-bold uppercase tracking-wider">{title}</span>
         <span className={`ml-auto text-[11px] font-bold tabular-nums ${critical ? "text-red-400 animate-pulse" : warn ? "text-amber-300" : "text-white"}`}>
-          {v.toFixed(0)} {unit}
+          {fmtV(v)} {unit}
         </span>
       </div>
       <div className="flex-1 bg-white rounded-b border border-[#E5E5E5] flex items-center justify-center">
@@ -154,11 +156,11 @@ export function LiveGauge({ title, unit, value, min = 0, max = 100, criticalAbov
           <line x1={cx} y1={cy} x2={needle.x} y2={needle.y} stroke="#262626" strokeWidth="2" strokeLinecap="round" />
           <circle cx={cx} cy={cy} r="4" fill="#262626" />
           {/* Center value */}
-          <text x={cx} y={cy + r / 2 + 4} textAnchor="middle" fontSize={large ? 28 : 16} fontWeight="bold" fill={critical ? "#C00000" : warn ? "#C36600" : "#262626"} className="tabular-nums">{v.toFixed(0)}</text>
+          <text x={cx} y={cy + r / 2 + 4} textAnchor="middle" fontSize={large ? 28 : 16} fontWeight="bold" fill={critical ? "#C00000" : warn ? "#C36600" : "#262626"} className="tabular-nums">{fmtV(v)}</text>
           <text x={cx} y={cy + r / 2 + (large ? 24 : 16)} textAnchor="middle" fontSize={large ? 12 : 10} fill="#595959">{unit}</text>
           {/* Min/max */}
-          <text x={toXY(-120).x} y={toXY(-120).y + 14} textAnchor="middle" fontSize="9" fill="#8B8B8B">{min}</text>
-          <text x={toXY(120).x} y={toXY(120).y + 14} textAnchor="middle" fontSize="9" fill="#8B8B8B">{max}</text>
+          <text x={toXY(-120).x} y={toXY(-120).y + 14} textAnchor="middle" fontSize="9" fill="#8B8B8B">{fmtV(min)}</text>
+          <text x={toXY(120).x} y={toXY(120).y + 14} textAnchor="middle" fontSize="9" fill="#8B8B8B">{fmtV(max)}</text>
         </svg>
       </div>
     </div>

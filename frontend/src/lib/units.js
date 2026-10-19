@@ -64,12 +64,29 @@ const CONV = {
     metric:   { label: "kN",  from: (v) => v * K.N_PER_LBF / 1000, to: (v) => v * K.LBF_PER_N * 1000 },
   },
   weight: {
-    imperial: { label: "lbs", from: (v) => v,                 to: (v) => v },
-    metric:   { label: "kN",  from: (v) => v * K.N_PER_LBF / 1000, to: (v) => v * K.LBF_PER_N * 1000 },
+    // Metric field convention for CT hook/injector weight is deca-newton
+    // (1 daN ≈ 1 kgf). Keeps the digit scale similar to lbs for the crew.
+    imperial: { label: "lbs", from: (v) => v,                      to: (v) => v },
+    metric:   { label: "daN", from: (v) => v * K.N_PER_LBF / 10,   to: (v) => v * K.LBF_PER_N * 10 },
   },
   pressure: {
+    // Field convention for CT pump / wellhead / net-ΔP readings is MPa in
+    // Metric. kPa produces 5-digit values that are hard to read on gauges.
+    imperial: { label: "psi", from: (v) => v,                         to: (v) => v },
+    metric:   { label: "MPa", from: (v) => v / K.PSI_PER_MPA,         to: (v) => v * K.PSI_PER_MPA },
+  },
+  pressure_kpa: {
+    // Opt-in retained for low-pressure annulus/casing fields that still
+    // want kPa resolution.
     imperial: { label: "psi", from: (v) => v,                 to: (v) => v },
     metric:   { label: "kPa", from: (v) => v * K.KPA_PER_PSI, to: (v) => v * K.PSI_PER_KPA },
+  },
+  pressure_psi_fixed: {
+    // Hydraulic injector-skate pressure is always expressed in psi in the
+    // field, regardless of the viewer's unit system — manufacturers only
+    // publish skate-cylinder recommended ranges in psi.
+    imperial: { label: "psi", from: (v) => v, to: (v) => v },
+    metric:   { label: "psi", from: (v) => v, to: (v) => v },
   },
   pressure_mpa: {
     imperial: { label: "psi", from: (v) => v,                 to: (v) => v },

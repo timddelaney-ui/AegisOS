@@ -189,7 +189,7 @@ function buildDossierHtml(d, u) {
           ${sparkRow("Weight", d.recorded_channels.weight_lb, "weight")}
           ${sparkRow("P internal", d.recorded_channels.p_internal_psi, "pressure")}
           ${sparkRow("P external", d.recorded_channels.p_external_psi, "pressure")}
-          ${sparkRow("Traction pressure", d.recorded_channels.traction_pressure_psi, "pressure")}
+          ${sparkRow("Traction pressure (skate)", d.recorded_channels.traction_pressure_psi, "pressure_psi_fixed")}
           ${sparkRow("Axial force", d.recorded_channels.axial_force_lbf, "force")}
           ${sparkRow("Depth", d.recorded_channels.depth_ft, "depth")}
         </tbody>
@@ -695,6 +695,7 @@ export default function LiveOpsPage() {
           max={u.from(10000, "pressure")}
           warnAbove={u.from(7500, "pressure")}
           criticalAbove={u.from(9000, "pressure")}
+          digits={u.isMetric ? 1 : 0}
           large={large} color="#EF4444" />;
       case "whp":
         return <LiveGauge title="Wellhead · P_whp [API RP 5C7]" unit={u.label("pressure")}
@@ -703,6 +704,7 @@ export default function LiveOpsPage() {
           max={u.from(8000, "pressure")}
           warnAbove={u.from(5500, "pressure")}
           criticalAbove={u.from(7000, "pressure")}
+          digits={u.isMetric ? 1 : 0}
           large={large} color="#06B6D4" />;
       case "dpnet": {
         const dp = (latest.p_internal_psi || 0) - (latest.p_external_psi || 0);
@@ -712,19 +714,22 @@ export default function LiveOpsPage() {
           max={u.from(10000, "pressure")}
           warnAbove={u.from(7500, "pressure")}
           criticalAbove={u.from(9000, "pressure")}
+          digits={u.isMetric ? 1 : 0}
           large={large} color="#F59E0B" />;
       }
       case "skate": {
         const ps = latest.traction_pressure_psi || 0;
         const sm = skateMetrics(ps);
+        // Skate pressure stays in psi globally — hydraulic skate-cylinder
+        // recommended ranges are only published in psi by every OEM.
         return <LiveGauge
           title={`Skate · K_t ${sm.kt.toFixed(2)} · ${sm.label}`}
-          unit={u.label("pressure")}
-          value={u.from(ps, "pressure")}
+          unit={u.label("pressure_psi_fixed")}
+          value={u.from(ps, "pressure_psi_fixed")}
           min={0}
-          max={u.from(2500, "pressure")}
-          warnAbove={u.from(1500, "pressure")}
-          criticalAbove={u.from(2000, "pressure")}
+          max={u.from(2500, "pressure_psi_fixed")}
+          warnAbove={u.from(1500, "pressure_psi_fixed")}
+          criticalAbove={u.from(2000, "pressure_psi_fixed")}
           large={large}
           color={sm.severity === "crit" ? "#EF4444" : sm.severity === "warn" ? "#F59E0B" : "#10B981"} />;
       }
@@ -742,15 +747,15 @@ export default function LiveOpsPage() {
           _depth:    u.from(s.depth_ft || 0, "depth"),
           _weight:   u.from(s.weight_lb || 0, "weight"),
           _pint:     u.from(s.p_internal_psi || s.pressure_psi || 0, "pressure"),
-          _skate:    u.from(s.traction_pressure_psi || 0, "pressure"),
+          _skate:    u.from(s.traction_pressure_psi || 0, "pressure_psi_fixed"),
           _vm_pct:   (s.vm_utilization || 0) * 100 * 0.8,  // % of SMYS (0..100)
           _fat_pct:  (s.fatigue_worst || 0) * 100,         // worst-node damage %
         }));
         const series = [
           { key: "_depth",   color: "#06B6D4", label: `Depth · ${u.label("depth")}`,     suffix: u.label("depth"),  format: (v) => v.toFixed(0) },
-          { key: "_weight",  color: "#FF6B1A", label: `Weight · ${u.label("weight")}`,   suffix: u.label("weight"), format: (v) => v.toFixed(u.isMetric ? 1 : 0) },
-          { key: "_pint",    color: "#EF4444", label: `P int · ${u.label("pressure")}`,  suffix: u.label("pressure"), format: (v) => v.toFixed(0) },
-          { key: "_skate",   color: "#F59E0B", label: `Skate · ${u.label("pressure")}`,  suffix: u.label("pressure"), format: (v) => v.toFixed(0) },
+          { key: "_weight",  color: "#FF6B1A", label: `Weight · ${u.label("weight")}`,   suffix: u.label("weight"), format: (v) => v.toFixed(0) },
+          { key: "_pint",    color: "#EF4444", label: `P int · ${u.label("pressure")}`,  suffix: u.label("pressure"), format: (v) => v.toFixed(u.isMetric ? 1 : 0) },
+          { key: "_skate",   color: "#F59E0B", label: `Skate · ${u.label("pressure_psi_fixed")}`,  suffix: u.label("pressure_psi_fixed"), format: (v) => v.toFixed(0) },
           { key: "_vm_pct",  color: "#A78BFA", label: "VM % of 80% SMYS",                suffix: "%",             format: (v) => v.toFixed(1) },
           { key: "_fat_pct", color: "#10B981", label: "Fatigue · worst node",            suffix: "%",             format: (v) => v.toFixed(2) },
         ];
