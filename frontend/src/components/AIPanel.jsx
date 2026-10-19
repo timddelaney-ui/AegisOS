@@ -72,7 +72,7 @@ const AIMessage = ({ content }) => {
             ? "hover:bg-[#FEE2E2] text-[#8B0000] bg-[#FFF2F2]"
             : "hover:bg-[#FFF7EF] text-[#595959] bg-[#FAFAFA]";
         return (
-          <div key={i} className="border-t border-[#EFEFEF]">
+          <div key={`${s.label}-${i}`} className="border-t border-[#EFEFEF]">
             <button
               onClick={() => toggle(i)}
               data-testid={`ai-section-toggle-${i}`}

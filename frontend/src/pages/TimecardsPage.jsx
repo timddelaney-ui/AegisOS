@@ -15,6 +15,9 @@ const STATUS_COLOR = {
 };
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
+// Client-side row identity so controlled inputs don't bleed state when a
+// middle shift activity is removed (index-based keys would shift state up).
+const newRowId = () => `ac_${Math.random().toString(36).slice(2, 10)}_${Date.now().toString(36)}`;
 // Default activity composition for a typical shift
 const DEFAULT_ACTIVITIES = [
   { pay_code: "field_rate", hours: 0, description: "Field hours — on location" },
@@ -22,6 +25,7 @@ const DEFAULT_ACTIVITIES = [
   { pay_code: "travel_rate", hours: 0, description: "Travel to/from location" },
   { pay_code: "moving_equipment", hours: 0, description: "Moving equipment" },
 ];
+const withRowId = (a) => ({ ...a, _rowId: newRowId() });
 
 export default function TimecardsPage() {
   const { user } = useAuth();
@@ -43,7 +47,7 @@ export default function TimecardsPage() {
   const [shiftDate, setShiftDate] = useState(todayISO());
   const [shiftJob, setShiftJob] = useState("");
   const [shiftRig, setShiftRig] = useState("");
-  const [activities, setActivities] = useState(DEFAULT_ACTIVITIES.map((a) => ({ ...a })));
+  const [activities, setActivities] = useState(DEFAULT_ACTIVITIES.map(withRowId));
   const [showQuick, setShowQuick] = useState(false);
   const [quick, setQuick] = useState({ work_date: todayISO(), hours: 12, description: "", job_number: "", pay_code: "regular", rig_id: "" });
 
@@ -76,9 +80,9 @@ export default function TimecardsPage() {
   const shiftHours = activities.reduce((acc, a) => acc + (Number(a.hours) || 0), 0);
 
   const updateActivity = (i, k, v) => setActivities((prev) => prev.map((a, idx) => idx === i ? { ...a, [k]: v } : a));
-  const addActivity = () => setActivities((prev) => [...prev, { pay_code: payCodes[0]?.code || "regular", hours: 0, description: "" }]);
+  const addActivity = () => setActivities((prev) => [...prev, withRowId({ pay_code: payCodes[0]?.code || "regular", hours: 0, description: "" })]);
   const removeActivity = (i) => setActivities((prev) => prev.filter((_, idx) => idx !== i));
-  const resetShift = () => { setActivities(DEFAULT_ACTIVITIES.map((a) => ({ ...a }))); setShiftJob(""); setShiftRig(""); };
+  const resetShift = () => { setActivities(DEFAULT_ACTIVITIES.map(withRowId)); setShiftJob(""); setShiftRig(""); };
 
   const submitShift = async () => {
     if (!shiftJob.trim()) return toast.error("Job number required for the shift");
@@ -202,7 +206,7 @@ export default function TimecardsPage() {
               const pc = payCodeMap[a.pay_code];
               const lineTotal = rate * (Number(a.hours) || 0);
               return (
-                <div key={i} data-testid={`shift-row-${i}`} className="grid grid-cols-12 gap-1 items-center text-xs">
+                <div key={a._rowId} data-testid={`shift-row-${i}`} className="grid grid-cols-12 gap-1 items-center text-xs">
                   <select data-testid={`shift-paycode-${i}`} value={a.pay_code} onChange={(e) => updateActivity(i, "pay_code", e.target.value)} className="col-span-3 border rounded px-1 py-0.5">
                     {payCodes.map((p) => <option key={p.code} value={p.code}>{p.label}{p.is_per_diem ? " (days)" : ""}</option>)}
                   </select>

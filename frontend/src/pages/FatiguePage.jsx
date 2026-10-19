@@ -188,7 +188,7 @@ export default function FatiguePage() {
           <h3 className="font-bold text-sm mb-2">Reel Heatmap · green → red</h3>
           <div data-testid="fatigue-heatmap" className="flex flex-wrap gap-[2px]">
             {nodes.map((d, i) => (
-              <div key={i} title={`MD ${i * spacing} ft · ${(d * 100).toFixed(1)}% life used`}
+              <div key={`fnode-${i * spacing}`} title={`MD ${i * spacing} ft · ${(d * 100).toFixed(1)}% life used`}
                 className="w-[14px] h-6 rounded-[2px]"
                 style={{ background: damageColor(d) }} />
             ))}

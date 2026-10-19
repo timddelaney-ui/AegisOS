@@ -592,3 +592,25 @@ Second-pass critical-fix sweep:
   - break up `LiveOpsPage`, `Hub`, `DocumentsPage`, `CTDrillingCalculator`
     oversized components.
 
+
+Third-pass critical-fix sweep (2026-02-19):
+- **ReelsPage intervals** + **TimecardsPage activities**: replaced
+  index-based React keys with stable client-generated `_rowId` so
+  controlled inputs no longer bleed state when a middle row is removed.
+  (`newRowId()` helpers, `withRowId()` in TimecardsPage.)
+- Replaced residual index keys with semantic composite keys in
+  `FatiguePage` (`fnode-{md}`), `LiveOpsPanels` damage heatmap
+  (`dmg-{md}`), `AIPanel` sections (`{label}-{i}`), `WellborePage`
+  surface Text (station `md_ft`), and `ReelsPage` card interval rows
+  (`{start}-{end}-{i}`).
+- Confirmed `eval()` findings in the code-quality report are **false
+  positives** (function names `_post_eval`, `crew_safety_eval`, URL
+  `/safety-eval` — no real `eval` builtin usage anywhere).
+- Confirmed `tests/test_phase2.py:104,266` "hardcoded secrets" findings
+  are **false positives** (Set-Cookie header parsing patterns, not
+  credentials).
+- Pyflakes + ESLint produced **zero** real "undefined variable" hits;
+  the report's "8 undefined vars" claim is unsubstantiated.
+- Console-statement reduction skipped: non-debug statements (11) are
+  legitimate catch-block warnings that are useful in production.
+

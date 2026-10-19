@@ -110,8 +110,8 @@ function Wellbore({ survey, depth, colorMode = "dls" }) {
           <meshStandardMaterial color="#F59E0B" emissive="#F59E0B" emissiveIntensity={0.5} />
         </mesh>
       )}
-      {survey.stations.slice(0, 1).map((s, i) => (
-        <Text key={i} position={[0, 0.5, 0]} fontSize={0.8} color="#06B6D4">surface</Text>
+      {survey.stations.slice(0, 1).map((s) => (
+        <Text key={`surface-${s.md_ft ?? 0}`} position={[0, 0.5, 0]} fontSize={0.8} color="#06B6D4">surface</Text>
       ))}
     </group>
   );

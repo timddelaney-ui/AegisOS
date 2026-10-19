@@ -85,7 +85,7 @@ export function MiniFatigue({ damage = [], spacing = 100, worst = 0, large = fal
           {damage.length === 0 && <p className="text-[10px] text-[#595959] italic">No fatigue history yet.</p>}
           {damage.map((d, i) => (
             <div
-              key={i}
+              key={`dmg-${i * spacing}`}
               title={`MD ${i * spacing} ft · ${(d * 100).toFixed(1)}%`}
               className={large ? "w-[14px] h-5" : "w-[7px] h-3"}
               style={{ background: damageColor(d), borderRadius: 1 }}

@@ -9,7 +9,10 @@ import { defaultSmys } from "../lib/ctPhysics";
 import { Plus, Upload, Trash2, CheckCircle2, Lock } from "lucide-react";
 import ShareLinksButton from "../components/ShareLinksButton";
 
-const emptyInterval = () => ({ start_md_ft: 0, end_md_ft: 1000, od_in: 2.0, wt_in: 0.175, grade: "QT-900", smys_psi: 90000 });
+// Client-side row identity so React doesn't bleed state between controlled
+// inputs when a middle interval is removed (index keys would shift state up).
+const newRowId = () => `iv_${Math.random().toString(36).slice(2, 10)}_${Date.now().toString(36)}`;
+const emptyInterval = () => ({ _rowId: newRowId(), start_md_ft: 0, end_md_ft: 1000, od_in: 2.0, wt_in: 0.175, grade: "QT-900", smys_psi: 90000 });
 
 const ReelCard = ({ reel, isActive, canWrite, onActivate, onDelete }) => (
   <div data-testid={`reel-card-${reel.reel_id}`} className={`bg-white border rounded-lg p-3 ${isActive ? "border-[#FF6B1A] shadow-md" : "border-[#D4D4D4]"}`}>
@@ -38,7 +41,7 @@ const ReelCard = ({ reel, isActive, canWrite, onActivate, onDelete }) => (
       <span>Start ft</span><span>End ft</span><span>OD in</span><span>WT in</span><span>Grade</span>
     </div>
     {(reel.intervals || []).map((s, i) => (
-      <div key={i} className="grid grid-cols-5 gap-1 text-[11px] text-[#262626] tabular-nums bg-[#F3F4F6] rounded px-1 py-0.5 mt-0.5">
+      <div key={`${s.start_md_ft}-${s.end_md_ft}-${i}`} className="grid grid-cols-5 gap-1 text-[11px] text-[#262626] tabular-nums bg-[#F3F4F6] rounded px-1 py-0.5 mt-0.5">
         <span>{s.start_md_ft}</span><span>{s.end_md_ft}</span><span>{s.od_in}</span><span>{s.wt_in}</span><span>{s.grade}</span>
       </div>
     ))}
@@ -128,7 +131,7 @@ export default function ReelsPage() {
                     <span>Start ft</span><span>End ft</span><span>OD in</span><span>WT in</span><span>Grade</span><span></span>
                   </div>
                   {intervals.map((s, i) => (
-                    <div key={i} className="grid grid-cols-6 gap-1">
+                    <div key={s._rowId} className="grid grid-cols-6 gap-1">
                       <input type="number" step="any" value={s.start_md_ft} onChange={(e) => updateInterval(i, "start_md_ft", e.target.value)} className="border rounded px-1 py-0.5 text-xs" />
                       <input type="number" step="any" value={s.end_md_ft} onChange={(e) => updateInterval(i, "end_md_ft", e.target.value)} className="border rounded px-1 py-0.5 text-xs" />
                       <input type="number" step="any" value={s.od_in} onChange={(e) => updateInterval(i, "od_in", e.target.value)} className="border rounded px-1 py-0.5 text-xs" />
