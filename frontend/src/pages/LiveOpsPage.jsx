@@ -5,19 +5,20 @@ import { toast } from "sonner";
 import { Phase1PageHeader } from "../components/Phase1Header";
 import { useAuth, API } from "../context/AuthContext";
 import { useActiveReel } from "../context/ActiveReelContext";
-import { MiniVonMises, MiniFatigue, LiveGauge, StripChart } from "../components/LiveOpsPanels";
+import { MiniVonMises, MiniFatigue, LiveGauge, StripChart, RollingTrends } from "../components/LiveOpsPanels";
 import { Play, Pause, Wifi, WifiOff, Maximize2, X, Zap, Settings, Rewind, FastForward, StepBack, StepForward, History, Download, StickyNote, Clock, Star } from "lucide-react";
 import { postSampleResilient, drainOfflineQueue, offlineQueueLength, startOfflineDrain } from "../lib/offlineQueue";
 import { samplesToCSV, samplesToLAS, downloadBlob } from "../lib/playbackExport";
+import { triaxialVonMises, intervalAt } from "../lib/ctPhysics";
 import ShareLinksButton from "../components/ShareLinksButton";
 import { AnnotationPins, DropAnnotationModal, ViewAnnotationModal } from "../components/AnnotationLayer";
 import { isSupervisorOrHigher, isManagement } from "../lib/roles";
 import { useRig } from "../context/RigContext";
 import { useUnits } from "../context/UnitContext";
 
-const RING = 600;             // seconds of history (10 min @ 1 Hz)
+const RING = 3600;            // seconds of history (1 hr @ 1 Hz) — scrub back to the sticky-pipe tick
 const TICK_MS = 1000;         // 1 Hz
-const CHART_WINDOW = 180;     // how many samples the strip chart shows at once
+const CHART_WINDOW = 300;     // how many samples the strip chart shows at once (5 min window)
 
 // --- Jittered simulator — fakes a plausible CT job scenario ---
 function nextSimSample(prev, t) {
@@ -43,7 +44,7 @@ const PANELS = [
   { id: "whp",      label: "Wellhead · P_whp" },
   { id: "dpnet",    label: "Net ΔP" },
   { id: "skate",    label: "Injector Skate · K_t" },
-  { id: "chart",    label: "Live Chart" },
+  { id: "chart",    label: "Rolling Trends · 5-pen" },
 ];
 
 // Skate penalty + stress-concentration from hydraulic clamping pressure.
@@ -246,7 +247,7 @@ export default function LiveOpsPage() {
       let realSample = null;
       if (connected) {
         try {
-          const r = await axios.get(`${API}/liveops/stream`, { params: { limit: 1 }, withCredentials: true });
+          const r = await axios.get(`${API}/liveops/stream`, { params: { limit: 1, rig_id: rigId }, withCredentials: true });
           const srv = r.data?.samples?.[0];
           if (srv) {
             const srvTs = Date.parse(srv.created_at || 0);
@@ -255,6 +256,7 @@ export default function LiveOpsPage() {
                 depth_ft: srv.depth_ft, p_internal_psi: srv.p_internal_psi, p_external_psi: srv.p_external_psi,
                 traction_pressure_psi: srv.traction_pressure_psi, weight_lb: srv.weight_lb,
                 axial_force_lbf: srv.axial_force_lbf, pressure_psi: srv.pressure_psi,
+                vm_utilization: srv.vm_utilization, fatigue_worst: srv.fatigue_worst,
                 ts: srv.created_at, source: srv.source || "wits",
               };
             }
@@ -263,7 +265,23 @@ export default function LiveOpsPage() {
       }
       setSamples((prev) => {
         const last = prev[prev.length - 1];
-        const next = realSample || { ...nextSimSample(last, t), ts: new Date(nowMs).toISOString(), source: connected ? "wits_fallback_sim" : "simulated" };
+        const raw = realSample || { ...nextSimSample(last, t), ts: new Date(nowMs).toISOString(), source: connected ? "wits_fallback_sim" : "simulated" };
+        // Compute Von Mises utilization snapshot for this tick (persists even
+        // when the user hasn't opened the Von Mises page). Uses active reel's
+        // interval at current depth, falls back to a default 2" QT-900.
+        const seg = intervalAt(activeReel, raw.depth_ft || 0) || { od_in: 2.0, wt_in: 0.175, smys_psi: 90000 };
+        const vm = triaxialVonMises({
+          OD: seg.od_in, WT: seg.wt_in,
+          p_i: raw.p_internal_psi || 0,
+          p_o: raw.p_external_psi || 0,
+          F_axial: raw.axial_force_lbf || 0,
+          smys: seg.smys_psi,
+        });
+        const next = {
+          ...raw,
+          vm_utilization: raw.vm_utilization != null ? raw.vm_utilization : (vm?.utilization || 0),
+          fatigue_worst: raw.fatigue_worst != null ? raw.fatigue_worst : (fatigue.worst_damage || 0),
+        };
         const buf = [...prev, next];
         if (buf.length > RING) buf.splice(0, buf.length - RING);
         setCurrentDepth(Math.round(next.depth_ft || 0));
@@ -274,7 +292,20 @@ export default function LiveOpsPage() {
         try {
           const last = samples[samples.length - 1];
           const sample = nextSimSample(last, t);
-          await postSampleResilient({ ...sample, reel_id: activeReel?.reel_id, source: "simulated" });
+          const seg = intervalAt(activeReel, sample.depth_ft || 0) || { od_in: 2.0, wt_in: 0.175, smys_psi: 90000 };
+          const vm = triaxialVonMises({
+            OD: seg.od_in, WT: seg.wt_in,
+            p_i: sample.p_internal_psi || 0, p_o: sample.p_external_psi || 0,
+            F_axial: sample.axial_force_lbf || 0, smys: seg.smys_psi,
+          });
+          await postSampleResilient({
+            ...sample,
+            rig_id: rigId,
+            reel_id: activeReel?.reel_id,
+            vm_utilization: vm?.utilization || 0,
+            fatigue_worst: fatigue.worst_damage || 0,
+            source: "simulated",
+          });
         } catch (e) { console.debug("[LiveOps] postSampleResilient inner failure", e?.message); }
       }
       // Every 3 seconds, advance the fatigue engine with the latest traction pressure
@@ -332,7 +363,7 @@ export default function LiveOpsPage() {
 
   const loadHistory = async () => {
     try {
-      const r = await axios.get(`${API}/liveops/stream`, { params: { limit: RING }, withCredentials: true });
+      const r = await axios.get(`${API}/liveops/stream`, { params: { limit: RING, rig_id: rigId }, withCredentials: true });
       const srv = r.data?.samples || [];
       if (srv.length === 0) {
         toast.info("No recorded samples yet — start the feed first.");
@@ -426,7 +457,7 @@ export default function LiveOpsPage() {
     if (buf.length === 0) {
       // Fetch history then re-run the jump against the fresh buffer.
       try {
-        const r = await axios.get(`${API}/liveops/stream`, { params: { limit: RING }, withCredentials: true });
+        const r = await axios.get(`${API}/liveops/stream`, { params: { limit: RING, rig_id: rigId }, withCredentials: true });
         const srv = r.data?.samples || [];
         if (srv.length === 0) { toast.info("No samples recorded for playback yet."); setViewAnnot(annot); return; }
         buf = srv.map((s) => ({
@@ -513,12 +544,44 @@ export default function LiveOpsPage() {
           large={large}
           color={sm.severity === "crit" ? "#EF4444" : sm.severity === "warn" ? "#F59E0B" : "#10B981"} />;
       }
-      case "chart":
-        return <StripChart samples={chartSamples} series={[
-          { key: "weight_lb", color: "#06B6D4", label: "Weight" },
-          { key: "p_internal_psi", color: "#EF4444", label: "P int" },
-          { key: "traction_pressure_psi", color: "#F59E0B", label: "Traction" },
-        ]} large={large} />;
+      case "chart": {
+        // Project each sample into display-unit space so pens respect Imp/SI
+        const projected = chartSamples.map((s) => ({
+          ...s,
+          _depth:    u.from(s.depth_ft || 0, "depth"),
+          _weight:   u.from(s.weight_lb || 0, "weight"),
+          _pint:     u.from(s.p_internal_psi || s.pressure_psi || 0, "pressure"),
+          _skate:    u.from(s.traction_pressure_psi || 0, "pressure"),
+          _vm_pct:   (s.vm_utilization || 0) * 100 * 0.8,  // % of SMYS (0..100)
+          _fat_pct:  (s.fatigue_worst || 0) * 100,         // worst-node damage %
+        }));
+        const series = [
+          { key: "_depth",   color: "#06B6D4", label: `Depth · ${u.label("depth")}`,     suffix: u.label("depth"),  format: (v) => v.toFixed(0) },
+          { key: "_weight",  color: "#FF6B1A", label: `Weight · ${u.label("weight")}`,   suffix: u.label("weight"), format: (v) => v.toFixed(u.isMetric ? 1 : 0) },
+          { key: "_pint",    color: "#EF4444", label: `P int · ${u.label("pressure")}`,  suffix: u.label("pressure"), format: (v) => v.toFixed(0) },
+          { key: "_skate",   color: "#F59E0B", label: `Skate · ${u.label("pressure")}`,  suffix: u.label("pressure"), format: (v) => v.toFixed(0) },
+          { key: "_vm_pct",  color: "#A78BFA", label: "VM % of 80% SMYS",                suffix: "%",             format: (v) => v.toFixed(1) },
+          { key: "_fat_pct", color: "#10B981", label: "Fatigue · worst node",            suffix: "%",             format: (v) => v.toFixed(2) },
+        ];
+        // Compute cursor index relative to chart window
+        const start = Math.max(0, Math.min(samples.length, samples.length - projected.length));
+        const cursorInWindow = mode === "playback" ? Math.max(0, playbackIdx - start) : null;
+        const onCursorClick = (idx) => {
+          const absolute = start + idx;
+          setMode("playback");
+          setPlaybackIdx(absolute);
+          setPlaybackPlaying(false);
+          setRunning(false);
+        };
+        return <RollingTrends
+          samples={projected}
+          series={series}
+          cursorIndex={cursorInWindow}
+          onCursor={onCursorClick}
+          large={large}
+          title={`Rolling Trends · 1 Hz · ${u.isMetric ? "SI" : "Imperial"}`}
+        />;
+      }
       default:
         return null;
     }
@@ -770,7 +833,7 @@ export default function LiveOpsPage() {
               key={id}
               data-testid={`panel-${id}`}
               onClick={() => setEnlarged(id)}
-              className="group relative cursor-pointer ca-glass overflow-hidden hover:ca-glass-orange transition-all h-[260px]">
+              className={`group relative cursor-pointer ca-glass overflow-hidden hover:ca-glass-orange transition-all ${id === "chart" ? "sm:col-span-2 lg:col-span-3 h-[360px]" : "h-[260px]"}`}>
               <div className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 rounded p-1 backdrop-blur">
                 <Maximize2 className="w-3.5 h-3.5 text-white" />
               </div>

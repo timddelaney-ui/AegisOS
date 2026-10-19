@@ -383,6 +383,33 @@ join only.
   green so field-beta UX is unaffected. User action: add
   `RESEND_API_KEY=re_xxx` to `/app/backend/.env`.
 
+## 1 Hz Recorder & 5-Pen Rolling Trends — 2026-02-18
+- Backend `LIVEOPS_MAX_SAMPLES` bumped **600 → 3600** (1 hour @ 1 Hz)
+  and the cap is now scoped per `(team_id, rig_id)` so each rig keeps
+  its own full-hour history even when the crew flips rigs.
+- `GET /liveops/stream` accepts `rig_id` filter; `POST /liveops/feed`
+  LiveSample model gains `vm_utilization` (0..1) and `fatigue_worst`
+  (0..1) so Von Mises excursions and fatigue advancement are stored
+  with every tick without a separate query.
+- Frontend ring buffer `RING` bumped 600 → 3600, `CHART_WINDOW` 180 → 300.
+- Each simulator tick now computes `triaxialVonMises(seg, p_i, p_o, F_axial, smys)`
+  and attaches the utilization + current `fatigue.worst_damage` snapshot
+  before pushing to the local ring and the resilient POST queue.
+- New `RollingTrends` component in `LiveOpsPanels.jsx` — 6-pen stacked-
+  lane strip chart (Depth · Weight · P int · Skate · VM % of 80% SMYS ·
+  Fatigue worst node), each pen in its own vertical lane with per-lane
+  label, 60-second vertical grid, pulsing "latest" marker, amber cursor
+  spotlight line + per-pen cursor dots, and a legend row showing live
+  values at the cursor position (or latest).
+- Click **anywhere** on the chart lanes → jumps playback to that tick,
+  with "T−Ns" timecode shown above the cursor so the crew can spot the
+  exact tick the string went sticky.
+- Panel spans full-width (`sm:col-span-2 lg:col-span-3`) at 360 px —
+  it's the primary forensic surface, not a side gauge.
+- Pens respect the Imp/SI toggle: Depth re-labels ft ⇄ m, Weight re-
+  labels lbs ⇄ kN, pressures re-label psi ⇄ kPa.
+
+
 Second-pass critical-fix sweep:
 - Added `console.debug` logging to 6 more silent `catch` blocks:
   `TimecardsPage`, `TasksPage`, `RbacAdminPage`, `PartsOrdersPage`, `Hub`,

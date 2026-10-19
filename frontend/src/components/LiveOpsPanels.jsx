@@ -219,3 +219,134 @@ export function StripChart({ samples = [], series = [], large = false }) {
     </div>
   );
 }
+
+/*────────────────────────────────────────────────────────────────────
+  RollingTrends — Enterprise 5-pen scrolling strip chart with cursor
+  spotlight, legend-with-live-value, and spike indicators. Designed
+  for the "spot the exact tick the string went sticky" doghouse flow.
+────────────────────────────────────────────────────────────────────*/
+export function RollingTrends({ samples = [], series = [], cursorIndex = null, onCursor, large = false, title = "Rolling Trends · 1 Hz" }) {
+  const W = large ? 1180 : 680;
+  const H = large ? 540 : 300;
+  const padL = 56, padR = 16, padT = 28, padB = 24;
+  const n = samples.length;
+  const xStep = n > 1 ? (W - padL - padR) / (n - 1) : 0;
+
+  const bounds = series.map((s) => {
+    const vals = samples.map((p) => Number(p?.[s.key])).filter((v) => Number.isFinite(v));
+    const lo = vals.length ? Math.min(...vals) : 0;
+    const hi = vals.length ? Math.max(...vals) : 1;
+    const pad = (hi - lo) * 0.1 + 1;
+    return { lo: lo - pad, hi: hi + pad };
+  });
+  const toY = (v, b) => padT + (1 - (v - b.lo) / Math.max(b.hi - b.lo, 1e-6)) * (H - padT - padB);
+  const line = (s, b) => samples.map((p, i) => {
+    const v = Number(p?.[s.key]);
+    if (!Number.isFinite(v)) return null;
+    return `${i === 0 ? "M" : "L"}${(padL + i * xStep).toFixed(1)},${toY(v, b).toFixed(1)}`;
+  }).filter(Boolean).join(" ");
+
+  // Resolve cursor sample
+  const safeCursor = cursorIndex != null && cursorIndex >= 0 && cursorIndex < n ? cursorIndex : (n > 0 ? n - 1 : null);
+  const cursorX = safeCursor != null ? padL + safeCursor * xStep : null;
+  const cursorSample = safeCursor != null ? samples[safeCursor] : null;
+
+  // Click handler → inform parent (lets external scrubber jump to the tick)
+  const svgRef = React.useRef(null);
+  const handleClick = (e) => {
+    e.stopPropagation();
+    if (!onCursor || !svgRef.current || xStep === 0) return;
+    const rect = svgRef.current.getBoundingClientRect();
+    // mouse x in viewBox space
+    const scaleX = W / rect.width;
+    const mx = (e.clientX - rect.left) * scaleX;
+    const i = Math.round((mx - padL) / xStep);
+    const clamped = Math.max(0, Math.min(n - 1, i));
+    onCursor(clamped);
+  };
+
+  // Y-axis tick count (per-pen mini scales rendered on the left stacked)
+  const laneCount = series.length;
+  const laneH = (H - padT - padB) / Math.max(1, laneCount);
+
+  return (
+    <div className="relative w-full h-full flex flex-col">
+      <div className="flex items-center gap-2 px-2.5 py-1.5 bg-[#0D1A24] text-white rounded-t border-b border-white/5">
+        <Activity className="w-3.5 h-3.5 text-[#F59E0B]" />
+        <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-300">{title}</span>
+        <span className="text-[9px] text-slate-500 font-mono tabular-nums">· {n} samples</span>
+        <span className="ml-auto flex items-center gap-3">
+          {series.map((s) => {
+            const v = cursorSample ? Number(cursorSample[s.key]) : null;
+            const txt = (v != null && Number.isFinite(v)) ? (s.format ? s.format(v) : v.toFixed(0)) : "—";
+            return (
+              <span key={s.key} className="flex items-center gap-1 text-[10px] font-bold tabular-nums" style={{ color: s.color }}>
+                <span className="w-1.5 h-1.5 rounded-full" style={{ background: s.color, boxShadow: `0 0 6px ${s.color}` }} />
+                <span className="uppercase tracking-wider text-[9px] text-slate-400">{s.label}</span>
+                <span>{txt}</span>
+                {s.suffix && <span className="text-[9px] text-slate-500">{s.suffix}</span>}
+              </span>
+            );
+          })}
+        </span>
+      </div>
+      <div className="flex-1 bg-[#0A1220] rounded-b overflow-hidden">
+        <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} className="w-full h-full cursor-crosshair" onClick={handleClick}>
+          {/* Lane backgrounds */}
+          {series.map((s, i) => (
+            <rect key={`lane-${s.key}`}
+              x={padL} y={padT + i * laneH}
+              width={W - padL - padR} height={laneH}
+              fill={i % 2 === 0 ? "rgba(148,163,184,0.03)" : "transparent"} />
+          ))}
+          {/* Vertical grid every 60s */}
+          {Array.from({ length: Math.floor(n / 60) + 1 }, (_, k) => {
+            const idx = n - 1 - k * 60;
+            if (idx < 0) return null;
+            const x = padL + idx * xStep;
+            return <line key={`gv-${k}`} x1={x} y1={padT} x2={x} y2={H - padB} stroke="rgba(148,163,184,0.08)" strokeDasharray="2 3" />;
+          })}
+          {/* Horizontal lane dividers */}
+          {series.slice(1).map((_, i) => (
+            <line key={`gh-${i}`} x1={padL} y1={padT + (i + 1) * laneH} x2={W - padR} y2={padT + (i + 1) * laneH} stroke="rgba(148,163,184,0.1)" />
+          ))}
+          {/* Pens */}
+          {series.map((s, i) => (
+            <g key={s.key}>
+              <path d={line(s, bounds[i])} stroke={s.color} strokeWidth="1.7" fill="none" opacity="0.95" />
+              <text x={padL - 6} y={padT + i * laneH + 11} textAnchor="end" fontSize="8" fontWeight="700" fill={s.color} style={{ letterSpacing: "0.1em" }}>
+                {s.label.toUpperCase()}
+              </text>
+              {/* latest dot */}
+              {n > 0 && Number.isFinite(Number(samples[n - 1]?.[s.key])) && (
+                <circle cx={padL + (n - 1) * xStep} cy={toY(Number(samples[n - 1][s.key]), bounds[i])} r="2.5" fill={s.color}>
+                  <animate attributeName="r" values="2.5;4.5;2.5" dur="1.6s" repeatCount="indefinite" />
+                </circle>
+              )}
+            </g>
+          ))}
+          {/* Cursor spotlight */}
+          {cursorX != null && (
+            <g>
+              <line x1={cursorX} y1={padT} x2={cursorX} y2={H - padB} stroke="#F59E0B" strokeWidth="1" strokeDasharray="3 3" opacity="0.75" />
+              {series.map((s, i) => {
+                const v = cursorSample ? Number(cursorSample[s.key]) : null;
+                if (v == null || !Number.isFinite(v)) return null;
+                const y = toY(v, bounds[i]);
+                return <circle key={`cur-${s.key}`} cx={cursorX} cy={y} r="3.2" fill={s.color} stroke="#0A1220" strokeWidth="1.5" />;
+              })}
+            </g>
+          )}
+          {/* Time axis */}
+          <text x={padL} y={H - 7} fontSize="9" fill="#64748B" fontFamily="monospace">T−{n}s</text>
+          <text x={W - padR} y={H - 7} textAnchor="end" fontSize="9" fill="#64748B" fontFamily="monospace">now</text>
+          {cursorX != null && (
+            <text x={cursorX} y={padT - 8} textAnchor="middle" fontSize="9" fontWeight="700" fill="#F59E0B" fontFamily="monospace">
+              T{safeCursor === n - 1 ? "0" : `−${n - 1 - safeCursor}s`}
+            </text>
+          )}
+        </svg>
+      </div>
+    </div>
+  );
+}

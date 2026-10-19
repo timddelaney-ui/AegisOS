@@ -190,7 +190,9 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
     # -----------------------------------------------------------------
     # Phase 1: client-side simulator POSTs samples; team sees the latest.
     # Phase 2 will swap in real WITS 0 / WITSML / Modbus listeners.
-    LIVEOPS_MAX_SAMPLES = 600  # ~10 min @ 1 Hz
+    # 1 Hz recorder — rolling 1-hour per-rig buffer so crews can scrub back
+    # to the exact second a sticky-pipe event happened.
+    LIVEOPS_MAX_SAMPLES = 3600  # ~1 hr @ 1 Hz, PER (team_id, rig_id)
 
     class LiveSample(BaseModel):
         rig_id: Optional[str] = None
@@ -202,6 +204,8 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
         p_internal_psi: Optional[float] = None
         p_external_psi: Optional[float] = None
         axial_force_lbf: Optional[float] = None
+        vm_utilization: Optional[float] = None   # 0..1 Von Mises / 80%-SMYS envelope util
+        fatigue_worst: Optional[float] = None    # 0..1 reel worst-node damage snapshot
         source: str = "simulated"  # 'simulated' | 'wits' | 'modbus' | 'manual'
 
     @api_router.post("/liveops/feed")
@@ -212,25 +216,29 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
         now = now_utc()
         doc = {**body.model_dump(), "team_id": team_id, "created_at": now, "user_email": user["email"]}
         await db.liveops_samples.insert_one(doc)
-        # Keep only the last N samples per team (soft cap, pruned opportunistically)
-        count = await db.liveops_samples.count_documents({"team_id": team_id})
+        # Keep only the last N samples per (team, rig) — pruned opportunistically
+        rig_scope = {"team_id": team_id, "rig_id": body.rig_id}
+        count = await db.liveops_samples.count_documents(rig_scope)
         if count > LIVEOPS_MAX_SAMPLES * 2:
-            cutoff = await db.liveops_samples.find({"team_id": team_id}, {"created_at": 1, "_id": 0}).sort("created_at", -1).skip(LIVEOPS_MAX_SAMPLES).limit(1).to_list(1)
+            cutoff = await db.liveops_samples.find(rig_scope, {"created_at": 1, "_id": 0}).sort("created_at", -1).skip(LIVEOPS_MAX_SAMPLES).limit(1).to_list(1)
             if cutoff:
-                await db.liveops_samples.delete_many({"team_id": team_id, "created_at": {"$lt": cutoff[0]["created_at"]}})
+                await db.liveops_samples.delete_many({**rig_scope, "created_at": {"$lt": cutoff[0]["created_at"]}})
         doc.pop("_id", None)
         return ser(doc)
 
     @api_router.get("/liveops/stream")
     async def stream_liveops(
-        limit: int = 300,
+        limit: int = 600,
         since: Optional[str] = None,
+        rig_id: Optional[str] = None,
         user: dict = Depends(require_user),
     ):
         team_id = user.get("team_id")
         if not team_id:
             return {"samples": [], "latest": None}
         q: Dict[str, Any] = {"team_id": team_id}
+        if rig_id:
+            q["rig_id"] = rig_id
         if since:
             try:
                 q["created_at"] = {"$gt": datetime.fromisoformat(since.replace("Z", "+00:00"))}
