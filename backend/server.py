@@ -1261,13 +1261,17 @@ async def ai_chat(req: AIChatRequest, user: dict = Depends(require_user)):
             logger.warning("Failed to inject team docs into AI prompt: %s", e)
 
     try:
+        # AI Privacy Mode (Enterprise security toggle) — scrub job numbers,
+        # well names, and team-defined redaction terms BEFORE any text
+        # leaves the pod. No-op if the team hasn't opted in.
+        safe_user_text = await _maybe_scrub_for_team(user.get("team_id"), user_text)
         chat = LlmChat(
             api_key=EMERGENT_LLM_KEY,
             session_id=session_id,
             system_message=system_msg,
         ).with_model("gemini", GEMINI_MODEL)
 
-        response = await chat.send_message(UserMessage(text=user_text))
+        response = await chat.send_message(UserMessage(text=safe_user_text))
 
         # Persist for history
         await db.ai_messages.insert_many([
@@ -1741,12 +1745,14 @@ async def crew_send(body: CrewMessage, user: dict = Depends(require_user)):
                     break
         try:
             session_id = f"skipper_team_{team_id}"
+            # AI Privacy Mode — scrub BEFORE anything hits the model
+            safe_query = await _maybe_scrub_for_team(team_id, query or text)
             chat = LlmChat(
                 api_key=EMERGENT_LLM_KEY,
                 session_id=session_id,
                 system_message=SYSTEM_PROMPTS["assistant"],
             ).with_model("gemini", GEMINI_MODEL)
-            response = await chat.send_message(UserMessage(text=query or text))
+            response = await chat.send_message(UserMessage(text=safe_query))
             await db.crew_messages.insert_one({
                 "message_id": f"msg_{uuid.uuid4().hex[:12]}",
                 "team_id": team_id,
@@ -4080,7 +4086,21 @@ register_phase1(api_router, db, require_user, get_current_user, _is_admin)
 
 
 # ============ SECURITY & COMPLIANCE (Enterprise bundle) ============
-from security_module import build_router as _build_security_router  # noqa: E402
+from security_module import build_router as _build_security_router, scrub_pii as _scrub_pii, audit_log as _audit_log  # noqa: E402
+
+
+async def _maybe_scrub_for_team(team_id: Optional[str], text: str) -> str:
+    """If the team has `ai_privacy_mode` on in `team_security_settings`,
+    run the text through the PII scrubber with their custom redaction
+    terms before it is sent to any upstream LLM. No-op otherwise so free
+    and Small-Med teams don't pay the cost of the regex pass.
+    """
+    if not team_id or not isinstance(text, str) or not text:
+        return text
+    settings = await db.team_security_settings.find_one({"team_id": team_id})
+    if not settings or not settings.get("ai_privacy_mode"):
+        return text
+    return _scrub_pii(text, settings.get("extra_redaction_terms") or [])
 
 
 async def _require_enterprise(user: dict = Depends(require_user)):

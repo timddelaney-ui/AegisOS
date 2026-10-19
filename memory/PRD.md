@@ -953,3 +953,41 @@ Four subsystems added as a single Enterprise-only feature
   audit rows after setting toggles, SECURE chip in header when any
   toggle is on. Demo user reset to smallmed after test.
 
+
+Inline-Ref Cleanup + PII Scrubber Wiring (2026-02-19 pm):
+
+Inline-array / inline-object fixes (reduce needless re-renders):
+- `ActiveReelContext` provider value now memoised on
+  `[activeReel, reels, refresh, currentDepth]` so consumers only re-render
+  when the data actually changes (not on every parent render).
+- `WellborePage.Wellbore` now memoises `segs` with pre-computed `pts`
+  tuples, so each `<Line points>` prop keeps a stable reference between
+  renders when the survey / color mode hasn't changed. Hook placement
+  moved above the early return to satisfy rules-of-hooks.
+
+AI Privacy Mode fully wired (previously the toggle only persisted —
+nothing scrubbed):
+- New `_maybe_scrub_for_team(team_id, text)` helper reads
+  `team_security_settings.ai_privacy_mode` and runs `scrub_pii()` with
+  the team's custom redaction terms when the toggle is on. No-op
+  otherwise so free / Small-Med teams don't pay the regex cost.
+- Both Gemini call sites in `server.py` now funnel user text through
+  the scrubber BEFORE `LlmChat.send_message(UserMessage(...))`:
+  1. `/api/ai/chat` main AI assistant (line ~1270)
+  2. `hey skipper / @skipper` crew-chat trigger (line ~1750)
+- End-to-end verified: with privacy toggle on + `Acme Oil` in redaction
+  terms, the string `Does job J-204 at Well Fenix-7 for Acme Oil need
+  an ERP update?` was scrubbed to `Does job [JOB] at Well [WELL] for
+  [REDACTED] need an ERP update?` before leaving the pod.
+
+Non-fixes (false positives verified again):
+- `eval()` findings → function/URL names (`crew_safety_eval`,
+  `_post_eval`, `/safety-eval`), not the builtin.
+- `random.choice(CAPE_BRETON_SAFETY_QUIPS)` → selects a safety joke
+  for a notification. Not cryptographic.
+- `mock_wits_server.py` uses `random` → generates simulated DAQ data
+  in a dev tool. Not cryptographic.
+- `TierTutorial` + `ActiveReelContext` + `RigContext` + `WelcomeTour`
+  localStorage → UI prefs only (seen flags, last depth, dismissed-at).
+  Auth is httpOnly cookie, no tokens in localStorage anywhere.
+

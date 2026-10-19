@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
+import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from "react";
 import axios from "axios";
 import { API } from "./AuthContext";
 
@@ -23,11 +23,18 @@ export const ActiveReelProvider = ({ children }) => {
   useEffect(() => { refresh(); }, [refresh]);
 
   useEffect(() => {
-    try { localStorage.setItem("ctp_current_depth", String(currentDepth)); } catch {}
+    try { localStorage.setItem("ctp_current_depth", String(currentDepth)); } catch { /* storage disabled */ }
   }, [currentDepth]);
 
+  // Memoised context value — prevents every ActiveReelContext consumer from
+  // re-rendering on parent re-renders when the actual data hasn't changed.
+  const value = useMemo(
+    () => ({ activeReel, reels, refresh, currentDepth, setCurrentDepth }),
+    [activeReel, reels, refresh, currentDepth],
+  );
+
   return (
-    <Ctx.Provider value={{ activeReel, reels, refresh, currentDepth, setCurrentDepth }}>
+    <Ctx.Provider value={value}>
       {children}
     </Ctx.Provider>
   );

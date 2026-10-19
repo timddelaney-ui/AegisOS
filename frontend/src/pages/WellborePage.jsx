@@ -81,28 +81,34 @@ function Wellbore({ survey, depth, colorMode = "dls" }) {
     return raws.map((r) => r / hi);
   }, [survey]);
 
-  if (!points.length) return null;
+  // Build colored line segments. Memoised so each `<Line points>` keeps a
+  // stable reference between renders when the underlying survey /
+  // colorMode hasn't changed. Each entry pre-computes its own `pts` tuple
+  // so we don't allocate `[a, b]` inline inside the map.
+  const segs = useMemo(() => {
+    if (!points.length) return [];
+    const out = [];
+    for (let i = 0; i < points.length - 1; i++) {
+      const st = survey?.stations?.[i + 1];
+      const dls = st?.dls_deg_per_100ft ?? 0;
+      const drag = dragNorm[i + 1] ?? 0;
+      let color;
+      if (colorMode === "drag") color = dragColor(drag);
+      else if (colorMode === "combined") {
+        const dls_norm = Math.min(1, dls / 12);
+        color = dragColor(Math.max(dls_norm, drag));
+      } else color = dlsColor(dls);
+      out.push({ pts: [points[i], points[i + 1]], color, md_ft: survey?.stations?.[i]?.md_ft ?? i });
+    }
+    return out;
+  }, [points, dragNorm, colorMode, survey]);
 
-  // Build colored line segments
-  const segs = [];
-  for (let i = 0; i < points.length - 1; i++) {
-    const st = survey.stations[i + 1];
-    const dls = st?.dls_deg_per_100ft ?? 0;
-    const drag = dragNorm[i + 1] ?? 0;
-    let color;
-    if (colorMode === "drag") color = dragColor(drag);
-    else if (colorMode === "combined") {
-      // Combined severity = max of DLS-normalized + drag-normalized.
-      const dls_norm = Math.min(1, dls / 12);
-      color = dragColor(Math.max(dls_norm, drag));
-    } else color = dlsColor(dls);
-    segs.push({ a: points[i], b: points[i + 1], color });
-  }
+  if (!points.length) return null;
 
   return (
     <group>
-      {segs.map((s, i) => (
-        <Line key={`seg-${survey.stations[i]?.md_ft ?? i}`} points={[s.a, s.b]} color={s.color} lineWidth={3} />
+      {segs.map((s) => (
+        <Line key={`seg-${s.md_ft}`} points={s.pts} color={s.color} lineWidth={3} />
       ))}
       {tip && (
         <mesh position={tip}>
