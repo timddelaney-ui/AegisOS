@@ -1,0 +1,25 @@
+{
+  "summary": "Iter 24 frontend-only retest of the iteration 23 fixes on /live-ops (MainOperatorScreen), at desktop 1920 and mobile 390, using the demo session cookie and pre-seeded localStorage ack keys. All 5 fixes PASS. (1) Added a Custom channel and the Custom tab became active. Removing it made the Custom tab disappear, job-set-pressures became active (bg-orange-600) and 3 Pressures cards were shown. (2) The modal copy reads 'Limits are in psi. Once the channel is mapped to a DAQ source tag, the tile turns amber at warn and red at crit.' (3) The trajectory-canvas backing store matches its CSS box (desktop 1862x254, mobile 340x224, dpr 1) with no stretching. The BIT label box is drawn above the bit marker with a leader line and is fully visible at desktop (IMP and SI) and mobile. On mobile, P2-P4 labels are skipped when they overlap and only P1 is drawn. pen-graph-canvas is also sized to its container (1894x240). (4) Mobile 390: color-mode-toggle is above the canvas (753-782), the canvas is at 794-1018, at-bit-readout is below it (1030-1135) and the DLS legend is below that (1147), so nothing overlaps. The header is position:static (it scrolls away, 138px tall). Nav pills show 'Operator' plus icons only, and there is no horizontal overflow (scrollWidth 390). (5) LIVE with fresh DAQ (POSTed to /api/liveops/feed RIG1 every 500ms): feed-status shows 'LIVE DAQ', depth 9,876.5 ft is mapped, and sim-play-pause-btn reads 'DAQ DRIVING' and is disabled. After the feed stops, it shows 'DAQ STALE • SIM FALLBACK' and the button goes back to 'SIM RUNNING' (enabled). Regression PASS: SIM ticker advances depth; SI/IMP toggle (ft->m, psi->MPa, canvas BIT label in m); pen graph view and pen toggle; crew rates edit (total updates to $1320) + save (modal closes, saved to localStorage); add channel to the Pressures group (no Custom tab created, card appears). No page errors.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/live-ops 3D Live (desktop)", "issues": ["Cosmetic, optional: the absolute-positioned at-bit-readout (top-left) and DLS legend (bottom-left) partly cover the vertical section and heel curve of the trajectory, because vertX = min(140, w*0.12) is about the right edge of the readout. Consider moving the trajectory start further right (for example vertX of about 180) on md+ screens."]},
+      {"screen": "/live-ops 3D Live (mobile 390)", "issues": ["Cosmetic: the P1-P4 plug markers bunch into one purple block next to the bit on narrow widths (this is expected given the depth scale)."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "The canvas is redrawn on window resize only (no ResizeObserver), so a container-only resize (for example a sidebar toggle) will not resize it. This is minor.",
+    "The iter 23 minor notes are still open (push() side effect inside the setTelemetry updater; CrewRatesModal parseFloat||0 means a field cannot be cleared). These are non-blocking."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped per request)", "frontend": "100% (5/5 fixes + 5 regression flows pass)"},
+  "test_credentials": "session_token=demo_session_dade4ac57f0c496094fde437e8e91f00 (demo.pro@example.com)",
+  "seed_data_creation": "POSTed manual samples to /api/liveops/feed for RIG1 (depth 9876.5) for about 5s. Custom channels were cleared from localStorage. Lead Specialist crew rate is now 50 in localStorage (test browser only).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Same setup as iter 23: add the cookie, then an init script setting ctp_disclaimer_ack_v1, coilaegis_tier_tutorial_seen_v1, ctp_install_prompt_dismissed_v1 and ctp_mgr_greet_v1::demo_pro_user=<today>. Channel cards match [data-testid^=channel-] twice each (card + -value), so divide the count by 2."
+}

@@ -26,7 +26,7 @@ export function prepCanvas(canvas) {
 
 export function drawTrajectory(ctx, w, h, { depthFt, colorMode, plugs, bitLabel }) {
   grid(ctx, w, h, "#080E1A", 0.04);
-  const vertX = Math.min(140, w * 0.12), heelY = h - 30, vertY = heelY * 0.55, heelX = vertX + Math.min(100, w * 0.12);
+  const vertX = w >= 768 ? 190 : Math.min(140, w * 0.12), heelY = h - 30, vertY = heelY * 0.55, heelX = vertX + Math.min(100, w * 0.12);
   const span = w - 80 - heelX;
   const plain = colorMode === "Plain";
   ctx.lineWidth = 6;

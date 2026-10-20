@@ -1017,3 +1017,13 @@ gets a taste of the top shelf while BETA_UNLOCK is on.
   tiles side-by-side; the ENTERPRISE DEMO chip renders beside the
   logo.
 
+
+## 2026-06 — Main Operator Screen (user-supplied component) integrated
+- `/live-ops` now renders `OperatorPage` → `MainOperatorScreen` (user's design); old console moved to `/live-ops/classic` (dossier, annotations, playback still there).
+- Wired to global UnitContext (SI/IMP buttons call setSystem; canonical imperial storage, display conversion incl. extra dims slurry/proppant/N2/torque in `lib/operatorConfig.js`).
+- LIVE mode polls `/api/liveops/stream` @1 Hz (fresh <5 s → "LIVE DAQ"; else "DAQ STALE • SIM FALLBACK"); SIM ticker with 1x/5x/10x, depth slider, reset; STANDBY freezes.
+- 3D Live trajectory canvas (DPR-aware, responsive) + Old Pen Graph strip chart w/ 6 pen toggles; plug tally ahead/passed; dynamic alarm badge from warn/crit.
+- Crew hourly rates & hours modal (localStorage), custom channels add/remove (localStorage).
+- Files: components/MainOperatorScreen.jsx, components/operator/*, lib/operatorConfig.js, pages/OperatorPage.jsx.
+- Tested: iteration_23 + iteration_24 (100% frontend).
+- Backlog: map custom channels to DAQ source tags; persist crew rates to backend timecards; pytest baseline failures (P2); Stripe live; real Resend key; refactor server.py/phase1_modules.py.
