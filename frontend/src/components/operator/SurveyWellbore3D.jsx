@@ -60,7 +60,7 @@ export default function SurveyWellbore3D({ survey, depthFt, colorMode, plugs, bi
         return (
           <group key={p.id} position={pos}>
             <mesh><boxGeometry args={[0.35, 0.35, 0.35]} /><meshStandardMaterial color="#A855F7" emissive="#A855F7" emissiveIntensity={0.6} /></mesh>
-            <Label text={p.id} color="#A855F7" position={[0, 0.9, 0]} />
+            <Label text={p.name} color="#A855F7" position={[0, 0.9, 0]} />
           </group>
         );
       })}

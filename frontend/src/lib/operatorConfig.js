@@ -102,8 +102,3 @@ export function fromDaqSample(prev, s) {
   };
 }
 
-// Demo plugs re-pinned onto a real survey: keep 394 ft spacing, last plug 400 ft above TD
-export const plugsForTD = (td) => PLUGS.map((p, i) => {
-  const start = Math.round(td - 400 - (PLUGS.length - 1 - i) * 394);
-  return { ...p, start, end: start + 4 };
-});

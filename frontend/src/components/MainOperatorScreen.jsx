@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import { Layers, Box, Play, Pause, RotateCcw, Plus, Users, Upload } from "lucide-react";
@@ -7,10 +7,13 @@ import { API } from "../context/AuthContext";
 import { useRig } from "../context/RigContext";
 import { UNIT_SYSTEMS } from "../lib/units";
 import {
-  SEED_TELEMETRY, CHANNELS, JOB_SETS, PLUGS, DEFAULT_CREW, DEPTH_MIN_FT, DEPTH_MAX_FT, simTick, fromDaqSample, plugsForTD,
+  SEED_TELEMETRY, CHANNELS, JOB_SETS, PLUGS, DEFAULT_CREW, DEPTH_MIN_FT, DEPTH_MAX_FT, simTick, fromDaqSample,
 } from "../lib/operatorConfig";
 import { stationAt, surveyTD, DLS_WARN, DLS_CRIT } from "../lib/surveyInterp";
 import SurveyWellbore3D from "./operator/SurveyWellbore3D";
+import { PlugTally } from "./operator/PlugTally";
+import { PlugManagerModal, PLUG_TYPES } from "./operator/PlugManagerModal";
+import { usePlugTestRun } from "./operator/usePlugTestRun";
 import { useOperatorUnits } from "./operator/useOperatorUnits";
 import { MetricCard, ChannelCard, levelOf } from "./operator/OperatorCards";
 import { drawTrajectory, drawPens, prepCanvas, PENS } from "./operator/operatorCanvas";
@@ -70,7 +73,36 @@ export default function MainOperatorScreen() {
   const survey = surveys.find((x) => x.survey_id === surveyId) || null;
   const minFt = survey ? 0 : DEPTH_MIN_FT;
   const maxFt = survey ? surveyTD(survey) : DEPTH_MAX_FT;
-  const plugs = useMemo(() => (survey ? plugsForTD(surveyTD(survey)) : PLUGS), [survey]);
+  const [plugRecords, setPlugRecords] = useState([]);
+  const [canEditPlugs, setCanEditPlugs] = useState(false);
+  const [showPlugManager, setShowPlugManager] = useState(false);
+  const loadPlugs = useCallback(() => {
+    if (!surveyId) { setPlugRecords([]); return; }
+    axios.get(`${API}/surveys/${surveyId}/plugs`, { withCredentials: true })
+      .then((r) => { setPlugRecords(r.data?.plugs || []); setCanEditPlugs(!!r.data?.can_edit); })
+      .catch((e) => console.debug("[Operator] plugs load failed", e?.response?.status || e?.message));
+  }, [surveyId]);
+  useEffect(() => { loadPlugs(); }, [loadPlugs]);
+  const plugs = useMemo(() => (survey
+    ? plugRecords.map((p) => ({ id: p.plug_id, name: p.name, type: PLUG_TYPES[p.plug_type], start: p.top_md_ft, end: p.bottom_md_ft, notes: p.notes }))
+    : PLUGS.map((p) => ({ ...p, name: p.id }))), [survey, plugRecords]);
+  const savePlug = async (plugId, body) => {
+    try {
+      if (plugId) await axios.put(`${API}/plugs/${plugId}`, body, { withCredentials: true });
+      else await axios.post(`${API}/surveys/${surveyId}/plugs`, body, { withCredentials: true });
+      toast.success(plugId ? "Plug updated" : `Plug ${body.name} added`);
+      loadPlugs();
+      return true;
+    } catch (e) {
+      const d = e?.response?.data?.detail;
+      toast.error(typeof d === "string" ? d : "Could not save plug — check depths");
+      return false;
+    }
+  };
+  const deletePlug = async (plugId) => {
+    try { await axios.delete(`${API}/plugs/${plugId}`, { withCredentials: true }); toast.success("Plug deleted"); loadPlugs(); }
+    catch (e) { toast.error(e?.response?.data?.detail || "Could not delete plug"); }
+  };
   useEffect(() => {
     const onResize = () => setResizeTick((t) => t + 1);
     window.addEventListener("resize", onResize);
@@ -78,6 +110,13 @@ export default function MainOperatorScreen() {
   }, []);
 
   const push = (next) => { historyRef.current = [...historyRef.current.slice(-99), next]; return next; };
+  const startTestRun = useCallback(() => {
+    setFeedMode("SIM"); setIsSimRunning(true); setPlaybackSpeed(100);
+    setTelemetry((p) => ({ ...p, depth: minFt }));
+    return minFt;
+  }, [minFt]);
+  const endTestRun = useCallback(() => setPlaybackSpeed(1), []);
+  const testRun = usePlugTestRun({ depth: telemetry.depth, plugs, maxFt, surveyId: survey?.survey_id, onStart: startTestRun, onEnd: endTestRun });
 
   // SIM ticker (also acts as fallback when LIVE has no fresh DAQ sample)
   useEffect(() => {
@@ -185,7 +224,7 @@ export default function MainOperatorScreen() {
           </button>
           <div className="flex items-center gap-1 bg-slate-950 px-2 py-0.5 rounded-lg border border-slate-800">
             <span className="text-[10px] text-slate-400 uppercase font-bold mr-1">Speed:</span>
-            {[1, 5, 10].map((s) => (
+            {[1, 5, 10, 100].map((s) => (
               <button key={s} onClick={() => setPlaybackSpeed(s)} className={`px-2 py-0.5 rounded text-[11px] font-bold transition-colors ${playbackSpeed === s ? "bg-orange-600 text-white" : "text-slate-400 hover:text-slate-200"}`} data-testid={`sim-speed-${s}x-btn`}>{s}x</button>
             ))}
           </div>
@@ -252,28 +291,8 @@ export default function MainOperatorScreen() {
             )}
           </div>
 
-          <div className="p-3 bg-[#0D1526] border border-slate-800 rounded-xl space-y-2" data-testid="plug-tally">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-300">Plug tally</span>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-              {plugs.map((p) => {
-                const passed = telemetry.depth >= p.end;
-                const dist = Math.abs(telemetry.depth - p.start);
-                return (
-                  <div key={p.id} className={`p-2.5 bg-[#090F1C] border rounded-lg flex justify-between items-center text-xs transition-colors ${passed ? "border-slate-800" : "border-purple-500/40"}`} data-testid={`plug-${p.id}`}>
-                    <div>
-                      <span className="font-bold text-purple-400 mr-1.5">{p.id}</span>
-                      <span className="text-slate-200">{p.type}</span>
-                      <div className="text-[10px] text-slate-400 font-mono">{u.show(p.start, "depth", 1)}–{u.show(p.end, "depth", 1)} {u.label("depth")}</div>
-                    </div>
-                    <div className="text-right">
-                      <span className={`text-[9px] font-bold uppercase ${passed ? "text-emerald-400" : "text-amber-400"}`} data-testid={`plug-${p.id}-status`}>{passed ? "passed" : "ahead"}</span>
-                      <div className="text-[11px] font-mono text-slate-300">{u.show(dist, "depth", 1)} {u.label("depth")}</div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          <PlugTally plugs={plugs} depth={telemetry.depth} u={u} isDemo={!survey} onManage={() => setShowPlugManager(true)}
+            testRun={testRun} onStartTest={() => testRun.start(100)} onStopTest={testRun.stop} />
         </div>
       ) : (
         <div className="bg-[#0D1526] border border-slate-800 rounded-2xl overflow-hidden flex flex-col" data-testid="view-pen-graph">
@@ -325,6 +344,11 @@ export default function MainOperatorScreen() {
         </div>
       </div>
 
+      {showPlugManager && survey && (
+        <PlugManagerModal plugs={plugRecords} canEdit={canEditPlugs} wellName={survey.well_name || survey.survey_id}
+          depthLabel={u.label("depth")} toFt={(v) => (u.isMetric ? u.to(v, "depth") : v)} fromFt={(v) => u.val(v, "depth")}
+          onSave={savePlug} onDelete={deletePlug} onClose={() => setShowPlugManager(false)} />
+      )}
       {showCrewSetup && <CrewRatesModal crew={crewMembers} onSave={saveCrew} onClose={() => setShowCrewSetup(false)} />}
       {showManageChannels && (
         <AddChannelModal pressLabel={u.label("pressure")} toPsi={(v) => u.to(v, "pressure")} custom={customChannels}

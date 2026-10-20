@@ -46,7 +46,7 @@ export function drawTrajectory(ctx, w, h, { depthFt, colorMode, plugs, bitLabel 
     lastLabelX = px;
     ctx.fillStyle = "#94A3B8";
     ctx.font = "bold 10px monospace";
-    ctx.fillText(p.id, px - 6, heelY - 18);
+    ctx.fillText(p.name || p.id, px - 6, heelY - 18);
   });
 
   const bitX = heelX + span * Math.max(Math.min(ratio(depthFt), 1), 0.05);

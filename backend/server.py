@@ -4122,6 +4122,9 @@ _security_router = _build_security_router(
 )
 api_router.include_router(_security_router)
 
+from plugs_module import build_router as _build_plugs_router  # noqa: E402
+api_router.include_router(_build_plugs_router(require_user=require_user, db=db))
+
 
 # ============ APP CONFIG ============
 app.include_router(api_router)
