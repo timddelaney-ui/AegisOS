@@ -283,7 +283,7 @@ export default function MainOperatorScreen() {
               <span className="flex items-center gap-1"><span className="w-2 h-2 bg-rose-500 rounded-sm" /><span className="text-slate-300">&gt; {u.show(DLS_CRIT, "dls", 1)}</span></span>
             </div>
             {survey ? (
-              <div className="order-1 w-full h-72 md:h-full" data-testid="survey-3d-view" data-plug-pins={plugs.map((p) => p.id).join(",")} data-bit-label={bitLabel}>
+              <div className="order-1 w-full h-72 md:h-full" data-testid="survey-3d-view" data-plug-pins={plugs.map((p) => p.name).join(",")} data-bit-label={bitLabel}>
                 <SurveyWellbore3D survey={survey} depthFt={telemetry.depth} colorMode={colorMode} plugs={plugs} bitLabel={bitLabel} />
               </div>
             ) : (

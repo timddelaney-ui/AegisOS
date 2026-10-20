@@ -38,7 +38,7 @@ export function PlugTally({ plugs, depth, u, isDemo, onManage, testRun, onStartT
       {plugs.length === 0 ? (
         <p className="text-xs text-slate-500 py-2" data-testid="plug-tally-empty">No plugs recorded for this well yet. Use “Plugs” to add the job's plug depths.</p>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
           {plugs.map((p) => {
             const passed = depth >= p.end;
             return (
@@ -46,7 +46,7 @@ export function PlugTally({ plugs, depth, u, isDemo, onManage, testRun, onStartT
                 <div className="min-w-0">
                   <span className="font-bold text-purple-400 mr-1.5">{p.name}</span>
                   <span className="text-slate-200">{p.type}</span>
-                  <div className="text-[10px] text-slate-400 font-mono truncate">{u.show(p.start, "depth", 1)}–{u.show(p.end, "depth", 1)} {u.label("depth")}</div>
+                  <div className="text-[10px] text-slate-400 font-mono">{u.show(p.start, "depth", 1)}–{u.show(p.end, "depth", 1)} {u.label("depth")}</div>
                 </div>
                 <div className="text-right shrink-0">
                   <span className={`text-[9px] font-bold uppercase ${passed ? "text-emerald-400" : "text-amber-400"}`} data-testid={`plug-${p.id}-status`}>{passed ? "passed" : "ahead"}</span>

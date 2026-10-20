@@ -1035,3 +1035,9 @@ gets a taste of the top shelf while BETA_UNLOCK is on.
 - No survey → legacy 2D demo canvas + "Upload survey" link to /wellbore.
 - Beta feedback inbox: timddelaney@gmail.com (FEEDBACK_INBOX); emails need a real RESEND_API_KEY.
 - Tested: iteration_25 (feature checks pass; crash/P1/z-index fixed afterwards and verified by screenshot — no page errors on view switch/navigation).
+
+## 2026-06 — Real Plug Records + Test Run
+- Backend `plugs_module.py`: GET/POST `/api/surveys/{id}/plugs` (crew+ add; validates bottom>=top, <=TD, unique name per well → 409), PUT/DELETE `/api/plugs/{id}` (supervisor/management), POST/GET `/api/surveys/{id}/plug-runs` (last 10). Survey delete cascades plugs + runs. Collections: `survey_plugs`, `plug_runs`.
+- Frontend: PlugTally (real per-survey plugs, DEMO PLUGS badge when no survey), PlugManagerModal (add/edit/delete, unit-aware depths), usePlugTestRun (SIM 100x surface→TD, logs each plug cleared, persists run, shows last run). Speed buttons now 1/5/10/100x. 3D plug labels stack when close.
+- Tested: iteration_26 (backend 18/18, frontend ~95% → minor items fixed after).
+- Resend key: user chose to SKIP for now — feedback is saved in-app but NOT emailed (FEEDBACK_INBOX=timddelaney@gmail.com ready).

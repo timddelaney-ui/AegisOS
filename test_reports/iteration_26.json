@@ -1,0 +1,41 @@
+{
+  "summary": "Iter 26: Real Plug Records feature on /live-ops, backend and frontend. BACKEND: 18/18 pytest pass (test_iter26_plug_records.py). Covered: GET returns plugs sorted by top_md plus can_edit; POST validation (bottom<top, bottom>TD, bad type, name empty or >40 chars, negative depth all give 422; bottom==TD is allowed); crew can add; guest gets 403 on add; PUT/DELETE give 403 for crew and guest; other-team survey/plug gives 404; plug-runs POST/GET is crew+, capped at the last 10, and team-isolated. FRONTEND (desktop 1920 + mobile 390): DLS Demo Well tally shows the real P1 (8,400–8,402 ft) with no DEMO PLUGS badge. Modal add/edit (prefill + 'Save changes')/delete all work with toasts, and the list and tally refresh. Below-TD and bottom<top both show the backend error toast and keep the form. SI entry 2600 m was stored as 8530.18 ft and shown as 2,600.0 m. Switching the survey shows only that survey's plugs (plug-tally-empty on the empty survey; Test run disabled). Test run forces SIM 100x from STANDBY and resets depth to 0. Progress counts plugs cleared, and each plug flips to passed. The run ended at ~61 s with toast 'Test run complete — 2/2 plugs cleared'. plug-last-run shows the summary and is still there after reload. Stop gives a 'Test run aborted' toast and speed returns to 1x. Crew-role UI: no edit/delete buttons, the 'needs Supervisor' hint shows, and add works. No-survey intercept: DEMO PLUGS badge, no Plugs button, a local test run (4/4, no POST). Pen graph toggle and SI/IMP work. Zero page errors in all runs.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "DELETE /api/surveys/{survey_id}", "issue": "Does not cascade-delete survey_plugs or plug_runs for that survey, so orphaned plug docs are left behind."},
+      {"endpoint": "POST /api/surveys/{survey_id}/plugs", "issue": "Duplicate plug names on the same survey are allowed (e.g. two 'P1'). This is optional, but a uniqueness check would avoid confusing tallies."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "SurveyWellbore3D plug labels", "issue": "Plug labels close together overlap. With P1 at 8400 ft and another plug at 8530 ft, the P1 label is fully hidden behind the other label; only a sliver of its border shows. There is no collision offset or stacking.", "selector": "[data-testid=survey-3d-view]", "priority": "LOW"}
+    ],
+    "integration_issues": [
+      {"flow": "data-plug-pins attribute", "issue": "The review request says data-plug-pins lists plug names, but for real records it lists plug_ids (e.g. 'plg_369ec24e1c10'). In demo mode it lists P1..P4. This is a minor spec mismatch; switch to p.name if names were intended.", "affected_selectors": ["[data-testid=survey-3d-view]"]},
+      {"flow": "No-survey test run", "issue": "When no survey is loaded, the run completes silently: lastRun is set but no 'Test run complete' toast is shown, unlike the survey path.", "affected_selectors": ["[data-testid=plug-last-run]"]}
+    ],
+    "design_issues": [
+      {"screen": "/live-ops mobile 390 plug tally", "issues": ["In the 2-col grid the plug depth range is truncated ('7,000.0–7,...'), so the bottom MD is hidden. Consider a 1-col layout on mobile or wrapping the range line."]},
+      {"screen": "Plug manager modal", "issues": ["The placeholder 'P1' in the name input looks very similar to a typed value. Use a dimmer placeholder colour (placeholder:text-slate-600)."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter26_plug_records.py", "/app/test_reports/pytest/pytest_iter26_plugs.xml"],
+  "action_items": [
+    "Optional: cascade-delete survey_plugs and plug_runs in DELETE /api/surveys/{id}",
+    "Optional: offset or stack overlapping 3D plug labels so close plugs (like P1) stay visible",
+    "Optional: show the completion toast in no-survey demo test runs too",
+    "Optional: stop the mobile tally truncating the depth range; decide whether data-plug-pins should hold names or ids"
+  ],
+  "critical_code_review_comments": [
+    "usePlugTestRun: switching survey-select during an active run does not stop the run. It continues against the new survey's plugs and maxFt and posts the run to the new survey. Consider aborting the run when surveyId changes.",
+    "usePlugTestRun end-detection relies on depth hitting exactly maxFt. simTick clamps to maxFt, so this works today, but it is fragile if simTick behaviour changes.",
+    "plugs_module update_plug: update_one filters by plug_id only. Team was checked beforehand, so this is safe, but adding team_id to the filter is defence-in-depth."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter26_plug_records.py"],
+  "success_rate": {"backend": "100% (18/18)", "frontend": "~95% (all requested flows pass; only minor label overlap and design nits)"},
+  "seed_data_creation": "Temporary TEST_plug_* crew/guest/other-team users and sessions, a 'TEST_Switch Well' survey and TEST_ plugs were created and all cleaned up. P1 (plg_369ec24e1c10) was left intact. plug_runs was emptied (it was empty before testing).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Crew/guest users are created directly in Mongo (users + user_sessions with role 'crew'/'guest', team_5d808edd1dbb); see the fixture in test_iter26_plug_records.py. srv_c2acb5c12743 belongs to another team (use it for 404 isolation). The speed button testids are sim-speed-{n}x-btn. A full test run on the 10,000 ft survey takes ~61 s; in demo mode it takes ~80 s. Seed localStorage acks as in iter 25."
+}

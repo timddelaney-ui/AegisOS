@@ -4,7 +4,7 @@ import { X, Trash2, Pencil, Save } from "lucide-react";
 export const PLUG_TYPES = {
   frac_plug: "Frac plug", bridge_plug: "Bridge plug", ball_seat: "Ball seat", packer: "Packer", other: "Other",
 };
-const inputCls = "w-full bg-slate-900 border border-slate-800 focus:border-purple-500 outline-none rounded px-2.5 py-1.5 text-xs text-slate-200 mt-1";
+const inputCls = "w-full bg-slate-900 border border-slate-800 focus:border-purple-500 outline-none rounded px-2.5 py-1.5 text-xs text-slate-200 placeholder:text-slate-600 mt-1";
 const blank = { name: "", plug_type: "frac_plug", top: "", bottom: "", notes: "" };
 
 // Depth inputs are in display units; toFt / fromFt convert to canonical ft

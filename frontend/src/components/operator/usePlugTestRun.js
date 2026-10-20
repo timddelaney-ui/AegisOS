@@ -38,9 +38,10 @@ export function usePlugTestRun({ depth, plugs, maxFt, surveyId, onStart, onEnd }
     const body = { mode: "test", speed: r.speed, start_md_ft: r.startMd, end_md_ft: +depth.toFixed(1), duration_s: +elapsed.toFixed(1), passes };
     setRun(null);
     onEnd();
-    if (!surveyId) { setLastRun(body); return; }
+    const msg = `Test run complete — ${passes.length}/${plugs.length} plugs cleared`;
+    if (!surveyId) { setLastRun(body); toast.success(msg); return; }
     axios.post(`${API}/surveys/${surveyId}/plug-runs`, body, { withCredentials: true })
-      .then((res) => { setLastRun(res.data); toast.success(`Test run complete — ${passes.length}/${plugs.length} plugs cleared`); })
+      .then((res) => { setLastRun(res.data); toast.success(msg); })
       .catch((e) => { setLastRun(body); toast.error(e?.response?.data?.detail || "Could not save test run"); });
   }, [depth, plugs, maxFt, surveyId, onEnd]);
 

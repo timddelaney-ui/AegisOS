@@ -1,6 +1,7 @@
 """Plug records per survey/well + recorded test runs (Operator screen)."""
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import List, Literal, Optional
@@ -57,6 +58,13 @@ def build_router(require_user, db) -> APIRouter:
         if td and body.bottom_md_ft > td:
             raise HTTPException(422, f"Plug is below survey TD ({td:.0f} ft).")
 
+    async def _unique_name(survey_id: str, team_id: Optional[str], name: str, exclude: Optional[str] = None) -> None:
+        q = {"survey_id": survey_id, "team_id": team_id, "name": {"$regex": f"^{re.escape(name.strip())}$", "$options": "i"}}
+        if exclude:
+            q["plug_id"] = {"$ne": exclude}
+        if await db.survey_plugs.find_one(q, {"_id": 1}):
+            raise HTTPException(409, f"A plug named '{name.strip()}' already exists on this well.")
+
     async def _plug(plug_id: str, team_id: Optional[str]) -> dict:
         p = await db.survey_plugs.find_one({"plug_id": plug_id, "team_id": team_id}, {"_id": 0})
         if not p:
@@ -74,6 +82,7 @@ def build_router(require_user, db) -> APIRouter:
         require_crew(user)
         survey = await _survey(survey_id, user.get("team_id"))
         _validate(body, survey)
+        await _unique_name(survey_id, user.get("team_id"), body.name)
         doc = {
             "plug_id": f"plg_{uuid.uuid4().hex[:12]}", "survey_id": survey_id, "team_id": user.get("team_id"),
             **body.model_dump(), "name": body.name.strip(),
@@ -88,6 +97,7 @@ def build_router(require_user, db) -> APIRouter:
         require_supervisor(user)
         p = await _plug(plug_id, user.get("team_id"))
         _validate(body, await _survey(p["survey_id"], user.get("team_id")))
+        await _unique_name(p["survey_id"], user.get("team_id"), body.name, exclude=plug_id)
         upd = {**body.model_dump(), "name": body.name.strip(), "updated_at": _now(), "updated_by": user["email"]}
         await db.survey_plugs.update_one({"plug_id": plug_id}, {"$set": upd})
         return {**p, **upd}

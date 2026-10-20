@@ -55,12 +55,16 @@ export default function SurveyWellbore3D({ survey, depthFt, colorMode, plugs, bi
         <Line key={`seg-${i}`} points={[pts[i], b]} lineWidth={3.5}
           color={colorMode === "Plain" ? "#38BDF8" : dlsColor(stations[i + 1].dls_deg_per_100ft ?? 0)} />
       ))}
-      {plugs.map((p) => {
+      {plugs.reduce((acc, p) => {
         const pos = project(stationAt(stations, p.start));
+        const prev = acc[acc.length - 1];
+        const level = prev && prev.pos.distanceTo(pos) < 2.5 ? prev.level + 1 : 0;
+        return [...acc, { p, pos, level }];
+      }, []).map(({ p, pos, level }) => {
         return (
           <group key={p.id} position={pos}>
             <mesh><boxGeometry args={[0.35, 0.35, 0.35]} /><meshStandardMaterial color="#A855F7" emissive="#A855F7" emissiveIntensity={0.6} /></mesh>
-            <Label text={p.name} color="#A855F7" position={[0, 0.9, 0]} />
+            <Label text={p.name} color="#A855F7" position={[0, 0.9 + level * 1.1, 0]} />
           </group>
         );
       })}
