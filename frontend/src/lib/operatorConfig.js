@@ -64,9 +64,9 @@ export const DEFAULT_CREW = [
 ];
 
 // One sim tick: physics authored in SI (as designed), stored in imperial.
-export function simTick(prev, speed) {
+export function simTick(prev, speed, minFt = DEPTH_MIN_FT, maxFt = DEPTH_MAX_FT) {
   const stepFt = 0.33 * speed;
-  const depth = prev.depth >= DEPTH_MAX_FT ? DEPTH_MIN_FT : +(prev.depth + stepFt).toFixed(1);
+  const depth = prev.depth >= maxFt || prev.depth < minFt ? minFt : +Math.min(prev.depth + stepFt, maxFt).toFixed(1);
   const dm = depth / FT_PER_M;
   const whp = (19.2 + Math.sin(dm / 10) * 0.8) * PSI_PER_MPA;
   const internalPress = (37.3 + Math.sin(dm / 14) * 1.2) * PSI_PER_MPA;
@@ -101,3 +101,9 @@ export function fromDaqSample(prev, s) {
     vonMises: s.vm_utilization != null ? s.vm_utilization * 100 : prev.vonMises,
   };
 }
+
+// Demo plugs re-pinned onto a real survey: keep 394 ft spacing, last plug 400 ft above TD
+export const plugsForTD = (td) => PLUGS.map((p, i) => {
+  const start = Math.round(td - 400 - (PLUGS.length - 1 - i) * 394);
+  return { ...p, start, end: start + 4 };
+});
