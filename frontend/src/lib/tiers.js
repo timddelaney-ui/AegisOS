@@ -147,6 +147,7 @@ export const ROUTE_FEATURES = {
   "/timecards":         "timecards",
   "/crew-admin":        "rbac_admin",
   "/live-ops":          "live_ops",
+  "/live-ops/classic":  "live_ops",
   "/daq":               "daq_ingest",
   "/security":          "security_compliance",
 };

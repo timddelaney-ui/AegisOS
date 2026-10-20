@@ -33,6 +33,7 @@ import PartsOrdersPage from "./pages/PartsOrdersPage";
 import TimecardsPage from "./pages/TimecardsPage";
 import RbacAdminPage from "./pages/RbacAdminPage";
 import LiveOpsPage from "./pages/LiveOpsPage";
+import OperatorPage from "./pages/OperatorPage";
 import DaqConfigPage from "./pages/DaqConfigPage";
 import SecurityCompliancePage from "./pages/SecurityCompliancePage";
 import ShareRedeemPage from "./pages/ShareRedeemPage";
@@ -266,7 +267,8 @@ const AppRouter = () => {
         <Route path="/parts-orders" element={<ProtectedRoute feature="parts_orders"><PartsOrdersPage /></ProtectedRoute>} />
         <Route path="/timecards" element={<ProtectedRoute feature="timecards"><TimecardsPage /></ProtectedRoute>} />
         <Route path="/crew-admin" element={<ProtectedRoute feature="rbac_admin"><RbacAdminPage /></ProtectedRoute>} />
-        <Route path="/live-ops" element={<ProtectedRoute feature="live_ops"><LiveOpsPage /></ProtectedRoute>} />
+        <Route path="/live-ops" element={<ProtectedRoute feature="live_ops"><OperatorPage /></ProtectedRoute>} />
+        <Route path="/live-ops/classic" element={<ProtectedRoute feature="live_ops"><LiveOpsPage /></ProtectedRoute>} />
         <Route path="/daq" element={<ProtectedRoute feature="daq_ingest"><DaqConfigPage /></ProtectedRoute>} />
         <Route path="/security" element={<ProtectedRoute feature="security_compliance"><SecurityCompliancePage /></ProtectedRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />

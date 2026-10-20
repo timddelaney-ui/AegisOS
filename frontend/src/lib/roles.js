@@ -24,7 +24,7 @@ export const isCrew = (user) => planRole(user) === "crew";
 // Operational routes a guest / client can still see (view-only).
 // Everything NOT in this set is hidden for guests — pay, schedule, planning, crew admin.
 export const GUEST_ALLOWED_PATHS = new Set([
-  "/hub", "/live-ops", "/stress", "/fatigue", "/wellbore", "/reels",
+  "/hub", "/live-ops", "/live-ops/classic", "/stress", "/fatigue", "/wellbore", "/reels",
   "/treatment", "/documents", "/erp-template", "/app", "/ctd-calculator",
 ]);
 
