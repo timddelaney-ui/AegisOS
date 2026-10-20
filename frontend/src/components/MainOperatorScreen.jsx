@@ -10,7 +10,7 @@ import {
 } from "../lib/operatorConfig";
 import { useOperatorUnits } from "./operator/useOperatorUnits";
 import { MetricCard, ChannelCard, levelOf } from "./operator/OperatorCards";
-import { drawTrajectory, drawPens, PENS } from "./operator/operatorCanvas";
+import { drawTrajectory, drawPens, prepCanvas, PENS } from "./operator/operatorCanvas";
 import { CrewRatesModal } from "./operator/CrewRatesModal";
 import { AddChannelModal } from "./operator/AddChannelModal";
 
@@ -51,6 +51,12 @@ export default function MainOperatorScreen() {
   const canvasPenRef = useRef(null);
   const canvas3DRef = useRef(null);
   const historyRef = useRef([]);
+  const [resizeTick, setResizeTick] = useState(0);
+  useEffect(() => {
+    const onResize = () => setResizeTick((t) => t + 1);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   const push = (next) => { historyRef.current = [...historyRef.current.slice(-99), next]; return next; };
 
@@ -86,15 +92,15 @@ export default function MainOperatorScreen() {
   const bitLabel = `BIT ${u.show(telemetry.depth, "depth", 1)} ${u.label("depth")}`;
   useEffect(() => {
     if (viewStyle !== "3d-live" || !canvas3DRef.current) return;
-    const c = canvas3DRef.current;
-    drawTrajectory(c.getContext("2d"), c.width, c.height, { depthFt: telemetry.depth, colorMode, plugs: PLUGS, bitLabel });
-  }, [telemetry.depth, viewStyle, colorMode, bitLabel]);
+    const { ctx, w, h } = prepCanvas(canvas3DRef.current);
+    drawTrajectory(ctx, w, h, { depthFt: telemetry.depth, colorMode, plugs: PLUGS, bitLabel });
+  }, [telemetry.depth, viewStyle, colorMode, bitLabel, resizeTick]);
 
   useEffect(() => {
     if (viewStyle !== "pen-graph" || !canvasPenRef.current) return;
-    const c = canvasPenRef.current;
-    drawPens(c.getContext("2d"), c.width, c.height, historyRef.current, activePens);
-  }, [telemetry, viewStyle, activePens]);
+    const { ctx, w, h } = prepCanvas(canvasPenRef.current);
+    drawPens(ctx, w, h, historyRef.current, activePens);
+  }, [telemetry, viewStyle, activePens, resizeTick]);
 
   const live = feedMode === "LIVE" && !liveStale;
   const sourceLabel = feedMode === "STANDBY" ? "standby • feed held" : live ? "live DAQ" : feedMode === "LIVE" ? "DAQ stale • sim fallback" : "simulated";
@@ -110,7 +116,11 @@ export default function MainOperatorScreen() {
   };
   const saveCrew = (next) => { setCrewMembers(next); saveLS(CREW_KEY, next); setShowCrewSetup(false); toast.success("Crew rates saved"); };
   const addChannel = (ch) => { const next = [...customChannels, ch]; setCustomChannels(next); saveLS(CUSTOM_CH_KEY, next); setActiveJobSet(ch.group); toast.success(`Channel "${ch.title}" added`); };
-  const removeChannel = (id) => { const next = customChannels.filter((c) => c.id !== id); setCustomChannels(next); saveLS(CUSTOM_CH_KEY, next); };
+  const removeChannel = (id) => {
+    const next = customChannels.filter((c) => c.id !== id);
+    setCustomChannels(next); saveLS(CUSTOM_CH_KEY, next);
+    if (activeJobSet === "Custom" && !next.some((c) => c.group === "Custom")) setActiveJobSet("Pressures");
+  };
 
   return (
     <div className="flex flex-col bg-[#070C14] text-slate-100 p-3 space-y-3" data-testid="main-operator-screen">
@@ -146,9 +156,9 @@ export default function MainOperatorScreen() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-slate-800/60 text-xs">
-          <button onClick={() => setIsSimRunning((r) => !r)} className={`flex items-center gap-1 px-3 py-1 rounded-lg border font-bold transition-colors ${isSimRunning ? "bg-emerald-500/20 border-emerald-500/50 text-emerald-300" : "bg-rose-500/20 border-rose-500/50 text-rose-300"}`} data-testid="sim-play-pause-btn">
-            {isSimRunning ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
-            <span>{isSimRunning ? "SIM RUNNING" : "PAUSED"}</span>
+          <button onClick={() => setIsSimRunning((r) => !r)} disabled={live} className={`flex items-center gap-1 px-3 py-1 rounded-lg border font-bold transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${live ? "bg-cyan-500/15 border-cyan-500/50 text-cyan-300" : isSimRunning ? "bg-emerald-500/20 border-emerald-500/50 text-emerald-300" : "bg-rose-500/20 border-rose-500/50 text-rose-300"}`} data-testid="sim-play-pause-btn">
+            {isSimRunning && !live ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+            <span>{live ? "DAQ DRIVING" : isSimRunning ? "SIM RUNNING" : "PAUSED"}</span>
           </button>
           <div className="flex items-center gap-1 bg-slate-950 px-2 py-0.5 rounded-lg border border-slate-800">
             <span className="text-[10px] text-slate-400 uppercase font-bold mr-1">Speed:</span>
@@ -178,27 +188,27 @@ export default function MainOperatorScreen() {
       {/* 3. VIEWPORT */}
       {viewStyle === "3d-live" ? (
         <div className="space-y-3" data-testid="view-3d-live">
-          <div className="bg-[#0B1120] border border-slate-800 rounded-2xl p-4 relative h-72 overflow-hidden">
-            <div className="absolute top-4 left-4 p-3 bg-slate-950/90 border border-slate-800 rounded-xl text-xs space-y-1 backdrop-blur z-10" data-testid="at-bit-readout">
-              <div className="text-[10px] font-bold text-orange-400 uppercase">At bit readout</div>
+          <div className="bg-[#0B1120] border border-slate-800 rounded-2xl p-3 md:p-4 relative flex flex-col gap-3 md:block md:h-72 overflow-hidden">
+            <div className="order-2 md:absolute md:top-4 md:left-4 p-3 bg-slate-950/90 border border-slate-800 rounded-xl text-xs grid grid-cols-2 gap-1 md:block md:space-y-1 backdrop-blur z-10" data-testid="at-bit-readout">
+              <div className="col-span-2 text-[10px] font-bold text-orange-400 uppercase">At bit readout</div>
               <div className="text-slate-300">MD: <span className="font-mono text-slate-100">{u.show(telemetry.depth, "depth", 1)} {u.label("depth")}</span></div>
               <div className="text-slate-300">TVD: <span className="font-mono text-slate-100">{u.show(telemetry.tvd, "depth", 1)} {u.label("depth")}</span></div>
               <div className="text-slate-300">Incl: <span className="font-mono text-slate-100">{telemetry.inclination}°</span></div>
               <div className="text-slate-300">DLS: <span className="font-mono text-slate-100">{u.show(telemetry.dls, "dls", 2)} {u.label("dls")}</span></div>
               <div className="text-slate-300">Drag: <span className="font-mono text-slate-100">{u.show(telemetry.drag, "weight", 0)} {u.label("weight")}</span></div>
             </div>
-            <div className="absolute top-4 right-4 flex bg-slate-950/90 p-0.5 rounded-lg border border-slate-800 text-[10px] font-bold z-10" data-testid="color-mode-toggle">
+            <div className="order-1 self-end md:absolute md:top-4 md:right-4 flex bg-slate-950/90 p-0.5 rounded-lg border border-slate-800 text-[10px] font-bold z-10" data-testid="color-mode-toggle">
               {["DLS", "Plain"].map((m) => (
                 <button key={m} onClick={() => setColorMode(m)} className={seg(colorMode === m, "bg-cyan-500 text-slate-950")} data-testid={`color-mode-${m.toLowerCase()}-btn`}>{m}</button>
               ))}
             </div>
-            <div className="absolute bottom-4 left-4 p-2 bg-slate-950/90 border border-slate-800 rounded-lg text-[10px] font-mono flex flex-wrap items-center gap-3 z-10">
+            <div className="order-3 md:absolute md:bottom-4 md:left-4 p-2 bg-slate-950/90 border border-slate-800 rounded-lg text-[10px] font-mono flex flex-wrap items-center gap-3 z-10">
               <span className="text-slate-400 font-bold">DLS {u.label("dls")}:</span>
               <span className="flex items-center gap-1"><span className="w-2 h-2 bg-emerald-500 rounded-sm" /><span className="text-slate-300">&lt; {u.show(0.91, "dls", 1)}</span></span>
               <span className="flex items-center gap-1"><span className="w-2 h-2 bg-amber-400 rounded-sm" /><span className="text-slate-300">{u.show(0.91, "dls", 1)}–{u.show(1.83, "dls", 1)}</span></span>
               <span className="flex items-center gap-1"><span className="w-2 h-2 bg-rose-500 rounded-sm" /><span className="text-slate-300">&gt; {u.show(1.83, "dls", 1)}</span></span>
             </div>
-            <canvas ref={canvas3DRef} width={1100} height={280} className="w-full h-full block" data-testid="trajectory-canvas" />
+            <canvas ref={canvas3DRef} className="order-1 w-full h-56 md:h-full block" data-testid="trajectory-canvas" />
           </div>
 
           <div className="p-3 bg-[#0D1526] border border-slate-800 rounded-xl space-y-2" data-testid="plug-tally">
@@ -237,7 +247,7 @@ export default function MainOperatorScreen() {
             <span className="text-[10px] text-slate-500 font-mono">DIGITAL STRIP CHART • {sourceLabel.toUpperCase()}</span>
           </div>
           <div className="h-60 relative">
-            <canvas ref={canvasPenRef} width={1200} height={240} className="w-full h-full block" data-testid="pen-graph-canvas" />
+            <canvas ref={canvasPenRef} className="w-full h-full block" data-testid="pen-graph-canvas" />
           </div>
         </div>
       )}

@@ -1,0 +1,38 @@
+{
+  "summary": "Iter 23 frontend-only testing of new MainOperatorScreen at /live-ops (OperatorPage). Tested on desktop 1920 and mobile 390 with demo session cookie (localStorage ack keys pre-seeded to skip tier tutorial and safety advisory). All 10 requested feature areas pass: header nav buttons (/hub, /live-ops/classic -> old LiveOps console), SIM ticker (1x about 1.5 ft/s, 5x about 8 ft/s, 10x about 16.5 ft/s; pause freezes), global SI/IMP toggle (m/ft, daN/lbs, MPa/psi on metric cards, at-bit readout, plug tally, channel cards; persists in coilaegis_unit_system_v1 and is reflected by UnitSwitcher + MPa/daN on /live-ops/classic), depth slider + reset (1,000.0 m / 3,281.0 ft), plug P1..P4 ahead/passed, 3D Live / Pen Graph views + DLS/Plain + 6 pen toggles, LIVE feed (stale -> 'DAQ STALE • SIM FALLBACK'; fresh samples POSTed to /api/liveops/feed for RIG1 -> 'LIVE DAQ' with depth/weight/pressures/VM mapped correctly; goes back to stale about 5s after samples stop), STANDBY freezes values and stops polling, job-set tabs, alarm badge ('2 ALARMS' with whp=7500 crit + treating=11000 warn, data-level crit/warn), add/remove custom channels + persistence, crew rates edit/total/save/toast/persist/discard-on-close. Zero JS errors on authed loads (the 401s seen on /api/reels, /api/rigs/labels, /api/crew/activity-summary came from the tool loading '/' before the cookie was set; they do not happen after an authed reload).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "MainOperatorScreen channels tabs", "issue": "If you remove the last 'Custom' group channel while the Custom tab is active, the Custom tab disappears but activeJobSet stays 'Custom'. No tab is highlighted and the channel grid is empty (0 cards). Fix: in removeChannel (or a useEffect), reset activeJobSet to 'Pressures' when the active group no longer exists in `groups`.", "selector": "[data-testid^=job-set-]", "priority": "MEDIUM"},
+      {"component": "Custom channels", "issue": "User-added channels have no data source (no `key`), so the value is always '—' / 'no source tag'. Their warn/crit limits can never trigger and they are never counted in alarm-badge. This may be intended for an MVP, but the modal text 'tile turns amber at warn and red at crit' is misleading. Either map custom channels to a DAQ tag or simulated value, or change the copy.", "selector": "[data-testid^=channel-c_]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/live-ops 3D Live (desktop)", "issues": ["The 'BIT xx,xxx.x ft' label box drawn under the bit marker on trajectory-canvas is clipped at the bottom edge of the canvas (only the top half of the box is visible). Move the label above the marker or add bottom padding in drawTrajectory."]},
+      {"screen": "/live-ops 3D Live (mobile 390)", "issues": ["trajectory-canvas has fixed width 1100 and height 280 but is stretched to w-full h-full (about 350x288), so the drawing is distorted horizontally. The at-bit-readout and DLS legend overlays cover most of the canvas, and the plug labels and BIT label become unreadable. Consider resizing the canvas to its container (ResizeObserver plus devicePixelRatio) and stacking the readout below the canvas on small screens."]},
+      {"screen": "/live-ops header (mobile 390)", "issues": ["The sticky OperatorPage header is 166px tall (about 20% of the viewport) because the nav pills and the ENTERPRISE DEMO LIVE indicator wrap onto separate rows. Consider making it non-sticky on mobile or collapsing the nav into icons."]},
+      {"screen": "/live-ops controls", "issues": ["In LIVE mode with a fresh DAQ feed, sim-play-pause-btn still shows 'SIM RUNNING' even though the sim ticker is not running. This is a minor labelling ambiguity; consider disabling or relabelling the sim controls while LIVE DAQ is fresh."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Reset activeJobSet to an existing group when the last Custom channel is removed (MainOperatorScreen.removeChannel)",
+    "Fix the clipped BIT label at the bottom of trajectory-canvas (operatorCanvas.drawTrajectory)",
+    "Make trajectory-canvas and pen-graph-canvas responsive (resize to the container) so mobile is not distorted; reduce the overlay footprint on mobile",
+    "Optional: shrink or un-stick the operator header on mobile; clarify custom-channel warn/crit behaviour; relabel sim controls during LIVE DAQ"
+  ],
+  "critical_code_review_comments": [
+    "removeChannel does not reconcile activeJobSet with `groups`, which causes the empty-tab state.",
+    "Canvas elements use fixed intrinsic width/height with CSS w-full h-full, so they distort at any aspect ratio other than about 3.9:1 and are not DPR-aware (blurry on retina).",
+    "The SIM ticker writes historyRef inside the setTelemetry updater via push(). This is a side effect inside a state updater, which can double-push under React StrictMode in dev. Minor.",
+    "CrewRatesModal: parseFloat(v) || 0 turns a cleared input into '0' immediately, so the user cannot clear the field to retype. Minor UX.",
+    "Files are well split (all under 300 lines) and data-testids are comprehensive."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped per request)", "frontend": "95% (all 10 requested flows pass; 1 medium edge-case bug + design issues)"},
+  "test_credentials": "session_token=demo_session_dade4ac57f0c496094fde437e8e91f00 (demo.pro@example.com)",
+  "seed_data_creation": "POSTed a few dozen manual samples to /api/liveops/feed for rig_id RIG1 (demo team) to test LIVE DAQ and alarms (depth 9876.5/12000, whp 3000/7500). They are now stale and will roll out of the ring buffer. Custom channels and crew rates were created in localStorage and cleaned up.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Pre-seed localStorage with an init script: ctp_disclaimer_ack_v1=<iso>, coilaegis_tier_tutorial_seen_v1={personal:1,smallmed:1,enterprise:1}, ctp_install_prompt_dismissed_v1=<iso>, ctp_mgr_greet_v1::demo_pro_user=<YYYY-MM-DD>. To get a fresh LIVE DAQ state, run a fetch loop in the page every 500ms: POST /api/liveops/feed {rig_id:'RIG1', depth_ft, p_internal_psi, p_external_psi, pressure_psi, vm_utilization, source:'manual'}. The active rig is read from localStorage ctp_active_rig_v2 (RIG1)."
+}

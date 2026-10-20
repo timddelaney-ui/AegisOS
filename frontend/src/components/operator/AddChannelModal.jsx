@@ -46,7 +46,7 @@ export function AddChannelModal({ pressLabel, toPsi, custom, onAdd, onRemove, on
               <input type="number" value={crit} onChange={(e) => setCrit(e.target.value)} className={inputCls} data-testid="add-channel-crit-input" />
             </label>
           </div>
-          <p className="text-[10px] text-slate-400">Limits are in {pressLabel}. The tile turns amber at warn and red at crit.</p>
+          <p className="text-[10px] text-slate-400">Limits are in {pressLabel}. Once the channel is mapped to a DAQ source tag, the tile turns amber at warn and red at crit.</p>
           <button onClick={submit} disabled={!name.trim()} className="w-full py-2 bg-orange-600 hover:bg-orange-500 disabled:opacity-40 transition-colors font-bold text-white text-xs rounded-lg" data-testid="add-channel-submit-btn">
             Add channel
           </button>

@@ -11,9 +11,23 @@ const grid = (ctx, w, h, bg, alpha) => {
 
 const ratio = (ft) => (ft - DEPTH_MIN_FT) / (DEPTH_MAX_FT - DEPTH_MIN_FT);
 
+// Size canvas backing store to its CSS box (crisp on HiDPI, no stretching)
+export function prepCanvas(canvas) {
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+  }
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { ctx, w, h };
+}
+
 export function drawTrajectory(ctx, w, h, { depthFt, colorMode, plugs, bitLabel }) {
   grid(ctx, w, h, "#080E1A", 0.04);
-  const vertX = 140, vertY = 140, heelX = 240, heelY = 250;
+  const vertX = Math.min(140, w * 0.12), heelY = h - 30, vertY = heelY * 0.55, heelX = vertX + Math.min(100, w * 0.12);
+  const span = w - 80 - heelX;
   const plain = colorMode === "Plain";
   ctx.lineWidth = 6;
   ctx.strokeStyle = plain ? "#38BDF8" : "#10B981";
@@ -23,29 +37,34 @@ export function drawTrajectory(ctx, w, h, { depthFt, colorMode, plugs, bitLabel 
   ctx.strokeStyle = plain ? "#38BDF8" : "#10B981";
   ctx.beginPath(); ctx.moveTo(heelX, heelY); ctx.lineTo(w - 60, heelY); ctx.stroke();
 
+  let lastLabelX = -Infinity;
   plugs.forEach((p) => {
-    const px = heelX + (w - 320) * ratio(p.start);
+    const px = heelX + span * ratio(p.start);
     ctx.fillStyle = "#A855F7";
     ctx.fillRect(px - 2, heelY - 14, 4, 28);
+    if (px - lastLabelX < 20) return;
+    lastLabelX = px;
     ctx.fillStyle = "#94A3B8";
     ctx.font = "bold 10px monospace";
     ctx.fillText(p.id, px - 6, heelY - 18);
   });
 
-  const bitX = heelX + (w - 320) * Math.max(Math.min(ratio(depthFt), 1), 0.05);
+  const bitX = heelX + span * Math.max(Math.min(ratio(depthFt), 1), 0.05);
   ctx.fillStyle = "#F97316";
   ctx.shadowColor = "#F97316";
   ctx.shadowBlur = 12;
   ctx.beginPath(); ctx.arc(bitX, heelY, 8, 0, Math.PI * 2); ctx.fill();
   ctx.shadowBlur = 0;
   ctx.fillStyle = "rgba(15,23,42,0.95)";
-  ctx.fillRect(bitX - 55, heelY + 14, 110, 22);
+  const lx = Math.max(4, Math.min(bitX - 55, w - 114)), ly = heelY - 62;
+  ctx.fillRect(lx, ly, 110, 22);
   ctx.strokeStyle = "#F97316";
   ctx.lineWidth = 1;
-  ctx.strokeRect(bitX - 55, heelY + 14, 110, 22);
+  ctx.strokeRect(lx, ly, 110, 22);
+  ctx.beginPath(); ctx.moveTo(bitX, ly + 22); ctx.lineTo(bitX, heelY - 9); ctx.stroke();
   ctx.fillStyle = "#F8FAFC";
   ctx.font = "bold 10px monospace";
-  ctx.fillText(bitLabel, bitX - 50, heelY + 29);
+  ctx.fillText(bitLabel, lx + 5, ly + 15);
 }
 
 // Ranges in canonical imperial
