@@ -223,7 +223,7 @@ export default function MainOperatorScreen() {
             </div>
             <div className="order-1 self-end md:absolute md:top-4 md:right-4 z-10 flex flex-wrap items-center justify-end gap-2">
               {surveys.length > 0 ? (
-                <select value={surveyId || ""} onChange={(e) => setSurveyId(e.target.value)} className="bg-slate-950/90 border border-slate-800 focus:border-cyan-500 outline-none rounded-lg px-2 py-1 text-[10px] font-bold text-slate-200 max-w-[180px]" data-testid="survey-select">
+                <select value={surveyId || ""} onChange={(e) => setSurveyId(e.target.value)} style={{ fontSize: 10 }} className="bg-slate-950/90 border border-slate-800 focus:border-cyan-500 outline-none rounded-lg px-2 py-1 font-bold leading-tight text-slate-200 max-w-[180px]" data-testid="survey-select">
                   {surveys.map((x) => <option key={x.survey_id} value={x.survey_id}>{x.well_name || x.survey_id}</option>)}
                 </select>
               ) : (
@@ -244,7 +244,7 @@ export default function MainOperatorScreen() {
               <span className="flex items-center gap-1"><span className="w-2 h-2 bg-rose-500 rounded-sm" /><span className="text-slate-300">&gt; {u.show(DLS_CRIT, "dls", 1)}</span></span>
             </div>
             {survey ? (
-              <div className="order-1 w-full h-72 md:h-full" data-testid="survey-3d-view">
+              <div className="order-1 w-full h-72 md:h-full" data-testid="survey-3d-view" data-plug-pins={plugs.map((p) => p.id).join(",")} data-bit-label={bitLabel}>
                 <SurveyWellbore3D survey={survey} depthFt={telemetry.depth} colorMode={colorMode} plugs={plugs} bitLabel={bitLabel} />
               </div>
             ) : (

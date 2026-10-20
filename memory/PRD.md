@@ -1027,3 +1027,11 @@ gets a taste of the top shelf while BETA_UNLOCK is on.
 - Files: components/MainOperatorScreen.jsx, components/operator/*, lib/operatorConfig.js, pages/OperatorPage.jsx.
 - Tested: iteration_23 + iteration_24 (100% frontend).
 - Backlog: map custom channels to DAQ source tags; persist crew rates to backend timecards; pytest baseline failures (P2); Stripe live; real Resend key; refactor server.py/phase1_modules.py.
+
+## 2026-06 — Real Survey Trajectory on Operator 3D Live
+- 3D Live panel loads `/api/surveys` (active survey default + `survey-select` dropdown) and renders a rotatable/zoomable react-three-fiber wellbore (`components/operator/SurveyWellbore3D.jsx`), DLS-coloured (<3 / 3–6 / >6 °/100ft), Plain mode cyan.
+- Bit MD → interpolated TVD/Incl/DLS (`lib/surveyInterp.js`); sim depth range = 0..survey TD; demo plugs re-pinned near TD (`plugsForTD`).
+- Labels are canvas-texture sprites (drei `<Html>` crashed on unmount under React 19 StrictMode).
+- No survey → legacy 2D demo canvas + "Upload survey" link to /wellbore.
+- Beta feedback inbox: timddelaney@gmail.com (FEEDBACK_INBOX); emails need a real RESEND_API_KEY.
+- Tested: iteration_25 (feature checks pass; crash/P1/z-index fixed afterwards and verified by screenshot — no page errors on view switch/navigation).

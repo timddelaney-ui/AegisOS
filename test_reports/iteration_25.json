@@ -1,0 +1,34 @@
+{
+  "summary": "Iter 25 frontend-only test of the Real Survey Trajectory 3D view on /live-ops at desktop 1920 and mobile 390, using the demo cookie and localStorage acks. Most of the feature works. survey-3d-view renders a WebGL canvas and the 2D canvas is gone. trajectory-source reads 'survey · 21 stn · TD 10,000 ft'. The slider runs 0..10000 (0..3048 m in SI). Reset goes to 0. The ticker wraps at TD (9,998.3 -> 0.0). At 8500 ft the readout gives TVD 3,418.0 ft, Incl 76.0°, DLS 0.40; at 2500 ft it gives TVD 2,401.4, 38.0°, 3.21. The bit label moves along the path. Drag rotates the view and the wheel zooms (label screen position changes). DLS/Plain colouring works: a mocked survey showed red and amber segments, and Plain mode is all cyan. The legend converts to °/30m in SI (<3.0, 3.0–5.9, >5.9). Plug tally shows 8418/8812/9206/9600 with correct passed/ahead status. survey-select defaults to active_survey_id, and switching between the real survey and a mocked one updates the path, source text, slider max and plug MDs. The no-survey fallback (surveys:[] via route intercept) shows trajectory-canvas, 'demo curve' and an upload-survey-link to /wellbore. Mobile 390 is stacked with no overflow. FAILURES: (1) CRITICAL: unmounting the 3D view throws an uncaught runtime error 'Failed to execute removeChild on Node' and the Emergent runtime-error overlay appears. This happens when clicking 'Old Pen Graph Style' and when navigating away from /live-ops. On mount, the console also logs 5x 'Attempted to synchronously unmount a root while React was already rendering'. (2) The P1 plug pin label (plug-pin-P1) is never rendered, at any depth or in either survey. P2–P4 labels render. (3) The drei <Html> labels (z-index ~16,000,000) sit on top of the Crew Rates modal and the Tier Tutorial modal.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "SurveyWellbore3D (drei Html labels)", "issue": "Unmounting the Canvas throws an uncaught DOMException \"Failed to execute 'removeChild' on 'Node'\" and the runtime error overlay appears. Repro: open /live-ops with a survey, then click view-pen-graph-btn (or navigate to /wellbore). The mount also logs 'Attempted to synchronously unmount a root while React was already rendering' once per Html. Environment: drei pinned at 10.0.0 with fiber 9.8.2, React 19.0.0 and React.StrictMode. Each drei <Html> creates its own ReactDOM root, and that lifecycle breaks under StrictMode with this drei version.", "selector": "[data-testid=view-pen-graph-btn] / [data-testid=survey-3d-view]", "priority": "CRITICAL"},
+      {"component": "SurveyWellbore3D plug pins", "issue": "plug-pin-P1 is never in the DOM; only P2, P3 and P4 render. The P1 cube mesh does render. This is most likely the same Html root race: the first Html root gets unmounted by the StrictMode double-mount.", "selector": "[data-testid=plug-pin-P1]", "priority": "HIGH"},
+      {"component": "SurveyWellbore3D Html labels z-index", "issue": "drei Html uses its default zIndexRange (~16M), so the BIT, P2, P3 and P4 tags are drawn on top of the crew-rates modal and the tier-tutorial modal. They are pointer-events-none, so they are visible but do not block clicks.", "selector": "[data-testid=bit-3d-label]", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/live-ops mobile 390", "issues": ["survey-select renders at a noticeably larger font than the DLS/Plain toggle next to it. This is minor, but the two controls look mismatched."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Fix the removeChild crash when the 3D view unmounts. Option A: upgrade @react-three/drei to the latest 10.x that supports fiber 9 and React 19 (yarn add @react-three/drei@^10), then retest. Option B: replace <Html> labels with drei <Billboard>/<Text> (in-WebGL, no extra React roots). Option C: project the bit and plug positions to screen space and render them as plain DOM overlays.",
+    "Make sure all 4 plug pin labels render (plug-pin-P1 is missing). This will likely be fixed together with the item above.",
+    "Add zIndexRange={[20, 0]} (or similar) to each <Html> so labels stay below modals.",
+    "Optional: guard plugsForTD for short surveys (TD < ~1600 ft gives negative plug MDs)."
+  ],
+  "critical_code_review_comments": [
+    "SurveyWellbore3D: stationAt is recomputed on every 200 ms tick for each plug; memoise the plug positions on [stations, plugs].",
+    "plugsForTD(td) can return negative start values when td < 400 + 3*394.",
+    "simTick still sets tvd: Math.min(depth, 7007) in survey mode. The readout overrides it, but other consumers of telemetry.tvd would get demo TVD."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped per request)", "frontend": "~80% (8 feature checks pass; 3D view unmount crash, missing P1 pin and label z-index fail)"},
+  "seed_data_creation": "None. The second survey and the empty-surveys case were simulated with page.route intercepts only.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Setup: add the cookie and pre-seed localStorage. coilaegis_tier_tutorial_seen_v1 must be JSON like {\"personal\":1,\"smallmed\":1,\"enterprise\":1}; a plain '1' does not dismiss it. Also set ctp_disclaimer_ack_v1, ctp_install_prompt_dismissed_v1 and ctp_mgr_greet_v1::demo_pro_user=<today>. Only one real survey exists (srv_705200a70a31, active_survey_id null). Test switching with a page.route mock. Set the slider through the native value setter plus an input event. To catch the crash, listen to the pageerror event and click view-pen-graph-btn.",
+  "rca of the issue": "Each drei <Html> mounts its own ReactDOM root in a layout effect. Under React 19 with StrictMode, mount, unmount and remount happen synchronously during render, which produces the 'synchronously unmount a root' warnings. One root (the first plug label) ends up detached, and on Canvas teardown drei calls removeChild on a node that is no longer attached, which throws the DOMException. drei 10.0.0 is the first v10 release, while fiber is 9.8.2, so upgrading drei or avoiding Html should resolve it."
+}
