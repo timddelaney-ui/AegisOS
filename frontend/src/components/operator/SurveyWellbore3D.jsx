@@ -25,7 +25,7 @@ function useGeometry(stations) {
   }, [stations]);
 }
 
-function Label({ text, color, position, size = 0.042, dim = false }) {
+function Label({ text, color, position, size = 0.042, dim = false, anchor = [0.5, 0.5] }) {
   const { tex, aspect } = useMemo(() => {
     const c = document.createElement("canvas");
     const ctx = c.getContext("2d");
@@ -44,7 +44,7 @@ function Label({ text, color, position, size = 0.042, dim = false }) {
   }, [text, color, dim]);
   useEffect(() => () => tex.dispose(), [tex]);
   return (
-    <sprite position={position} scale={[size * aspect, size, 1]} renderOrder={10}>
+    <sprite position={position} center={anchor} scale={[size * aspect, size, 1]} renderOrder={10}>
       <spriteMaterial map={tex} sizeAttenuation={false} depthTest={false} transparent />
     </sprite>
   );
@@ -84,7 +84,7 @@ function PlugRing({ position, tangent, name, level }) {
         <torusGeometry args={[0.34, 0.07, 12, 32]} />
         <meshStandardMaterial color="#A855F7" emissive="#A855F7" emissiveIntensity={0.9} metalness={0.3} roughness={0.4} />
       </mesh>
-      <Label text={name} color="#A855F7" position={[-1.6, 1.0 + level * 1.0, 0]} size={0.036} />
+      <Label text={name} color="#A855F7" position={[0, 0, 0]} anchor={[1.15, 1.5 + level * 1.3]} size={0.036} />
     </group>
   );
 }
@@ -102,7 +102,7 @@ function Bit({ position, label }) {
       <mesh><sphereGeometry args={[0.34, 24, 24]} /><meshStandardMaterial color="#F97316" emissive="#F97316" emissiveIntensity={1.4} /></mesh>
       <mesh ref={halo}><sphereGeometry args={[0.62, 24, 24]} /><meshBasicMaterial color="#F97316" transparent opacity={0.3} blending={THREE.AdditiveBlending} depthWrite={false} /></mesh>
       <pointLight color="#F97316" intensity={6} distance={6} />
-      <Label text={label} color="#F97316" position={[0, -1.3, 0]} size={0.046} />
+      <Label text={label} color="#F97316" position={[0, 0, 0]} anchor={[1.1, -0.8]} size={0.046} />
     </group>
   );
 }
@@ -188,7 +188,7 @@ export default function SurveyWellbore3D({ survey, depthFt, colorMode, plugs, bi
       {ticks.map((t) => (
         <group key={t.md} position={t.pos}>
           <mesh><sphereGeometry args={[0.2, 12, 12]} /><meshBasicMaterial color="#CBD5E1" /></mesh>
-          <Label text={fmtDepth(t.md)} color="#94A3B8" position={[1.5, 0.5, 0]} size={0.032} dim />
+          <Label text={fmtDepth(t.md)} color="#94A3B8" position={[0, 0, 0]} anchor={[-0.18, -0.25]} size={0.032} dim />
         </group>
       ))}
 

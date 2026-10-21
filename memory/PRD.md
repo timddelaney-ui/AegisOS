@@ -1041,3 +1041,11 @@ gets a taste of the top shelf while BETA_UNLOCK is on.
 - Frontend: PlugTally (real per-survey plugs, DEMO PLUGS badge when no survey), PlugManagerModal (add/edit/delete, unit-aware depths), usePlugTestRun (SIM 100x surface→TD, logs each plug cleared, persists run, shows last run). Speed buttons now 1/5/10/100x. 3D plug labels stack when close.
 - Tested: iteration_26 (backend 18/18, frontend ~95% → minor items fixed after).
 - Resend key: user chose to SKIP for now — feedback is saved in-app but NOT emailed (FEEDBACK_INBOX=timddelaney@gmail.com ready).
+
+## 2026-06 — Depth Correlation, Channel add/remove, Pro 3D viewer
+- Backend (`plugs_module.py`): GET/POST `/api/surveys/{id}/correlation` (shared per well, offset ±5000 ft, move_target ct_string|plugs, log with who/when/prev), GET/PUT `/api/me/operator-layout` (per user: active_sets, hidden, custom[CustomChannel]). Survey delete cascades correlations.
+- Frontend: DepthCorrelationPanel (counter / true depth, offset input w/ dirty-commit, Reset, ±5/±0.5 nudges debounced, Tag a plug → offset, Move on screen CT string/Plugs, log). True depth drives bit everywhere (3D, at-bit, tally, test run).
+- ChannelsPanel: multi-select job sets, × hide per card, restore in Add channel modal, live sparklines (all channels drift in SIM), layout synced per user on server.
+- 3D viewer rebuilt: lit DLS-coloured tube + halo, depth ticks, plug rings, pulsing bit, wellhead, ground shadow, fog; toolbar 3D/Side/Plan/Fit/Zoom to bit/Orbit, +/- zoom; eased camera.
+- Plug tally: two-tap inline delete, dashed "+ Add a plug". Escape closes modals.
+- Tested: iteration_27 (backend 19/19) + iteration_28 (backend 29/29, frontend 100%).

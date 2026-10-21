@@ -1,0 +1,21 @@
+{
+  "summary": "Iteration 28: retest of the iteration 27 fixes on /live-ops. Backend: 29/29 pytest pass (the new test_iter28_layout_custom_validation.py plus the iter27 regression). PUT /api/me/operator-layout now drops unknown keys and returns 422 when id, title or group is missing, title is empty or over 60 chars, dim is not 'pressure', warn is not a number, or there are more than 50 custom channels. Frontend: all fixes verified. (1) Focus then blur, or focus then Enter, on correlation-offset-input with no edit sends 0 POSTs in both IMP and SI, and the offset stays at 4.63 ft (1.4 m). Editing and blurring commits as 'typed' (4.6 to 7.3 ft). Editing in SI and pressing Enter commits 3.0 m, which shows as 9.8 ft. (2) Sparklines: 19 of 19 channel polylines changed over 5 s of SIM. (3) tag-counter-input clears on SI to IMP and on IMP to SI. (4) Plug delete is two-tap: the first tap sets data-armed=yes and shows 'Delete?' with no DELETE sent; it disarms after 3 s; tapping again twice sends DELETE. (5) Escape closes plug-manager-modal, crew-rates-modal and manage-channels-modal. (6) 3D: default view and Fit show the whole well including the toe past 9,000 ft. The P1 label sits to the left of the tube. Zoom to bit shows the wellhead, the bit and the next ticks, which reads well. (7) Mobile 390: the metric-bit-depth sub text 'ctr 0.6 • off +3.0 m' shows in full with no clipping, and there is no horizontal overflow. Regression OK: nudges are debounced (3 × +0.5 sent 1 POST of 1.5), reset works, job-set toggles work, and hiding then restoring a channel works.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "3D viewer depth ticks", "issues": ["The white tick marker dot on the tube covers the first digit of each depth label, so '1,000' reads as ',000' and '8,000' as '-,000'. Start the label a few px further from the tube. The P1 label box also sits right next to the 8,000 tick label. This is cosmetic only.", "Fit leaves a lot of empty space at 1920 wide: the well fills about 25% of the canvas width. This is acceptable."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter28_layout_custom_validation.py", "/app/backend/tests/test_iter27_correlation_layout.py", "/app/test_reports/pytest/iter28.xml"],
+  "action_items": ["Optional, cosmetic: move the 3D depth tick labels away from the tick marker so the leading digit is not hidden."],
+  "critical_code_review_comments": ["DepthCorrelationPanel: the dirty flag is reset when offsetFt changes. If another crew member's update arrives while the user is typing, the typed text is overwritten. This is an edge case and acceptable."],
+  "updated_files": ["/app/backend/tests/test_iter28_layout_custom_validation.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "Plug P1 was deleted by the two-tap delete test and re-created via the API as P1 8400-8402 frac_plug. Its new id is plg_e0b43c9fd472 (the old plg_369ec24e1c10 is gone). The offset was reset to 0 / ct_string. The layout was reset to active_sets ['Pressures'], hidden [], custom [].",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Survey srv_705200a70a31, team team_5d808edd1dbb. P1 plug id is now plg_e0b43c9fd472. Run pytest without -p no:xdist, because pytest.ini needs xdist. Use the same localStorage pre-seed as iteration 27. Pause the SIM with sim-play-pause-btn. Unit buttons are unit-si-btn / unit-imp-btn. Channel cards are channel-<key> with -remove-btn.",
+  "test_credentials": "session_token=demo_session_dade4ac57f0c496094fde437e8e91f00 (demo.pro@example.com)"
+}
