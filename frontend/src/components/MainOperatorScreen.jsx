@@ -14,7 +14,7 @@ import SurveyWellbore3D from "./operator/SurveyWellbore3D";
 import { PlugTally } from "./operator/PlugTally";
 import { PlugManagerModal, PLUG_TYPES } from "./operator/PlugManagerModal";
 import { usePlugTestRun } from "./operator/usePlugTestRun";
-import { useDepthCorrelation, useChannelLayout } from "./operator/useOperatorSync";
+import { useDepthCorrelation, useChannelLayout, useTeamChannelConfig } from "./operator/useOperatorSync";
 import { DepthCorrelationPanel } from "./operator/DepthCorrelationPanel";
 import { ChannelsPanel } from "./operator/ChannelsPanel";
 import { ViewerToolbar, ZoomButtons } from "./operator/ViewerToolbar";
@@ -54,6 +54,7 @@ export default function MainOperatorScreen() {
   const [showCrewSetup, setShowCrewSetup] = useState(false);
   const [crewMembers, setCrewMembers] = useState(() => loadLS(CREW_KEY, DEFAULT_CREW));
   const layout = useChannelLayout();
+  const teamCfg = useTeamChannelConfig();
   const [viewCmd, setViewCmd] = useState(null);
   const [view3d, setView3d] = useState("3d");
   const [orbit, setOrbit] = useState(false);
@@ -346,7 +347,7 @@ export default function MainOperatorScreen() {
 
       {/* 5. CHANNELS */}
       <ChannelsPanel channels={allChannels} groups={groups} activeSets={layout.active_sets} hidden={layout.hidden} telemetry={telemetry}
-        history={historyRef.current} u={u} sourceLabel={sourceLabel} onToggleSet={layout.toggleSet} onHide={layout.hide} onOpenAdd={() => setShowManageChannels(true)} />
+        history={historyRef.current} u={u} sourceLabel={sourceLabel} onToggleSet={layout.toggleSet} onHide={layout.hide} onOpenAdd={() => setShowManageChannels(true)} teamCfg={teamCfg} />
 
       {showPlugManager && survey && (
         <PlugManagerModal plugs={plugRecords} canEdit={canEditPlugs} wellName={survey.well_name || survey.survey_id}

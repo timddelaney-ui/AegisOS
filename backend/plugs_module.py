@@ -64,6 +64,11 @@ class LayoutIn(BaseModel):
     custom: List[CustomChannel] = Field(default_factory=list, max_length=50)
 
 
+class TeamChannelConfigIn(BaseModel):
+    order: List[str] = Field(default_factory=list, max_length=200)
+    names: dict[str, str] = Field(default_factory=dict)
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -193,6 +198,29 @@ def build_router(require_user, db) -> APIRouter:
     async def put_layout(body: LayoutIn, user: dict = Depends(require_user)):
         doc = {"email": user["email"], **body.model_dump(), "updated_at": _now()}
         await db.operator_layouts.update_one({"email": user["email"]}, {"$set": doc}, upsert=True)
+        return doc
+
+    @r.get("/team/channel-config")
+    async def get_team_channels(user: dict = Depends(require_user)):
+        doc = await db.team_channel_config.find_one({"team_id": user.get("team_id")}, {"_id": 0, "team_id": 0})
+        return doc or {"order": [], "names": {}, "updated_by": None, "updated_at": None}
+
+    @r.put("/team/channel-config")
+    async def put_team_channels(body: TeamChannelConfigIn, user: dict = Depends(require_user)):
+        require_crew(user)
+        if len(body.names) > 200:
+            raise HTTPException(422, "Too many renamed channels.")
+        names = {}
+        for k, v in body.names.items():
+            v = (v or "").strip()
+            if not k or len(k) > 40 or len(v) > 40:
+                raise HTTPException(422, "Channel names must be 1-40 characters.")
+            if v:
+                names[k] = v
+        doc = {"team_id": user.get("team_id"), "order": list(dict.fromkeys(body.order)), "names": names,
+               "updated_by": user["email"], "updated_at": _now()}
+        await db.team_channel_config.update_one({"team_id": doc["team_id"]}, {"$set": doc}, upsert=True)
+        doc.pop("team_id")
         return doc
 
     return r

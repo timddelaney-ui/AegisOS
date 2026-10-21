@@ -87,3 +87,42 @@ export function useChannelLayout() {
   const removeCustom = (id) => setLayout((l) => ({ ...l, custom: l.custom.filter((c) => c.id !== id), hidden: l.hidden.filter((h) => h !== id) }));
   return { ...layout, toggleSet, hide, restore, addCustom, removeCustom };
 }
+
+// Team-shared channel order + display names (whole crew sees the same)
+export function useTeamChannelConfig() {
+  const [cfg, setCfg] = useState({ order: [], names: {} });
+  const dirty = useRef(false);
+  const timer = useRef(null);
+
+  const load = useCallback(() => {
+    if (dirty.current) return;
+    axios.get(`${API}/team/channel-config`, opts)
+      .then((r) => { if (!dirty.current) setCfg({ order: r.data.order || [], names: r.data.names || {} }); })
+      .catch((e) => console.debug("[Operator] channel config load failed", e?.response?.status || e?.message));
+  }, []);
+
+  useEffect(() => {
+    load();
+    const id = setInterval(load, 30000);
+    window.addEventListener("focus", load);
+    return () => { clearInterval(id); window.removeEventListener("focus", load); };
+  }, [load]);
+
+  const save = (next) => {
+    setCfg(next);
+    dirty.current = true;
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => {
+      axios.put(`${API}/team/channel-config`, next, opts)
+        .catch((e) => toast.error(e?.response?.data?.detail || "Could not save channel layout"))
+        .finally(() => { dirty.current = false; });
+    }, 500);
+  };
+  const setOrder = (order) => save({ ...cfg, order });
+  const rename = (id, name) => {
+    const names = { ...cfg.names };
+    if (name && name.trim()) names[id] = name.trim().slice(0, 40); else delete names[id];
+    save({ ...cfg, names });
+  };
+  return { ...cfg, setOrder, rename };
+}

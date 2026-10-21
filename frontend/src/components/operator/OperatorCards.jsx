@@ -1,5 +1,6 @@
 import React from "react";
 import { X } from "lucide-react";
+import { EditableTitle } from "./EditableTitle";
 
 export const levelOf = (v, warn, crit) => {
   if (v == null) return "ok";
@@ -30,12 +31,12 @@ export function MetricCard({ title, value, unit, sub, barVal, testId }) {
   );
 }
 
-export function ChannelCard({ title, raw, value, unit, tag, waveform, warn, crit, warnLabel, critLabel, sourceLabel, testId, onRemove, spark }) {
+export function ChannelCard({ title, defaultTitle, renamed, onRename, dragHandle, dragging, raw, value, unit, tag, warn, crit, warnLabel, critLabel, sourceLabel, testId, onRemove, spark }) {
   const level = levelOf(raw, warn, crit);
   const max = crit ? crit * 1.15 : null;
   const pct = max && raw != null ? Math.max(0, Math.min(100, (raw / max) * 100)) : 40;
   return (
-    <div className={`p-3 bg-[#090F1C] border ${BORDER[level]} rounded-xl space-y-2 transition-colors duration-300`} data-testid={testId} data-level={level}>
+    <div className={`p-3 bg-[#090F1C] border ${BORDER[level]} rounded-xl space-y-2 transition-[border-color,box-shadow] duration-300 ${dragging ? "shadow-2xl shadow-orange-500/20 ring-1 ring-orange-500/60" : ""}`} data-testid={testId} data-level={level}>
       <div className="flex justify-between items-center gap-2 text-[10px] font-bold">
         <span className="text-slate-300 uppercase tracking-wider truncate">{title}</span>
         <span className="flex items-center gap-1.5 shrink-0">
