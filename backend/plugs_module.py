@@ -208,6 +208,8 @@ def build_router(require_user, db) -> APIRouter:
     @r.put("/team/channel-config")
     async def put_team_channels(body: TeamChannelConfigIn, user: dict = Depends(require_user)):
         require_crew(user)
+        if any(not i or len(i) > 40 for i in body.order):
+            raise HTTPException(422, "Channel ids must be 1-40 characters.")
         if len(body.names) > 200:
             raise HTTPException(422, "Too many renamed channels.")
         names = {}

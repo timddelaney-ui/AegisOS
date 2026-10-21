@@ -23,8 +23,8 @@ function SortableChannel({ id, children }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id });
   const style = { transform: CSS.Transform.toString(transform), transition, zIndex: isDragging ? 20 : undefined, position: "relative" };
   const handle = (
-    <button ref={setActivatorNodeRef} {...attributes} {...listeners} title="Drag to reorder"
-      className="p-0.5 -ml-1 rounded text-slate-500 hover:text-orange-400 cursor-grab active:cursor-grabbing touch-none shrink-0" data-testid={`channel-${id}-drag-handle`}>
+    <button ref={setActivatorNodeRef} {...attributes} {...listeners} title="Drag to reorder" style={{ touchAction: "none" }}
+      className="p-2.5 -m-2 sm:p-0.5 sm:-ml-1 sm:m-0 rounded text-slate-500 hover:text-orange-400 cursor-grab active:cursor-grabbing touch-none shrink-0" data-testid={`channel-${id}-drag-handle`}>
       <GripVertical className="w-3.5 h-3.5" />
     </button>
   );
@@ -70,8 +70,8 @@ export function ChannelsPanel({ channels, groups, activeSets, hidden, telemetry,
         </button>
       </div>
       <div className="space-y-1.5">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Job set</span>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 whitespace-nowrap">Job set</span>
           <span className="text-[9px] font-mono text-slate-500">drag ⠿ to reorder · tap a name to rename · shared with crew</span>
         </div>
         <div className="flex flex-wrap gap-2 text-xs font-semibold">

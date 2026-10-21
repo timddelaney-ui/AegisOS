@@ -38,7 +38,11 @@ export function ChannelCard({ title, defaultTitle, renamed, onRename, dragHandle
   return (
     <div className={`p-3 bg-[#090F1C] border ${BORDER[level]} rounded-xl space-y-2 transition-[border-color,box-shadow] duration-300 ${dragging ? "shadow-2xl shadow-orange-500/20 ring-1 ring-orange-500/60" : ""}`} data-testid={testId} data-level={level}>
       <div className="flex justify-between items-center gap-2 text-[10px] font-bold">
-        <span className="text-slate-300 uppercase tracking-wider truncate">{title}</span>
+        <span className="flex items-center gap-1 min-w-0 flex-1">
+          {dragHandle}
+          {onRename ? <EditableTitle title={title} defaultTitle={defaultTitle || title} renamed={renamed} onRename={onRename} testId={testId} />
+            : <span className="text-slate-300 uppercase tracking-wider truncate">{title}</span>}
+        </span>
         <span className="flex items-center gap-1.5 shrink-0">
           <span className="text-slate-500 font-mono">{tag}</span>
           {onRemove && <button onClick={onRemove} title="Remove from screen" className="p-0.5 rounded text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors" data-testid={`${testId}-remove-btn`}><X className="w-3 h-3" /></button>}

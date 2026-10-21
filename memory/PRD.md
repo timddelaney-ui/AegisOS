@@ -1049,3 +1049,9 @@ gets a taste of the top shelf while BETA_UNLOCK is on.
 - 3D viewer rebuilt: lit DLS-coloured tube + halo, depth ticks, plug rings, pulsing bit, wellhead, ground shadow, fog; toolbar 3D/Side/Plan/Fit/Zoom to bit/Orbit, +/- zoom; eased camera.
 - Plug tally: two-tap inline delete, dashed "+ Add a plug". Escape closes modals.
 - Tested: iteration_27 (backend 19/19) + iteration_28 (backend 29/29, frontend 100%).
+
+## 2026-06 — Channel drag reorder + rename (team-shared)
+- Backend: GET/PUT `/api/team/channel-config` {order, names} per team (crew+ write; ids/names ≤40 chars).
+- Frontend: @dnd-kit sortable channel grid (mouse/touch/keyboard via grip handle, one combined order across job sets), inline rename (EditableTitle: Enter/blur save, Esc cancel, reset), refetch every 30s/focus so crew sees changes.
+- Note: visual-edits babel plugin overflowed on a template-literal-heavy component; EditableTitle uses plain string concat.
+- Tested: iteration_29 (backend 38/38, frontend 100% after tester fixes: handle/title render, touch-action none on handle).
