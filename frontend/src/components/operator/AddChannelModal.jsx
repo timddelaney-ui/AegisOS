@@ -1,10 +1,10 @@
 import React, { useState } from "react";
-import { X, Trash2 } from "lucide-react";
+import { X, Trash2, Plus } from "lucide-react";
 import { JOB_SETS } from "../../lib/operatorConfig";
 
 const inputCls = "w-full bg-slate-900 border border-slate-800 focus:border-orange-500 outline-none rounded px-2.5 py-1.5 text-xs text-slate-200 mt-1";
 
-export function AddChannelModal({ pressLabel, toPsi, custom, onAdd, onRemove, onClose }) {
+export function AddChannelModal({ pressLabel, toPsi, custom, hiddenChannels = [], onRestore, onAdd, onRemove, onClose }) {
   const [name, setName] = useState("");
   const [group, setGroup] = useState("Custom");
   const [warn, setWarn] = useState("");
@@ -28,8 +28,22 @@ export function AddChannelModal({ pressLabel, toPsi, custom, onAdd, onRemove, on
           <button onClick={onClose} className="p-1 text-slate-400 hover:text-white" data-testid="manage-channels-close-btn"><X className="w-5 h-5" /></button>
         </div>
 
+        {hiddenChannels.length > 0 && (
+          <div className="p-4 bg-[#0D1526] border border-slate-800 rounded-xl space-y-2" data-testid="hidden-channel-list">
+            <span className="text-xs font-bold uppercase text-slate-300">Put back on screen</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {hiddenChannels.map((c) => (
+                <button key={c.key || c.id} onClick={() => onRestore(c.key || c.id)} className="flex items-center justify-between gap-2 p-2 bg-slate-900 border border-slate-800 hover:border-orange-500/60 rounded-lg text-xs text-left transition-colors" data-testid={`restore-channel-${c.key || c.id}`}>
+                  <span className="text-slate-200 truncate">{c.title} <span className="text-slate-500 font-mono">· {c.group}</span></span>
+                  <Plus className="w-3.5 h-3.5 text-orange-400 shrink-0" />
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="p-4 bg-[#0D1526] border border-slate-800 rounded-xl space-y-3">
-          <span className="text-xs font-bold uppercase text-slate-300">Add a channel</span>
+          <span className="text-xs font-bold uppercase text-slate-300">Add a custom channel</span>
           <div className="grid grid-cols-2 gap-3">
             <label className="text-[10px] uppercase text-slate-400">Name
               <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Tubing press" className={inputCls} data-testid="add-channel-name-input" />

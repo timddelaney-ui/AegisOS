@@ -38,6 +38,22 @@ class PlugRunIn(BaseModel):
     passes: List[PlugPass] = []
 
 
+class CorrelationIn(BaseModel):
+    offset_ft: float = Field(ge=-5000, le=5000)
+    move_target: Literal["ct_string", "plugs"] = "ct_string"
+    reason: Literal["manual", "nudge", "reset", "tag", "target"] = "manual"
+    plug_id: Optional[str] = None
+    plug_name: Optional[str] = None
+    plug_md_ft: Optional[float] = None
+    counter_ft: Optional[float] = None
+
+
+class LayoutIn(BaseModel):
+    active_sets: List[str] = Field(default_factory=list, max_length=20)
+    hidden: List[str] = Field(default_factory=list, max_length=100)
+    custom: List[dict] = Field(default_factory=list, max_length=50)
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -126,5 +142,47 @@ def build_router(require_user, db) -> APIRouter:
         await _survey(survey_id, user.get("team_id"))
         docs = await db.plug_runs.find({"survey_id": survey_id, "team_id": user.get("team_id")}, {"_id": 0}).sort("created_at", -1).to_list(10)
         return {"runs": docs}
+
+    @r.get("/surveys/{survey_id}/correlation")
+    async def get_correlation(survey_id: str, user: dict = Depends(require_user)):
+        team_id = user.get("team_id")
+        await _survey(survey_id, team_id)
+        cur = await db.depth_correlations.find_one({"survey_id": survey_id, "team_id": team_id}, {"_id": 0})
+        log = await db.depth_correlation_log.find({"survey_id": survey_id, "team_id": team_id}, {"_id": 0}).sort("at", -1).to_list(20)
+        return {
+            "offset_ft": (cur or {}).get("offset_ft", 0.0),
+            "move_target": (cur or {}).get("move_target", "ct_string"),
+            "updated_by": (cur or {}).get("updated_by"), "updated_at": (cur or {}).get("updated_at"),
+            "log": log,
+        }
+
+    @r.post("/surveys/{survey_id}/correlation")
+    async def set_correlation(survey_id: str, body: CorrelationIn, user: dict = Depends(require_user)):
+        require_crew(user)
+        team_id = user.get("team_id")
+        await _survey(survey_id, team_id)
+        prev = await db.depth_correlations.find_one({"survey_id": survey_id, "team_id": team_id}, {"_id": 0}) or {}
+        now = _now()
+        cur = {"survey_id": survey_id, "team_id": team_id, "offset_ft": round(body.offset_ft, 2),
+               "move_target": body.move_target, "updated_by": user["email"], "updated_at": now}
+        await db.depth_correlations.update_one({"survey_id": survey_id, "team_id": team_id}, {"$set": cur}, upsert=True)
+        entry = {"entry_id": f"cor_{uuid.uuid4().hex[:10]}", "survey_id": survey_id, "team_id": team_id,
+                 **body.model_dump(), "offset_ft": cur["offset_ft"], "prev_offset_ft": prev.get("offset_ft", 0.0),
+                 "by": user["email"], "by_name": user.get("name") or user["email"], "at": now}
+        await db.depth_correlation_log.insert_one(entry)
+        entry.pop("_id", None)
+        cur.pop("team_id", None)
+        return {**cur, "entry": entry}
+
+    @r.get("/me/operator-layout")
+    async def get_layout(user: dict = Depends(require_user)):
+        doc = await db.operator_layouts.find_one({"email": user["email"]}, {"_id": 0})
+        return doc or {"active_sets": None, "hidden": [], "custom": []}
+
+    @r.put("/me/operator-layout")
+    async def put_layout(body: LayoutIn, user: dict = Depends(require_user)):
+        doc = {"email": user["email"], **body.model_dump(), "updated_at": _now()}
+        await db.operator_layouts.update_one({"email": user["email"]}, {"$set": doc}, upsert=True)
+        return doc
 
     return r

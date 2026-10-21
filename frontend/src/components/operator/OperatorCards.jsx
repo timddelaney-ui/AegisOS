@@ -1,4 +1,5 @@
 import React from "react";
+import { X } from "lucide-react";
 
 export const levelOf = (v, warn, crit) => {
   if (v == null) return "ok";
@@ -29,15 +30,18 @@ export function MetricCard({ title, value, unit, sub, barVal, testId }) {
   );
 }
 
-export function ChannelCard({ title, raw, value, unit, tag, waveform, warn, crit, warnLabel, critLabel, sourceLabel, testId }) {
+export function ChannelCard({ title, raw, value, unit, tag, waveform, warn, crit, warnLabel, critLabel, sourceLabel, testId, onRemove, spark }) {
   const level = levelOf(raw, warn, crit);
   const max = crit ? crit * 1.15 : null;
   const pct = max && raw != null ? Math.max(0, Math.min(100, (raw / max) * 100)) : 40;
   return (
     <div className={`p-3 bg-[#090F1C] border ${BORDER[level]} rounded-xl space-y-2 transition-colors duration-300`} data-testid={testId} data-level={level}>
-      <div className="flex justify-between items-center text-[10px] font-bold">
-        <span className="text-slate-300 uppercase tracking-wider">{title}</span>
-        <span className="text-slate-500 font-mono">{tag}</span>
+      <div className="flex justify-between items-center gap-2 text-[10px] font-bold">
+        <span className="text-slate-300 uppercase tracking-wider truncate">{title}</span>
+        <span className="flex items-center gap-1.5 shrink-0">
+          <span className="text-slate-500 font-mono">{tag}</span>
+          {onRemove && <button onClick={onRemove} title="Remove from screen" className="p-0.5 rounded text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors" data-testid={`${testId}-remove-btn`}><X className="w-3 h-3" /></button>}
+        </span>
       </div>
       <div className="flex items-baseline space-x-2">
         <span className="text-2xl font-black text-slate-100 font-mono tabular-nums" data-testid={`${testId}-value`}>{value}</span>
@@ -48,7 +52,7 @@ export function ChannelCard({ title, raw, value, unit, tag, waveform, warn, crit
         {warn != null && max && <div className="absolute top-0 bottom-0 w-0.5 bg-amber-400" style={{ left: `${(warn / max) * 100}%` }} />}
         {crit != null && max && <div className="absolute top-0 bottom-0 w-0.5 bg-rose-500" style={{ left: `${(crit / max) * 100}%` }} />}
       </div>
-      {waveform && <div className="h-3 w-full text-[9px] text-cyan-400/70 font-mono text-center overflow-hidden">~~~~~~~~~~~~~~~~~~~~~~~~</div>}
+      {spark}
       <div className="text-[9px] text-slate-500 font-mono flex justify-between gap-2">
         <span>{sourceLabel}</span>
         {warnLabel && <span>warn {warnLabel} · crit {critLabel}</span>}

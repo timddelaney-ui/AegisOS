@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
-import { Layers, Box, Play, Pause, RotateCcw, Plus, Users, Upload } from "lucide-react";
+import { Layers, Box, Play, Pause, RotateCcw, Users, Upload } from "lucide-react";
 import { Link } from "react-router-dom";
 import { API } from "../context/AuthContext";
 import { useRig } from "../context/RigContext";
@@ -14,14 +14,17 @@ import SurveyWellbore3D from "./operator/SurveyWellbore3D";
 import { PlugTally } from "./operator/PlugTally";
 import { PlugManagerModal, PLUG_TYPES } from "./operator/PlugManagerModal";
 import { usePlugTestRun } from "./operator/usePlugTestRun";
+import { useDepthCorrelation, useChannelLayout } from "./operator/useOperatorSync";
+import { DepthCorrelationPanel } from "./operator/DepthCorrelationPanel";
+import { ChannelsPanel } from "./operator/ChannelsPanel";
+import { ViewerToolbar, ZoomButtons } from "./operator/ViewerToolbar";
 import { useOperatorUnits } from "./operator/useOperatorUnits";
-import { MetricCard, ChannelCard, levelOf } from "./operator/OperatorCards";
+import { MetricCard } from "./operator/OperatorCards";
 import { drawTrajectory, drawPens, prepCanvas, PENS } from "./operator/operatorCanvas";
 import { CrewRatesModal } from "./operator/CrewRatesModal";
 import { AddChannelModal } from "./operator/AddChannelModal";
 
 const CREW_KEY = "coilaegis_crew_rates_v1";
-const CUSTOM_CH_KEY = "coilaegis_custom_channels_v1";
 const loadLS = (k, fallback) => { try { return JSON.parse(localStorage.getItem(k)) || fallback; } catch { return fallback; } };
 const saveLS = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { console.debug("[Operator] save failed", e?.message); } };
 
@@ -44,14 +47,17 @@ export default function MainOperatorScreen() {
   const [viewStyle, setViewStyle] = useState("3d-live");
   const [feedMode, setFeedMode] = useState("SIM");
   const [liveStale, setLiveStale] = useState(false);
-  const [activeJobSet, setActiveJobSet] = useState("Pressures");
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [isSimRunning, setIsSimRunning] = useState(true);
   const [colorMode, setColorMode] = useState("DLS");
   const [showManageChannels, setShowManageChannels] = useState(false);
   const [showCrewSetup, setShowCrewSetup] = useState(false);
   const [crewMembers, setCrewMembers] = useState(() => loadLS(CREW_KEY, DEFAULT_CREW));
-  const [customChannels, setCustomChannels] = useState(() => loadLS(CUSTOM_CH_KEY, []));
+  const layout = useChannelLayout();
+  const [viewCmd, setViewCmd] = useState(null);
+  const [view3d, setView3d] = useState("3d");
+  const [orbit, setOrbit] = useState(false);
+  const sendCmd = (type) => { if (["3d", "side", "plan"].includes(type)) setView3d(type); setViewCmd({ type, n: Date.now() }); };
   const [activePens, setActivePens] = useState(() => Object.fromEntries(PENS.map((p) => [p.key, true])));
   const [telemetry, setTelemetry] = useState(SEED_TELEMETRY);
   const canvasPenRef = useRef(null);
@@ -83,9 +89,16 @@ export default function MainOperatorScreen() {
       .catch((e) => console.debug("[Operator] plugs load failed", e?.response?.status || e?.message));
   }, [surveyId]);
   useEffect(() => { loadPlugs(); }, [loadPlugs]);
-  const plugs = useMemo(() => (survey
+  const corr = useDepthCorrelation(surveyId);
+  const rawPlugs = useMemo(() => (survey
     ? plugRecords.map((p) => ({ id: p.plug_id, name: p.name, type: PLUG_TYPES[p.plug_type], start: p.top_md_ft, end: p.bottom_md_ft, notes: p.notes }))
     : PLUGS.map((p) => ({ ...p, name: p.id }))), [survey, plugRecords]);
+  // True depth = counter + offset; "Plugs" mode shifts plugs instead of the string on screen
+  const counterFt = telemetry.depth;
+  const moveString = corr.moveTarget === "ct_string";
+  const bitFt = moveString ? counterFt + corr.offsetFt : counterFt;
+  const plugs = useMemo(() => (moveString ? rawPlugs
+    : rawPlugs.map((p) => ({ ...p, start: p.start - corr.offsetFt, end: p.end - corr.offsetFt }))), [rawPlugs, moveString, corr.offsetFt]);
   const savePlug = async (plugId, body) => {
     try {
       if (plugId) await axios.put(`${API}/plugs/${plugId}`, body, { withCredentials: true });
@@ -116,7 +129,7 @@ export default function MainOperatorScreen() {
     return minFt;
   }, [minFt]);
   const endTestRun = useCallback(() => setPlaybackSpeed(1), []);
-  const testRun = usePlugTestRun({ depth: telemetry.depth, plugs, maxFt, surveyId: survey?.survey_id, onStart: startTestRun, onEnd: endTestRun });
+  const testRun = usePlugTestRun({ depth: bitFt, plugs, maxFt: maxFt + (moveString ? corr.offsetFt : 0), surveyId: survey?.survey_id, onStart: startTestRun, onEnd: endTestRun });
 
   // SIM ticker (also acts as fallback when LIVE has no fresh DAQ sample)
   useEffect(() => {
@@ -147,13 +160,18 @@ export default function MainOperatorScreen() {
     return () => { cancelled = true; clearInterval(id); };
   }, [feedMode, rigId]);
 
-  const bitLabel = `BIT ${u.show(telemetry.depth, "depth", 1)} ${u.label("depth")}`;
+  const bitLabel = `BIT ${u.show(bitFt, "depth", 1)} ${u.label("depth")}`;
+  const tickStepFt = useMemo(() => {
+    const steps = u.isMetric ? [100, 250, 500, 1000, 2000].map((m) => m / 0.3048) : [250, 500, 1000, 2000, 5000];
+    return steps.find((st) => maxFt / st <= 10) || steps[steps.length - 1];
+  }, [u.isMetric, maxFt]);
+  const fmtDepth = useCallback((ft) => u.show(ft, "depth", 0), [u]);
   useEffect(() => {
     if (viewStyle !== "3d-live" || survey || !canvas3DRef.current) return;
     const { ctx, w, h } = prepCanvas(canvas3DRef.current);
-    drawTrajectory(ctx, w, h, { depthFt: telemetry.depth, colorMode, plugs, bitLabel });
-  }, [telemetry.depth, viewStyle, colorMode, bitLabel, resizeTick, survey, plugs]);
-  const geo = survey ? stationAt(survey.stations, telemetry.depth) : null;
+    drawTrajectory(ctx, w, h, { depthFt: bitFt, colorMode, plugs, bitLabel });
+  }, [bitFt, viewStyle, colorMode, bitLabel, resizeTick, survey, plugs]);
+  const geo = survey ? stationAt(survey.stations, bitFt) : null;
   const atBit = geo
     ? { tvd: geo.tvd_ft, inc: geo.inc_deg, dls: geo.dls_deg_per_100ft }
     : { tvd: telemetry.tvd, inc: telemetry.inclination, dls: telemetry.dls };
@@ -168,20 +186,21 @@ export default function MainOperatorScreen() {
   const sourceLabel = feedMode === "STANDBY" ? "standby • feed held" : live ? "live DAQ" : feedMode === "LIVE" ? "DAQ stale • sim fallback" : "simulated";
   const P = (v) => u.show(v, "pressure");
 
-  const allChannels = useMemo(() => [...CHANNELS, ...customChannels], [customChannels]);
-  const alarms = allChannels.filter((c) => c.key && levelOf(telemetry[c.key], c.warn, c.crit) !== "ok").length;
-  const groups = customChannels.some((c) => c.group === "Custom") ? [...JOB_SETS, "Custom"] : JOB_SETS;
+  const allChannels = useMemo(() => [...CHANNELS, ...layout.custom], [layout.custom]);
+  const groups = layout.custom.some((c) => c.group === "Custom") ? [...JOB_SETS, "Custom"] : JOB_SETS;
+  const hiddenChannels = allChannels.filter((c) => layout.hidden.includes(c.key || c.id));
 
   const setDepthFromSlider = (displayVal) => {
     const ft = u.isMetric ? u.to(displayVal, "depth") : displayVal;
     setTelemetry((prev) => ({ ...prev, depth: ft }));
   };
   const saveCrew = (next) => { setCrewMembers(next); saveLS(CREW_KEY, next); setShowCrewSetup(false); toast.success("Crew rates saved"); };
-  const addChannel = (ch) => { const next = [...customChannels, ch]; setCustomChannels(next); saveLS(CUSTOM_CH_KEY, next); setActiveJobSet(ch.group); toast.success(`Channel "${ch.title}" added`); };
-  const removeChannel = (id) => {
-    const next = customChannels.filter((c) => c.id !== id);
-    setCustomChannels(next); saveLS(CUSTOM_CH_KEY, next);
-    if (activeJobSet === "Custom" && !next.some((c) => c.group === "Custom")) setActiveJobSet("Pressures");
+  const addChannel = (ch) => { layout.addCustom(ch); toast.success(`Channel "${ch.title}" added`); };
+  const restoreChannel = (id) => {
+    const ch = allChannels.find((c) => (c.key || c.id) === id);
+    layout.restore(id);
+    if (ch && !layout.active_sets.includes(ch.group)) layout.toggleSet(ch.group);
+    toast.success(`${ch?.title || "Channel"} back on screen`);
   };
 
   return (
@@ -239,7 +258,7 @@ export default function MainOperatorScreen() {
 
       {/* 2. READOUT CARDS */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
-        <MetricCard testId="metric-bit-depth" title="CT Bit Depth" value={u.show(telemetry.depth, "depth", 1)} unit={u.label("depth")} sub={`counter • offset ±0.0 ${u.label("depth")}`} />
+        <MetricCard testId="metric-bit-depth" title="CT Bit Depth" value={u.show(counterFt + corr.offsetFt, "depth", 1)} unit={u.label("depth")} sub={`counter ${u.show(counterFt, "depth", 1)} • offset ${corr.offsetFt >= 0 ? "+" : ""}${u.show(corr.offsetFt, "depth", 1)} ${u.label("depth")}`} />
         <MetricCard testId="metric-von-mises" title="Von Mises" value={telemetry.vonMises.toFixed(1)} unit="%SMYS" sub={`${sourceLabel} • 80% alert line`} barVal={telemetry.vonMises} />
         <MetricCard testId="metric-surface-weight" title="Surface Weight" value={u.show(telemetry.weight, "weight", 0)} unit={u.label("weight")} sub={sourceLabel} />
         <MetricCard testId="metric-internal-pressure" title="Internal Pressure" value={P(telemetry.internalPress)} unit={u.label("pressure")} sub={sourceLabel} />
@@ -250,10 +269,15 @@ export default function MainOperatorScreen() {
       {/* 3. VIEWPORT */}
       {viewStyle === "3d-live" ? (
         <div className="space-y-3" data-testid="view-3d-live">
-          <div className={`bg-[#0B1120] border border-slate-800 rounded-2xl p-3 md:p-4 relative flex flex-col gap-3 md:block ${survey ? "md:h-[26rem]" : "md:h-72"} overflow-hidden`} data-testid="trajectory-panel">
+          <div className="bg-[#0D1526] border border-slate-800 rounded-2xl p-3 md:p-4 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-sm font-bold tracking-wide text-slate-100 uppercase">Wellbore and plugs</h2>
+            {survey && <ViewerToolbar view={view3d} orbit={orbit} onCmd={sendCmd} onOrbit={() => setOrbit((o) => !o)} />}
+          </div>
+          <div className={`bg-[#070C14] border border-slate-800 rounded-2xl p-3 md:p-4 relative flex flex-col gap-3 md:block ${survey ? "md:h-[30rem]" : "md:h-72"} overflow-hidden`} data-testid="trajectory-panel">
             <div className="order-2 md:absolute md:top-4 md:left-4 p-3 bg-slate-950/90 border border-slate-800 rounded-xl text-xs grid grid-cols-2 gap-1 md:block md:space-y-1 backdrop-blur z-10" data-testid="at-bit-readout">
               <div className="col-span-2 text-[10px] font-bold text-orange-400 uppercase">At bit readout</div>
-              <div className="text-slate-300">MD: <span className="font-mono text-slate-100">{u.show(telemetry.depth, "depth", 1)} {u.label("depth")}</span></div>
+              <div className="text-slate-300">MD: <span className="font-mono text-slate-100" data-testid="at-bit-md">{u.show(bitFt, "depth", 1)} {u.label("depth")}</span></div>
               <div className="text-slate-300">TVD: <span className="font-mono text-slate-100" data-testid="at-bit-tvd">{u.show(atBit.tvd, "depth", 1)} {u.label("depth")}</span></div>
               <div className="text-slate-300">Incl: <span className="font-mono text-slate-100" data-testid="at-bit-inc">{atBit.inc.toFixed(1)}°</span></div>
               <div className="text-slate-300">DLS: <span className="font-mono text-slate-100" data-testid="at-bit-dls">{u.show(atBit.dls, "dls", 2)} {u.label("dls")}</span></div>
@@ -283,15 +307,19 @@ export default function MainOperatorScreen() {
               <span className="flex items-center gap-1"><span className="w-2 h-2 bg-rose-500 rounded-sm" /><span className="text-slate-300">&gt; {u.show(DLS_CRIT, "dls", 1)}</span></span>
             </div>
             {survey ? (
-              <div className="order-1 w-full h-72 md:h-full" data-testid="survey-3d-view" data-plug-pins={plugs.map((p) => p.name).join(",")} data-bit-label={bitLabel}>
-                <SurveyWellbore3D survey={survey} depthFt={telemetry.depth} colorMode={colorMode} plugs={plugs} bitLabel={bitLabel} />
+              <div className="order-1 relative w-full h-[22rem] md:absolute md:inset-0 md:h-full" data-testid="survey-3d-view" data-plug-pins={plugs.map((p) => p.name).join(",")} data-bit-label={bitLabel} data-view={view3d} data-orbit={orbit ? "on" : "off"}>
+                <SurveyWellbore3D survey={survey} depthFt={bitFt} colorMode={colorMode} plugs={plugs} bitLabel={bitLabel}
+                  fmtDepth={fmtDepth} tickStepFt={tickStepFt} command={viewCmd} orbit={orbit} />
+                <ZoomButtons onCmd={sendCmd} />
               </div>
             ) : (
               <canvas ref={canvas3DRef} className="order-1 w-full h-56 md:h-full block" data-testid="trajectory-canvas" />
             )}
           </div>
+          </div>
 
-          <PlugTally plugs={plugs} depth={telemetry.depth} u={u} isDemo={!survey} onManage={() => setShowPlugManager(true)}
+          <PlugTally plugs={plugs} depth={bitFt} u={u} isDemo={!survey} canDelete={!!survey && canEditPlugs}
+            onManage={() => setShowPlugManager(true)} onAdd={() => setShowPlugManager(true)} onDelete={deletePlug}
             testRun={testRun} onStartTest={() => testRun.start(100)} onStopTest={testRun.stop} />
         </div>
       ) : (
@@ -312,37 +340,13 @@ export default function MainOperatorScreen() {
         </div>
       )}
 
-      {/* 4. CHANNELS */}
-      <div className="bg-[#0D1526] border border-slate-800 rounded-2xl p-4 space-y-3" data-testid="channels-panel">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <h2 className="text-sm font-bold tracking-wide text-slate-100">CHANNELS</h2>
-            <span className={`px-2 py-0.5 rounded border text-[10px] font-bold ${alarms ? "bg-rose-500/10 border-rose-500/40 text-rose-300" : "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"}`} data-testid="alarm-badge">
-              {alarms ? `${alarms} ALARM${alarms > 1 ? "S" : ""}` : "NO ALARMS"}
-            </span>
-          </div>
-          <button onClick={() => setShowManageChannels(true)} className="flex items-center gap-1 px-3 py-1 bg-orange-600 hover:bg-orange-500 transition-colors text-white rounded-lg text-xs font-semibold" data-testid="add-channel-btn">
-            <Plus className="w-3.5 h-3.5" /> Add channel
-          </button>
-        </div>
-        <div className="flex gap-2 border-b border-slate-800/80 pb-2.5 text-xs font-semibold overflow-x-auto">
-          {groups.map((set) => (
-            <button key={set} onClick={() => setActiveJobSet(set)} className={`px-3 py-1 rounded-lg border transition-colors whitespace-nowrap ${activeJobSet === set ? "bg-orange-600 border-orange-500 text-white" : "bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200"}`}
-              data-testid={`job-set-${set.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}>{set}</button>
-          ))}
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {allChannels.filter((c) => c.group === activeJobSet).map((c) => {
-            const raw = c.key ? telemetry[c.key] : null;
-            return (
-              <ChannelCard key={c.key || c.id} testId={`channel-${c.key || c.id}`} title={c.title} raw={raw}
-                value={u.show(raw, c.dim, c.dim === "n2_vol" ? 0 : undefined)} unit={u.label(c.dim)} tag={c.tag} waveform={c.waveform}
-                warn={c.warn} crit={c.crit} warnLabel={c.warn != null ? u.show(c.warn, c.dim) : null} critLabel={c.crit != null ? u.show(c.crit, c.dim) : null}
-                sourceLabel={c.key ? sourceLabel : "no source tag"} />
-            );
-          })}
-        </div>
-      </div>
+      {/* 4. DEPTH CORRELATION */}
+      <DepthCorrelationPanel counterFt={counterFt} offsetFt={corr.offsetFt} moveTarget={corr.moveTarget} plugs={rawPlugs} log={corr.log}
+        u={u} onOffset={corr.setOffset} onTarget={corr.setTarget} shared={!!survey} />
+
+      {/* 5. CHANNELS */}
+      <ChannelsPanel channels={allChannels} groups={groups} activeSets={layout.active_sets} hidden={layout.hidden} telemetry={telemetry}
+        history={historyRef.current} u={u} sourceLabel={sourceLabel} onToggleSet={layout.toggleSet} onHide={layout.hide} onOpenAdd={() => setShowManageChannels(true)} />
 
       {showPlugManager && survey && (
         <PlugManagerModal plugs={plugRecords} canEdit={canEditPlugs} wellName={survey.well_name || survey.survey_id}
@@ -351,8 +355,8 @@ export default function MainOperatorScreen() {
       )}
       {showCrewSetup && <CrewRatesModal crew={crewMembers} onSave={saveCrew} onClose={() => setShowCrewSetup(false)} />}
       {showManageChannels && (
-        <AddChannelModal pressLabel={u.label("pressure")} toPsi={(v) => u.to(v, "pressure")} custom={customChannels}
-          onAdd={addChannel} onRemove={removeChannel} onClose={() => setShowManageChannels(false)} />
+        <AddChannelModal pressLabel={u.label("pressure")} toPsi={(v) => u.to(v, "pressure")} custom={layout.custom}
+          hiddenChannels={hiddenChannels} onRestore={restoreChannel} onAdd={addChannel} onRemove={layout.removeCustom} onClose={() => setShowManageChannels(false)} />
       )}
     </div>
   );

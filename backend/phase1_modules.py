@@ -786,6 +786,8 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
             raise HTTPException(404, "Not found.")
         await db.survey_plugs.delete_many({"survey_id": survey_id, "team_id": user.get("team_id")})
         await db.plug_runs.delete_many({"survey_id": survey_id, "team_id": user.get("team_id")})
+        await db.depth_correlations.delete_many({"survey_id": survey_id, "team_id": user.get("team_id")})
+        await db.depth_correlation_log.delete_many({"survey_id": survey_id, "team_id": user.get("team_id")})
         return {"success": True}
 
     # -----------------------------------------------------------------

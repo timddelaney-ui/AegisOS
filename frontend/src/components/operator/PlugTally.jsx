@@ -1,7 +1,7 @@
 import React from "react";
-import { FlaskConical, Square, ListPlus } from "lucide-react";
+import { FlaskConical, Square, ListPlus, Plus, X } from "lucide-react";
 
-export function PlugTally({ plugs, depth, u, isDemo, onManage, testRun, onStartTest, onStopTest }) {
+export function PlugTally({ plugs, depth, u, isDemo, canDelete, onManage, onAdd, onDelete, testRun, onStartTest, onStopTest }) {
   const { run, lastRun } = testRun;
   const D = (v) => `${u.show(v, "depth", 1)} ${u.label("depth")}`;
   return (
@@ -23,7 +23,7 @@ export function PlugTally({ plugs, depth, u, isDemo, onManage, testRun, onStartT
           )}
           {!isDemo && (
             <button onClick={onManage} className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-[11px] font-bold transition-colors" data-testid="plug-manage-btn">
-              <ListPlus className="w-3 h-3" /> Plugs
+              <ListPlus className="w-3 h-3" /> Edit plugs
             </button>
           )}
         </div>
@@ -36,13 +36,14 @@ export function PlugTally({ plugs, depth, u, isDemo, onManage, testRun, onStartT
       )}
 
       {plugs.length === 0 ? (
-        <p className="text-xs text-slate-500 py-2" data-testid="plug-tally-empty">No plugs recorded for this well yet. Use “Plugs” to add the job's plug depths.</p>
+        <p className="text-xs text-slate-500 py-2" data-testid="plug-tally-empty">No plugs recorded for this well yet.</p>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
           {plugs.map((p) => {
             const passed = depth >= p.end;
             return (
-              <div key={p.id} title={p.notes || ""} className={`p-2.5 bg-[#090F1C] border rounded-lg flex justify-between items-center gap-2 text-xs transition-colors ${passed ? "border-slate-800" : "border-purple-500/40"}`} data-testid={`plug-${p.id}`}>
+              <div key={p.id} className="flex items-stretch gap-1.5">
+              <div title={p.notes || ""} className={`flex-1 min-w-0 p-2.5 bg-[#090F1C] border rounded-lg flex justify-between items-center gap-2 text-xs transition-colors ${passed ? "border-slate-800" : "border-purple-500/40"}`} data-testid={`plug-${p.id}`}>
                 <div className="min-w-0">
                   <span className="font-bold text-purple-400 mr-1.5">{p.name}</span>
                   <span className="text-slate-200">{p.type}</span>
@@ -53,9 +54,21 @@ export function PlugTally({ plugs, depth, u, isDemo, onManage, testRun, onStartT
                   <div className="text-[11px] font-mono text-slate-300">{D(Math.abs(depth - p.start))}</div>
                 </div>
               </div>
+              {canDelete && (
+                <button onClick={() => onDelete(p.id)} title={`Delete ${p.name}`} className="px-2 bg-[#090F1C] border border-slate-800 hover:border-rose-500/60 rounded-lg text-slate-500 hover:text-rose-400 transition-colors" data-testid={`plug-${p.id}-delete-btn`}>
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+              </div>
             );
           })}
         </div>
+      )}
+
+      {!isDemo && (
+        <button onClick={onAdd} className="w-full flex items-center gap-2 px-3 py-2.5 border border-dashed border-slate-700 hover:border-orange-500/60 rounded-lg text-xs font-semibold text-slate-300 transition-colors" data-testid="plug-add-inline-btn">
+          <Plus className="w-3.5 h-3.5 text-orange-500" /> Add a plug
+        </button>
       )}
 
       {lastRun && !run && (
