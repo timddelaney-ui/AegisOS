@@ -258,7 +258,7 @@ export default function MainOperatorScreen() {
 
       {/* 2. READOUT CARDS */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
-        <MetricCard testId="metric-bit-depth" title="CT Bit Depth" value={u.show(counterFt + corr.offsetFt, "depth", 1)} unit={u.label("depth")} sub={`counter ${u.show(counterFt, "depth", 1)} • offset ${corr.offsetFt >= 0 ? "+" : ""}${u.show(corr.offsetFt, "depth", 1)} ${u.label("depth")}`} />
+        <MetricCard testId="metric-bit-depth" title="CT Bit Depth" value={u.show(counterFt + corr.offsetFt, "depth", 1)} unit={u.label("depth")} sub={`ctr ${u.show(counterFt, "depth", 1)} • off ${corr.offsetFt >= 0 ? "+" : ""}${u.show(corr.offsetFt, "depth", 1)} ${u.label("depth")}`} />
         <MetricCard testId="metric-von-mises" title="Von Mises" value={telemetry.vonMises.toFixed(1)} unit="%SMYS" sub={`${sourceLabel} • 80% alert line`} barVal={telemetry.vonMises} />
         <MetricCard testId="metric-surface-weight" title="Surface Weight" value={u.show(telemetry.weight, "weight", 0)} unit={u.label("weight")} sub={sourceLabel} />
         <MetricCard testId="metric-internal-pressure" title="Internal Pressure" value={P(telemetry.internalPress)} unit={u.label("pressure")} sub={sourceLabel} />

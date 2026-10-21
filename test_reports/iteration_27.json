@@ -1,0 +1,46 @@
+{
+  "summary": "Iteration 27: tested the /live-ops Depth Correlation, Channels add/remove, the professional 3D viewer and the inline Plug Tally, plus regression. Backend: 19/19 pytest pass (correlation GET/POST, 20-entry log newest first, prev_offset/by/by_name/at, ±5000 bounds, enum validation, crew can post, guest gets 403, team isolation 404, unauth 401, per-user operator layout). Frontend: almost everything works end to end with no page errors. True depth = counter + offset everywhere. Enter/blur commit works. Nudges debounce into one POST (5 quick clicks gave 1 entry 12.5→18.5), and a pending nudge is flushed when you navigate away. Tag a plug: preview and set work, and the counter box clears. CT string vs Plugs mode works: bit label, at-bit MD and the tally shift are correct. The offset and mode persist after reload and are shared with a crew user of the same team. SI inputs and nudges are in metres (+5 m = +16.4 ft). Job sets are multi-select with aria-pressed. The × hides a channel, restoring it re-enables its job set, the empty state shows, custom channels add a 'Custom' set, and the layout persists on the server after reload. The 3D toolbar works: data-view changes and the camera moves smoothly for 3D/Side/Plan/Fit/Zoom to bit/+/-, and Orbit auto-rotates. Depth ticks every 1,000 ft, plug rings and the glowing bit all render. Inline plug × (management only; hidden for crew) and the dashed '+ Add a plug' row work, and 'Edit plugs' still opens the modal. Regression OK: SIM ticker, 100x, pen graph, crew rates, test run (bit = counter + offset), mobile 390 with no horizontal overflow. Two real bugs: (1) blurring the offset input without editing silently rewrites the shared offset; (2) most channel sparklines are flat because SIM never changes those values.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "PUT /api/me/operator-layout", "issue": "custom is List[dict] with no schema, so arbitrary keys and values are stored. Add a Pydantic CustomChannel model (id, title, group, warn, crit)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "DepthCorrelationPanel offset input", "issue": "Focus then blur (or Enter) with no edit sends a 'manual' POST that rounds the shared offset to the 0.1 shown on screen. Reproduced: offset 4.63 ft became 4.6 ft and a 'typed 4.6 → 4.6' log entry was added just by clicking into the box and out. It is worse in SI: 21.4 ft shows as 6.5 m, and blurring rewrites it to 21.33 ft. RCA: commitText compares toFt(parseFloat(offsetText)) with offsetFt using a 0.01 tolerance, but offsetText is the rounded display value. Fix: commit only if offsetText !== disp(offsetFt).toFixed(1), i.e. the user actually edited it (track a dirty flag).", "selector": "[data-testid='correlation-offset-input']", "priority": "HIGH"},
+      {"component": "ChannelsPanel sparklines", "issue": "Only 5 of 19 channels change in SIM: whp, treatingPress, ccl, dhTorque, vibration. simTick (lib/operatorConfig.js) never updates annulusPress, slurryRate, proppantConc, slurryDensity, n2Rate, n2Cum, n2Discharge, gamma, voltage, toolTemp, dhTension, dhIntPress, dhAnnPress or dhTemp. Their cards show a flat, frozen sparkline, which does not meet 'live sparkline that changes over time'. Add small noise or trends for these keys in simTick.", "selector": "[data-testid='channel-gamma'] svg polyline", "priority": "MEDIUM"},
+      {"component": "DepthCorrelationPanel tag-counter-input", "issue": "The typed value is not converted when switching SI↔IMP. A '2560' typed in m is read as 2560 ft after switching to IMP.", "selector": "[data-testid='tag-counter-input']", "priority": "LOW"},
+      {"component": "PlugTally inline delete", "issue": "× deletes a plug record immediately with no confirmation or undo. One stray tap on a rig tablet removes a well record. Add a confirm step or an undo toast.", "selector": "[data-testid^='plug-'][data-testid$='-delete-btn']", "priority": "MEDIUM"},
+      {"component": "AddChannelModal", "issue": "Escape does not close the Manage Channels modal (only the X button does).", "selector": "[data-testid='manage-channels-modal']", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "3D viewer (default 3D and Fit)", "issues": ["Fit does not fit the whole well: the toe below the 9,000 ft tick runs off the bottom of the panel in the 3D view. Increase the distance multiplier (0.62) or fit on the projected bounds.", "Plug label sprites (P1, TEST_X9) overlap the depth tick labels (8,000 / 6,000). Offset plug labels to the other side of the tube or hide ticks near plugs.", "Zoom to bit at the surface zooms so far in that the wellhead and bit fill the view (radius*0.22). A slightly larger distance would read better."]},
+      {"screen": "Mobile 390 metric-bit-depth card", "issues": ["The sub-text 'counter 4.2 • offset +4.…' is cut off, so the offset value is not readable on mobile. Wrap it or drop the 'counter' word."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter27_correlation_layout.py", "/app/test_reports/pytest/pytest_iter27.xml"],
+  "action_items": [
+    "Fix the DepthCorrelationPanel commitText false-positive: only commit on a real user edit (dirty flag, or compare with the displayed string). Today a focus+blur silently changes the shared offset and pollutes the audit log.",
+    "Make all SIM channels vary in simTick so every sparkline is live.",
+    "Add a confirm step or undo toast to the inline plug × delete.",
+    "Improve 3D Fit framing so the full well (toe) is visible, and de-overlap plug labels from tick labels.",
+    "Minor: convert tag-counter-input on unit switch; Escape closes Manage Channels; let the mobile bit-depth sub-text wrap; validate the operator-layout custom schema."
+  ],
+  "critical_code_review_comments": [
+    "DepthCorrelationPanel.commitText: comparing a rounded display value with the canonical ft value causes unintended writes (see ui_bugs).",
+    "useChannelLayout: if the GET fails (e.g. a network blip), loaded stays true and the default layout is PUT on the next change, overwriting the user's saved server layout. Set loaded only on success.",
+    "useChannelLayout: on first load the effect PUTs the just-loaded layout back to the server. Harmless but redundant.",
+    "useDepthCorrelation.setTarget while a nudge is pending: the target POST goes out first, then the debounced nudge POST, giving 2 log entries in reverse order of intent. Flush the pending nudge before posting the target.",
+    "The console shows a React hydration warning '<span> cannot be a child of <option>' in tag-plug-select. It is caused by the visual-editor instrumentation wrapping the {p.name} expressions, not by app code, but it would go away if the option text were built as a single template string."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter27_correlation_layout.py"],
+  "success_rate": {"backend": "100% (19/19)", "frontend": "~90% (all flows work; 1 HIGH data-integrity bug, 1 MEDIUM sparkline gap)"},
+  "test_credentials": "demo session_token=demo_session_dade4ac57f0c496094fde437e8e91f00 (management). Crew/guest/other-team users are created in Mongo by the test fixture and removed afterwards.",
+  "seed_data_creation": "None left behind. A temporary TEST_ui_crew user and session were created for the UI sharing check and deleted. TEST_X9 plug was created and deleted. Correlation offset reset to 0 / ct_string, demo layout restored to {active_sets:['Pressures'], hidden:[], custom:[]}. Correlation log entries from testing remain (append-only by design).",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "pytest.ini runs xdist with --dist loadscope, which splits test classes across workers. Module fixtures that create and delete shared users must be per-worker (see the PYTEST_XDIST_WORKER suffix in test_iter27). Pre-seed localStorage: coilaegis_tier_tutorial_seen_v1={personal:1,smallmed:1,enterprise:1}, ctp_disclaimer_ack_v1, ctp_install_prompt_dismissed_v1, coilaegis_tour_seen_v1, ctp_mgr_greet_v1::demo_pro_user=<today>. Pause the SIM (sim-play-pause-btn) for stable numbers. 3D movement was checked by hashing canvas.toDataURL before and after; this works because there is no preserveDrawingBuffer issue in headless. Plug P1 id plg_369ec24e1c10. To retest the blur bug: POST an offset of 4.63 via the API, load the page, click into correlation-offset-input, click away, and confirm no POST is sent.",
+  "rca of the issue": "Offset blur bug: the offsetText state is initialised to disp(offsetFt).toFixed(1). On blur, commitText parses it, converts it to ft and compares with offsetFt at a 0.01 tolerance. Any offset with more precision than the 0.1 display (tag offsets, SI conversions) fails that comparison, so a 'manual' POST is sent with the rounded value. Mitigation: keep a dirty flag set in onChange, reset it on offsetFt change, and commit only when dirty."
+}

@@ -1,8 +1,10 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { FlaskConical, Square, ListPlus, Plus, X } from "lucide-react";
 
 export function PlugTally({ plugs, depth, u, isDemo, canDelete, onManage, onAdd, onDelete, testRun, onStartTest, onStopTest }) {
   const { run, lastRun } = testRun;
+  const [armed, setArmed] = useState(null);
+  useEffect(() => { if (!armed) return; const t = setTimeout(() => setArmed(null), 3000); return () => clearTimeout(t); }, [armed]);
   const D = (v) => `${u.show(v, "depth", 1)} ${u.label("depth")}`;
   return (
     <div className="p-3 bg-[#0D1526] border border-slate-800 rounded-xl space-y-2" data-testid="plug-tally">
@@ -55,8 +57,9 @@ export function PlugTally({ plugs, depth, u, isDemo, canDelete, onManage, onAdd,
                 </div>
               </div>
               {canDelete && (
-                <button onClick={() => onDelete(p.id)} title={`Delete ${p.name}`} className="px-2 bg-[#090F1C] border border-slate-800 hover:border-rose-500/60 rounded-lg text-slate-500 hover:text-rose-400 transition-colors" data-testid={`plug-${p.id}-delete-btn`}>
-                  <X className="w-3.5 h-3.5" />
+                <button onClick={() => (armed === p.id ? (setArmed(null), onDelete(p.id)) : setArmed(p.id))} title={armed === p.id ? "Tap again to delete" : `Delete ${p.name}`}
+                  className={`px-2 border rounded-lg transition-colors text-[10px] font-bold ${armed === p.id ? "bg-rose-600 border-rose-500 text-white" : "bg-[#090F1C] border-slate-800 hover:border-rose-500/60 text-slate-500 hover:text-rose-400"}`} data-testid={`plug-${p.id}-delete-btn`} data-armed={armed === p.id ? "yes" : "no"}>
+                  {armed === p.id ? "Delete?" : <X className="w-3.5 h-3.5" />}
                 </button>
               )}
               </div>

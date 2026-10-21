@@ -25,7 +25,7 @@ export function MetricCard({ title, value, unit, sub, barVal, testId }) {
           <div className="absolute left-[80%] top-0 bottom-0 w-0.5 bg-slate-300" />
         </div>
       )}
-      <div className="text-[10px] text-slate-500 font-mono truncate">{sub}</div>
+      <div className="text-[10px] text-slate-500 font-mono break-words">{sub}</div>
     </div>
   );
 }

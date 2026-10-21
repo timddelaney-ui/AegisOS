@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { X, Trash2, Pencil, Save } from "lucide-react";
 
 export const PLUG_TYPES = {
@@ -9,6 +9,7 @@ const blank = { name: "", plug_type: "frac_plug", top: "", bottom: "", notes: ""
 
 // Depth inputs are in display units; toFt / fromFt convert to canonical ft
 export function PlugManagerModal({ plugs, canEdit, depthLabel, toFt, fromFt, onSave, onDelete, onClose, wellName }) {
+  useEffect(() => { const k = (e) => e.key === "Escape" && onClose(); window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [onClose]);
   const [form, setForm] = useState(blank);
   const [editId, setEditId] = useState(null);
   const [busy, setBusy] = useState(false);

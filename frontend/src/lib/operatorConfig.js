@@ -63,6 +63,20 @@ export const DEFAULT_CREW = [
   { id: 4, name: "Field Trainee", designation: "Field Hand 2", hourlyRate: 13, hoursLogged: 12 },
 ];
 
+// Bounded random walk around seed values so every channel trends live
+const DRIFT_KEYS = { annulusPress: 0.004, slurryRate: 0.006, proppantConc: 0.008, slurryDensity: 0.002, n2Rate: 0.005,
+  n2Discharge: 0.004, gamma: 0.01, voltage: 0.003, toolTemp: 0.002, dhTension: 0.004, dhIntPress: 0.003, dhAnnPress: 0.003, dhTemp: 0.002 };
+function drift(prev) {
+  const out = {};
+  Object.entries(DRIFT_KEYS).forEach(([k, a]) => {
+    const seed = SEED_TELEMETRY[k];
+    const next = prev[k] + (Math.random() - 0.5) * 2 * a * seed;
+    out[k] = Math.min(seed * 1.12, Math.max(seed * 0.88, next));
+  });
+  out.n2Cum = prev.n2Cum + prev.n2Rate / 300;
+  return out;
+}
+
 // One sim tick: physics authored in SI (as designed), stored in imperial.
 export function simTick(prev, speed, minFt = DEPTH_MIN_FT, maxFt = DEPTH_MAX_FT) {
   const stepFt = 0.33 * speed;
@@ -83,6 +97,7 @@ export function simTick(prev, speed, minFt = DEPTH_MIN_FT, maxFt = DEPTH_MAX_FT)
     dhTorque: (350 + dm * 0.02 + (Math.random() - 0.5) * 15) / 1.35581795,
     vonMises: Math.min(25 + dm / 200 + Math.random() * 0.4, 78),
     vibration: 2.2 + (Math.random() - 0.5) * 0.6,
+    ...drift(prev),
   };
 }
 

@@ -10,18 +10,23 @@ export function DepthCorrelationPanel({ counterFt, offsetFt, moveTarget, plugs, 
   const disp = (ft) => u.val(ft, "depth");
   const toFt = (v) => (u.isMetric ? u.to(v, "depth") : v);
   const [offsetText, setOffsetText] = useState("");
+  const [dirty, setDirty] = useState(false);
   const [tagPlug, setTagPlug] = useState("");
   const [tagCounter, setTagCounter] = useState("");
 
-  useEffect(() => { setOffsetText(disp(offsetFt).toFixed(1)); }, [offsetFt, u.isMetric]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setOffsetText(disp(offsetFt).toFixed(1)); setDirty(false); }, [offsetFt, u.isMetric]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setTagCounter(""); }, [u.isMetric]);
   useEffect(() => { if (!plugs.some((p) => p.id === tagPlug)) setTagPlug(plugs[0]?.id || ""); }, [plugs, tagPlug]);
 
   const plug = plugs.find((p) => p.id === tagPlug);
   const counterAtTag = tagCounter === "" ? counterFt : toFt(parseFloat(tagCounter));
   const tagOffset = plug && Number.isFinite(counterAtTag) ? plug.start - counterAtTag : null;
   const commitText = () => {
+    if (!dirty) return;
+    setDirty(false);
     const v = parseFloat(offsetText);
-    if (Number.isFinite(v) && Math.abs(toFt(v) - offsetFt) > 0.01) onOffset(toFt(v), "manual");
+    if (Number.isFinite(v)) onOffset(toFt(v), "manual");
+    else setOffsetText(disp(offsetFt).toFixed(1));
   };
 
   return (
@@ -48,7 +53,7 @@ export function DepthCorrelationPanel({ counterFt, offsetFt, moveTarget, plugs, 
       <div className="space-y-2">
         <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Offset {L}</label>
         <div className="flex gap-2">
-          <input type="number" step="0.1" value={offsetText} onChange={(e) => setOffsetText(e.target.value)} onBlur={commitText} onKeyDown={(e) => e.key === "Enter" && commitText()}
+          <input type="number" step="0.1" value={offsetText} onChange={(e) => { setOffsetText(e.target.value); setDirty(true); }} onBlur={commitText} onKeyDown={(e) => e.key === "Enter" && commitText()}
             className="flex-1 min-w-0 bg-slate-950 border border-slate-800 focus:border-orange-500 outline-none rounded-lg px-3 py-2 text-sm font-mono text-slate-100" data-testid="correlation-offset-input" />
           <button onClick={() => onOffset(0, "reset")} className={`${btn} flex items-center gap-1`} data-testid="correlation-reset-btn"><RotateCcw className="w-3.5 h-3.5" /> Reset to 0</button>
         </div>

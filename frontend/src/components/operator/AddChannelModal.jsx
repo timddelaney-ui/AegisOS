@@ -1,10 +1,11 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { X, Trash2, Plus } from "lucide-react";
 import { JOB_SETS } from "../../lib/operatorConfig";
 
 const inputCls = "w-full bg-slate-900 border border-slate-800 focus:border-orange-500 outline-none rounded px-2.5 py-1.5 text-xs text-slate-200 mt-1";
 
 export function AddChannelModal({ pressLabel, toPsi, custom, hiddenChannels = [], onRestore, onAdd, onRemove, onClose }) {
+  useEffect(() => { const k = (e) => e.key === "Escape" && onClose(); window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [onClose]);
   const [name, setName] = useState("");
   const [group, setGroup] = useState("Custom");
   const [warn, setWarn] = useState("");

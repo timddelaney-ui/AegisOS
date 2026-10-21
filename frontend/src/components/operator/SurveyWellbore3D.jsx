@@ -84,7 +84,7 @@ function PlugRing({ position, tangent, name, level }) {
         <torusGeometry args={[0.34, 0.07, 12, 32]} />
         <meshStandardMaterial color="#A855F7" emissive="#A855F7" emissiveIntensity={0.9} metalness={0.3} roughness={0.4} />
       </mesh>
-      <Label text={name} color="#A855F7" position={[0, 1.0 + level * 1.0, 0]} size={0.036} />
+      <Label text={name} color="#A855F7" position={[-1.6, 1.0 + level * 1.0, 0]} size={0.036} />
     </group>
   );
 }
@@ -116,13 +116,13 @@ function CameraRig({ geo, tip, command, orbit }) {
 
   useEffect(() => {
     if (!controls || !command) return;
-    const dist = (r) => (r / Math.sin(THREE.MathUtils.degToRad(FOV / 2))) * 0.62;
+    const dist = (r) => (r / Math.sin(THREE.MathUtils.degToRad(FOV / 2))) * 0.85;
     const dirFor = (v) => (v === "plan" ? new THREE.Vector3(0.0001, 1, 0.0001) : v === "side" ? geo.side.clone() : new THREE.Vector3(1, 0.55, 1).normalize());
     const cur = camera.position.clone().sub(controls.target);
     let target = geo.center.clone(), pos;
     if (["3d", "side", "plan"].includes(command.type)) view.current = command.type;
     if (["3d", "side", "plan", "fit"].includes(command.type)) pos = target.clone().add(dirFor(view.current).multiplyScalar(dist(geo.radius)));
-    else if (command.type === "bit") { target = tip.clone(); pos = target.clone().add(cur.normalize().multiplyScalar(dist(geo.radius) * 0.22)); }
+    else if (command.type === "bit") { target = tip.clone(); pos = target.clone().add(cur.normalize().multiplyScalar(dist(geo.radius) * 0.38)); }
     else if (command.type === "in" || command.type === "out") {
       target = controls.target.clone();
       pos = target.clone().add(cur.multiplyScalar(command.type === "in" ? 0.75 : 1.33));
@@ -165,7 +165,7 @@ export default function SurveyWellbore3D({ survey, depthFt, colorMode, plugs, bi
   }, []), [plugs, stations, td, geo]);
 
   const shadow = useMemo(() => geo.pts.map((v) => new THREE.Vector3(v.x, geo.floorY + 0.01, v.z)), [geo]);
-  const startPos = useMemo(() => geo.center.clone().add(new THREE.Vector3(1, 0.55, 1).normalize().multiplyScalar((geo.radius / Math.sin(THREE.MathUtils.degToRad(FOV / 2))) * 0.62)), [geo]);
+  const startPos = useMemo(() => geo.center.clone().add(new THREE.Vector3(1, 0.55, 1).normalize().multiplyScalar((geo.radius / Math.sin(THREE.MathUtils.degToRad(FOV / 2))) * 0.85)), [geo]);
 
   return (
     <Canvas camera={{ position: startPos.toArray(), fov: FOV, near: 0.1, far: 400 }} dpr={[1, 2]} gl={{ antialias: true }} data-testid="survey-3d-canvas">

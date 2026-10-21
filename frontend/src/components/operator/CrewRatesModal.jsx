@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Users, X } from "lucide-react";
 
 export function CrewRatesModal({ crew, onSave, onClose }) {
+  useEffect(() => { const k = (e) => e.key === "Escape" && onClose(); window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [onClose]);
   const [draft, setDraft] = useState(crew);
   const update = (id, field, v) => setDraft((prev) => prev.map((m) => (m.id === id ? { ...m, [field]: parseFloat(v) || 0 } : m)));
   const total = draft.reduce((s, m) => s + m.hourlyRate * m.hoursLogged, 0);

@@ -48,10 +48,20 @@ class CorrelationIn(BaseModel):
     counter_ft: Optional[float] = None
 
 
+class CustomChannel(BaseModel):
+    id: str = Field(min_length=1, max_length=40)
+    title: str = Field(min_length=1, max_length=60)
+    group: str = Field(min_length=1, max_length=30)
+    dim: Literal["pressure"] = "pressure"
+    tag: Optional[str] = Field(default=None, max_length=30)
+    warn: Optional[float] = None
+    crit: Optional[float] = None
+
+
 class LayoutIn(BaseModel):
     active_sets: List[str] = Field(default_factory=list, max_length=20)
     hidden: List[str] = Field(default_factory=list, max_length=100)
-    custom: List[dict] = Field(default_factory=list, max_length=50)
+    custom: List[CustomChannel] = Field(default_factory=list, max_length=50)
 
 
 def _now() -> str:
