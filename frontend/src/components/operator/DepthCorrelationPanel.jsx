@@ -32,6 +32,8 @@ export function DepthCorrelationPanel({ counterFt, offsetFt, moveTarget, plugs, 
       </div>
       <p className="text-xs text-slate-400">True depth is the counter reading plus the offset. Use it when the string and the plugs do not line up.</p>
 
+      <div className="grid lg:grid-cols-2 gap-4">
+      <div className="space-y-3">
       <div className="grid grid-cols-2 gap-2">
         <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl">
           <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Counter</div>
@@ -57,6 +59,16 @@ export function DepthCorrelationPanel({ counterFt, offsetFt, moveTarget, plugs, 
         </div>
       </div>
 
+      <div className="flex items-center gap-3">
+        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Move on screen</span>
+        <div className="flex bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-xs font-semibold" data-testid="correlation-move-toggle">
+          {[["ct_string", "CT string"], ["plugs", "Plugs"]].map(([k, l]) => (
+            <button key={k} onClick={() => k !== moveTarget && onTarget(k)} className={`px-3 py-1 rounded transition-colors ${moveTarget === k ? "bg-orange-600 text-white" : "text-slate-400 hover:text-slate-200"}`} data-testid={`correlation-move-${k}`}>{l}</button>
+          ))}
+        </div>
+      </div>
+      </div>
+      <div className="space-y-3">
       <div className="p-3 bg-[#090F1C] border border-slate-800 rounded-xl space-y-2" data-testid="tag-plug-section">
         <div className="text-xs font-bold uppercase tracking-wider text-slate-200">Tag a plug</div>
         {plugs.length === 0 ? <p className="text-xs text-slate-500">Add plugs first to correlate against them.</p> : (
@@ -83,15 +95,6 @@ export function DepthCorrelationPanel({ counterFt, offsetFt, moveTarget, plugs, 
         )}
       </div>
 
-      <div className="flex items-center gap-3">
-        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Move on screen</span>
-        <div className="flex bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-xs font-semibold" data-testid="correlation-move-toggle">
-          {[["ct_string", "CT string"], ["plugs", "Plugs"]].map(([k, l]) => (
-            <button key={k} onClick={() => k !== moveTarget && onTarget(k)} className={`px-3 py-1 rounded transition-colors ${moveTarget === k ? "bg-orange-600 text-white" : "text-slate-400 hover:text-slate-200"}`} data-testid={`correlation-move-${k}`}>{l}</button>
-          ))}
-        </div>
-      </div>
-
       <div className="space-y-1" data-testid="correlation-log">
         {log.length === 0 ? <p className="text-xs text-slate-500">No correlations logged yet.</p> : log.slice(0, 6).map((e) => (
           <div key={e.entry_id} className="flex justify-between gap-2 text-[10px] font-mono text-slate-400 border-b border-slate-800/60 py-1">
@@ -99,6 +102,8 @@ export function DepthCorrelationPanel({ counterFt, offsetFt, moveTarget, plugs, 
             <span className="shrink-0">{new Date(e.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
           </div>
         ))}
+      </div>
+      </div>
       </div>
     </div>
   );

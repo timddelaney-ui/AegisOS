@@ -116,7 +116,7 @@ function CameraRig({ geo, tip, command, orbit }) {
 
   useEffect(() => {
     if (!controls || !command) return;
-    const dist = (r) => (r / Math.sin(THREE.MathUtils.degToRad(FOV / 2))) * 0.9;
+    const dist = (r) => (r / Math.sin(THREE.MathUtils.degToRad(FOV / 2))) * 0.62;
     const dirFor = (v) => (v === "plan" ? new THREE.Vector3(0.0001, 1, 0.0001) : v === "side" ? geo.side.clone() : new THREE.Vector3(1, 0.55, 1).normalize());
     const cur = camera.position.clone().sub(controls.target);
     let target = geo.center.clone(), pos;
@@ -165,7 +165,7 @@ export default function SurveyWellbore3D({ survey, depthFt, colorMode, plugs, bi
   }, []), [plugs, stations, td, geo]);
 
   const shadow = useMemo(() => geo.pts.map((v) => new THREE.Vector3(v.x, geo.floorY + 0.01, v.z)), [geo]);
-  const startPos = useMemo(() => geo.center.clone().add(new THREE.Vector3(1, 0.55, 1).normalize().multiplyScalar((geo.radius / Math.sin(THREE.MathUtils.degToRad(FOV / 2))) * 0.9)), [geo]);
+  const startPos = useMemo(() => geo.center.clone().add(new THREE.Vector3(1, 0.55, 1).normalize().multiplyScalar((geo.radius / Math.sin(THREE.MathUtils.degToRad(FOV / 2))) * 0.62)), [geo]);
 
   return (
     <Canvas camera={{ position: startPos.toArray(), fov: FOV, near: 0.1, far: 400 }} dpr={[1, 2]} gl={{ antialias: true }} data-testid="survey-3d-canvas">
@@ -188,7 +188,7 @@ export default function SurveyWellbore3D({ survey, depthFt, colorMode, plugs, bi
       {ticks.map((t) => (
         <group key={t.md} position={t.pos}>
           <mesh><sphereGeometry args={[0.2, 12, 12]} /><meshBasicMaterial color="#CBD5E1" /></mesh>
-          <Label text={fmtDepth(t.md)} color="#94A3B8" position={[0.9, 0.35, 0]} size={0.032} dim />
+          <Label text={fmtDepth(t.md)} color="#94A3B8" position={[1.5, 0.5, 0]} size={0.032} dim />
         </group>
       ))}
 
