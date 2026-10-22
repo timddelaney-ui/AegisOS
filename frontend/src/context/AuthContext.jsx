@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useState, useCallback } from "react";
+import React, { createContext, useContext, useMemo, useState, useCallback, useEffect } from "react";
 import axios from "axios";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -26,8 +26,6 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   useEffect(() => {
-    // CRITICAL: If returning from OAuth callback, skip the /me check.
-    // AuthCallback will exchange the session_id and establish the session first.
     if (window.location.hash?.includes("session_id=")) {
       setLoading(false);
       return;
@@ -55,14 +53,5 @@ export const AuthProvider = ({ children }) => {
 
 export { API, BACKEND_URL };
 
-// Free-for-all mode: user flipped this ON in iter 21 — every logged-in user
-// gets full Pro access. To re-enable paid gating, swap this helper back to
-// the subscription-aware version below.
+// Aegis OS active field-beta unlock: all premium gates are dormant so the edge/cloud test environment remains fully accessible.
 export const isProUser = (_user) => true;
-
-// Keep the original logic available so it's a one-line restore later:
-//   if (!user || user.subscription_status !== "active") return false;
-//   const exp = user.subscription_expires_at;
-//   if (!exp) return true;
-//   const t = new Date(exp).getTime();
-//   return Number.isFinite(t) && t > Date.now();
