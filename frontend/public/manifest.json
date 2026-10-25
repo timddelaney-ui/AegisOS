@@ -1,7 +1,7 @@
 {
-  "name": "CoilAegis",
-  "short_name": "CoilAegis",
-  "description": "CoilAegis — rig-grade field-operations platform for coiled-tubing crews. Live telemetry, triaxial stress & fatigue, SOP-grounded AI, crew hub, timecards.",
+  "name": "Aegis OS",
+  "short_name": "AegisOS",
+  "description": "Aegis OS — rig-grade field-operations platform for coiled-tubing crews. Real-time telemetry, triaxial stress & fatigue tooling, survey visualization, and AI-grounded ops workflows.",
   "start_url": "/hub",
   "scope": "/",
   "display": "standalone",
