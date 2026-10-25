@@ -5,12 +5,12 @@ Aegis OS is the operating layer for hybrid edge/cloud coiled-tubing field operat
 ## Product state
 - Brand name: Aegis OS
 - Legacy compatibility alias: CoilAegis
-- Access state: fully unlocked testing / field beta
+- Access state: explicit beta access is environment-scoped and requires an authenticated beta user
 - WebGL 3D viewer: enabled
 - Directional survey parser: enabled
 
 ## Runtime access model
-The active client configuration uses a field-beta unlock pattern so paywalls are dormant during validation. This keeps engineering tools available for live operations, testing, and field review without requiring subscription gating.
+Aegis OS enforces plan access through authenticated session data and backend tier checks. Beta unlocks are opt-in and environment-scoped; they are never enabled by default.
 
 ## Telemetry channel model
 The live operations layer tracks the following channels:

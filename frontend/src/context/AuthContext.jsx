@@ -1,6 +1,39 @@
 import React, { createContext, useContext, useMemo, useState, useCallback, useEffect } from "react";
 import axios from "axios";
-import { API_BASE } from "../config/env";
+
+const DEFAULT_BACKEND_ORIGIN = "http://localhost:8000";
+
+const getBrowserOrigin = () => {
+  if (typeof window === "undefined") return DEFAULT_BACKEND_ORIGIN;
+  const { protocol, hostname, port } = window.location;
+  return `${protocol}//${hostname}${port ? `:${port}` : ""}`;
+};
+
+const normalizeBackendUrl = (rawValue) => {
+  if (!rawValue || typeof rawValue !== "string") {
+    return getBrowserOrigin();
+  }
+
+  const value = rawValue.trim();
+  if (!value) return getBrowserOrigin();
+
+  try {
+    const url = new URL(value);
+    if (!url.protocol || !url.host) {
+      throw new Error("Backend URL is missing protocol or host");
+    }
+    return `${url.protocol}//${url.host}`.replace(/\/$/, "");
+  } catch (error) {
+    console.warn("REACT_APP_BACKEND_URL is invalid; falling back to current browser origin.", {
+      rawValue,
+      error: error?.message || String(error),
+    });
+    return getBrowserOrigin();
+  }
+};
+
+const BACKEND_URL = normalizeBackendUrl(process.env.REACT_APP_BACKEND_URL);
+const API = `${BACKEND_URL}/api`;
 
 axios.defaults.withCredentials = true;
 
@@ -14,7 +47,7 @@ export const AuthProvider = ({ children }) => {
 
   const checkAuth = useCallback(async () => {
     try {
-      const { data } = await axios.get(`${API_BASE}/auth/me`, { withCredentials: true });
+      const { data } = await axios.get(`${API}/auth/me`, { withCredentials: true });
       setUser(data || null);
     } catch (e) {
       setUser(null);
@@ -33,7 +66,7 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try {
-      await axios.post(`${API_BASE}/auth/logout`, {}, { withCredentials: true });
+      await axios.post(`${API}/auth/logout`, {}, { withCredentials: true });
     } catch (e) {
       console.warn("Logout call failed (session may already be gone):", e?.message);
     }
@@ -49,12 +82,11 @@ export const AuthProvider = ({ children }) => {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
-export { API_BASE };
+export { API, BACKEND_URL };
 
 export const isProUser = (user) => {
   if (!user) return false;
-  if (user.is_pro === true) return true;
   if (user.subscription_tier === "enterprise") return true;
   if (user.subscription_status === "active") return true;
-  return Boolean(user.subscription_plan || user.subscription_expires_at);
+  return false;
 };

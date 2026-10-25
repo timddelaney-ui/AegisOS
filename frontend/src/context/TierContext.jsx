@@ -11,15 +11,6 @@ import {
   FEATURE_SPECS,
 } from "../lib/tiers";
 
-/**
- * TierContext — owns the viewer's active plan tier, the global BETA_UNLOCK
- * override from the backend, and the upgrade-modal state.
- *
- * All feature gating in the app flows through `useTier()` so flipping
- * `BETA_UNLOCK=false` on the backend is the single switch that activates
- * paywalls for everyone.
- */
-
 const TierContext = createContext(null);
 
 export const useTier = () => {
@@ -31,22 +22,24 @@ export const useTier = () => {
 export const TierProvider = ({ children }) => {
   const { user, loading: authLoading } = useAuth();
   const [tier, setTier] = useState(TIER_PERSONAL);
-  const [betaUnlock, setBetaUnlock] = useState(true); // optimistic default so no flash of locked UI during Beta
+  const [betaUnlock, setBetaUnlock] = useState(false);
   const [loaded, setLoaded] = useState(false);
-  const [upgradeFor, setUpgradeFor] = useState(null); // featureId we're prompting to upgrade for
+  const [upgradeFor, setUpgradeFor] = useState(null);
 
   const refresh = useCallback(async () => {
     if (!user) {
+      setTier(TIER_PERSONAL);
+      setBetaUnlock(false);
       setLoaded(true);
       return;
     }
+
     try {
       const { data } = await axios.get(`${API}/me/tier`, { withCredentials: true });
-      setTier(data?.tier && TIER_ORDER.includes(data.tier) ? data.tier : TIER_PERSONAL);
-      setBetaUnlock(!!data?.beta_unlock);
+      const nextTier = data?.tier && TIER_ORDER.includes(data.tier) ? data.tier : TIER_PERSONAL;
+      setTier(nextTier);
+      setBetaUnlock(Boolean(data?.beta_unlock));
     } catch (e) {
-      // Fail safe to personal + beta-off so the client never silently
-      // elevates a user who doesn't legitimately have Enterprise.
       setTier(TIER_PERSONAL);
       setBetaUnlock(false);
     } finally {
@@ -59,10 +52,9 @@ export const TierProvider = ({ children }) => {
     refresh();
   }, [authLoading, refresh]);
 
-  // Gate helpers. `canAccess` is the one every feature callsite uses.
   const canAccess = useCallback(
     (featureId) => {
-      if (betaUnlock) return true;             // Field Beta — nothing is locked
+      if (betaUnlock) return true;
       return tierHasAccess(tier, featureId);
     },
     [tier, betaUnlock],
@@ -84,8 +76,6 @@ export const TierProvider = ({ children }) => {
     [tier, betaUnlock],
   );
 
-  // Open the upgrade modal for a specific feature. The feature's min tier
-  // dictates which plan card gets highlighted on the pricing page.
   const promptUpgrade = useCallback((featureId) => setUpgradeFor(featureId), []);
   const dismissUpgrade = useCallback(() => setUpgradeFor(null), []);
 
