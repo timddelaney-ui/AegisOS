@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useMemo, useState, useCallback, useEffect } from "react";
 import axios from "axios";
-import { API } from "../config/env";
+import { API_BASE } from "../config/env";
+
+axios.defaults.withCredentials = true;
 
 const AuthContext = createContext(null);
 
@@ -12,7 +14,7 @@ export const AuthProvider = ({ children }) => {
 
   const checkAuth = useCallback(async () => {
     try {
-      const { data } = await axios.get(`${API}/auth/me`, { withCredentials: true });
+      const { data } = await axios.get(`${API_BASE}/auth/me`, { withCredentials: true });
       setUser(data || null);
     } catch (e) {
       setUser(null);
@@ -31,7 +33,7 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try {
-      await axios.post(`${API}/auth/logout`, {}, { withCredentials: true });
+      await axios.post(`${API_BASE}/auth/logout`, {}, { withCredentials: true });
     } catch (e) {
       console.warn("Logout call failed (session may already be gone):", e?.message);
     }
@@ -41,17 +43,18 @@ export const AuthProvider = ({ children }) => {
 
   const value = useMemo(
     () => ({ user, setUser, loading, checkAuth, logout }),
-    [user, loading, checkAuth]
+    [user, loading, checkAuth],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
-export { API };
+export { API_BASE };
 
 export const isProUser = (user) => {
   if (!user) return false;
   if (user.is_pro === true) return true;
   if (user.subscription_tier === "enterprise") return true;
-  return false;
+  if (user.subscription_status === "active") return true;
+  return Boolean(user.subscription_plan || user.subscription_expires_at);
 };

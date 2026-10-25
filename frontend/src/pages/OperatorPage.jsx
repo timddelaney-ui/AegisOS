@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useState, useCallback } from "react";
 import axios from "axios";
-import { useAuth, API } from "./AuthContext";
+import { useAuth, API_BASE } from "./AuthContext";
 import {
   TIER_PERSONAL,
   TIER_ORDER,
@@ -10,14 +10,6 @@ import {
   minTierFor,
   FEATURE_SPECS,
 } from "../lib/tiers";
-
-/**
- * TierContext — owns the viewer's active plan tier and the global gating state.
- *
- * We intentionally do not assume a beta unlock is active by default. If the
- * backend does not specify a value, the app falls back to the normal tier
- * enforcement model instead of silently bypassing access controls.
- */
 
 const TierContext = createContext(null);
 
@@ -43,7 +35,7 @@ export const TierProvider = ({ children }) => {
     }
 
     try {
-      const { data } = await axios.get(`${API}/me/tier`, { withCredentials: true });
+      const { data } = await axios.get(`${API_BASE}/me/tier`, { withCredentials: true });
       const nextTier = data?.tier && TIER_ORDER.includes(data.tier) ? data.tier : TIER_PERSONAL;
       setTier(nextTier);
       setBetaUnlock(Boolean(data?.beta_unlock));
