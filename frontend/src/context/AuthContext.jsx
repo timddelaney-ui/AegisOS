@@ -1,10 +1,6 @@
 import React, { createContext, useContext, useMemo, useState, useCallback, useEffect } from "react";
 import axios from "axios";
-
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
-
-axios.defaults.withCredentials = true;
+import { API } from "../config/env";
 
 const AuthContext = createContext(null);
 
@@ -17,7 +13,7 @@ export const AuthProvider = ({ children }) => {
   const checkAuth = useCallback(async () => {
     try {
       const { data } = await axios.get(`${API}/auth/me`, { withCredentials: true });
-      setUser(data);
+      setUser(data || null);
     } catch (e) {
       setUser(null);
     } finally {
@@ -51,7 +47,11 @@ export const AuthProvider = ({ children }) => {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
-export { API, BACKEND_URL };
+export { API };
 
-// Aegis OS active field-beta unlock: all premium gates are dormant so the edge/cloud test environment remains fully accessible.
-export const isProUser = (_user) => true;
+export const isProUser = (user) => {
+  if (!user) return false;
+  if (user.is_pro === true) return true;
+  if (user.subscription_tier === "enterprise") return true;
+  return false;
+};
