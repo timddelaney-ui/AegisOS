@@ -25,6 +25,10 @@ import { CrewRatesModal } from "./operator/CrewRatesModal";
 import { AddChannelModal } from "./operator/AddChannelModal";
 
 const CREW_KEY = "coilaegis_crew_rates_v1";
+const SIM_TICK_MS = 500;
+const LIVE_POLL_MS = 2000;
+const CANVAS_DRAW_MS = 500;
+
 const loadLS = (k, fallback) => { try { return JSON.parse(localStorage.getItem(k)) || fallback; } catch { return fallback; } };
 const saveLS = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { console.debug("[Operator] save failed", e?.message); } };
 
@@ -64,6 +68,7 @@ export default function MainOperatorScreen() {
   const canvasPenRef = useRef(null);
   const canvas3DRef = useRef(null);
   const historyRef = useRef([]);
+  const lastCanvasDraw = useRef({ trajectory: 0, pens: 0 });
   const [surveys, setSurveys] = useState([]);
   const [surveyId, setSurveyId] = useState(null);
   const [resizeTick, setResizeTick] = useState(0);
@@ -94,12 +99,10 @@ export default function MainOperatorScreen() {
   const rawPlugs = useMemo(() => (survey
     ? plugRecords.map((p) => ({ id: p.plug_id, name: p.name, type: PLUG_TYPES[p.plug_type], start: p.top_md_ft, end: p.bottom_md_ft, notes: p.notes }))
     : PLUGS.map((p) => ({ ...p, name: p.id }))), [survey, plugRecords]);
-  // True depth = counter + offset; "Plugs" mode shifts plugs instead of the string on screen
   const counterFt = telemetry.depth;
   const moveString = corr.moveTarget === "ct_string";
   const bitFt = moveString ? counterFt + corr.offsetFt : counterFt;
-  const plugs = useMemo(() => (moveString ? rawPlugs
-    : rawPlugs.map((p) => ({ ...p, start: p.start - corr.offsetFt, end: p.end - corr.offsetFt }))), [rawPlugs, moveString, corr.offsetFt]);
+  const plugs = useMemo(() => (moveString ? rawPlugs : rawPlugs.map((p) => ({ ...p, start: p.start - corr.offsetFt, end: p.end - corr.offsetFt }))), [rawPlugs, moveString, corr.offsetFt]);
   const savePlug = async (plugId, body) => {
     try {
       if (plugId) await axios.put(`${API}/plugs/${plugId}`, body, { withCredentials: true });
@@ -132,15 +135,13 @@ export default function MainOperatorScreen() {
   const endTestRun = useCallback(() => setPlaybackSpeed(1), []);
   const testRun = usePlugTestRun({ depth: bitFt, plugs, maxFt: maxFt + (moveString ? corr.offsetFt : 0), surveyId: survey?.survey_id, onStart: startTestRun, onEnd: endTestRun });
 
-  // SIM ticker (also acts as fallback when LIVE has no fresh DAQ sample)
   useEffect(() => {
     if (feedMode === "STANDBY" || !isSimRunning) return;
     if (feedMode === "LIVE" && !liveStale) return;
-    const id = setInterval(() => setTelemetry((prev) => push(simTick(prev, playbackSpeed, minFt, maxFt))), 200);
+    const id = setInterval(() => setTelemetry((prev) => push(simTick(prev, playbackSpeed, minFt, maxFt))), SIM_TICK_MS);
     return () => clearInterval(id);
   }, [isSimRunning, feedMode, playbackSpeed, liveStale, minFt, maxFt]);
 
-  // LIVE DAQ poll — /api/liveops/stream @ 1 Hz
   useEffect(() => {
     if (feedMode !== "LIVE") { setLiveStale(false); return; }
     let cancelled = false;
@@ -157,7 +158,7 @@ export default function MainOperatorScreen() {
       }
     };
     poll();
-    const id = setInterval(poll, 1000);
+    const id = setInterval(poll, LIVE_POLL_MS);
     return () => { cancelled = true; clearInterval(id); };
   }, [feedMode, rigId]);
 
@@ -169,6 +170,9 @@ export default function MainOperatorScreen() {
   const fmtDepth = useCallback((ft) => u.show(ft, "depth", 0), [u]);
   useEffect(() => {
     if (viewStyle !== "3d-live" || survey || !canvas3DRef.current) return;
+    const now = Date.now();
+    if (now - lastCanvasDraw.current.trajectory < CANVAS_DRAW_MS) return;
+    lastCanvasDraw.current.trajectory = now;
     const { ctx, w, h } = prepCanvas(canvas3DRef.current);
     drawTrajectory(ctx, w, h, { depthFt: bitFt, colorMode, plugs, bitLabel });
   }, [bitFt, viewStyle, colorMode, bitLabel, resizeTick, survey, plugs]);
@@ -179,6 +183,9 @@ export default function MainOperatorScreen() {
 
   useEffect(() => {
     if (viewStyle !== "pen-graph" || !canvasPenRef.current) return;
+    const now = Date.now();
+    if (now - lastCanvasDraw.current.pens < CANVAS_DRAW_MS) return;
+    lastCanvasDraw.current.pens = now;
     const { ctx, w, h } = prepCanvas(canvasPenRef.current);
     drawPens(ctx, w, h, historyRef.current, activePens);
   }, [telemetry, viewStyle, activePens, resizeTick]);
@@ -188,8 +195,8 @@ export default function MainOperatorScreen() {
   const P = (v) => u.show(v, "pressure");
 
   const allChannels = useMemo(() => [...CHANNELS, ...layout.custom], [layout.custom]);
-  const groups = layout.custom.some((c) => c.group === "Custom") ? [...JOB_SETS, "Custom"] : JOB_SETS;
-  const hiddenChannels = allChannels.filter((c) => layout.hidden.includes(c.key || c.id));
+  const groups = useMemo(() => (layout.custom.some((c) => c.group === "Custom") ? [...JOB_SETS, "Custom"] : JOB_SETS), [layout.custom]);
+  const hiddenChannels = useMemo(() => allChannels.filter((c) => layout.hidden.includes(c.key || c.id)), [allChannels, layout.hidden]);
 
   const setDepthFromSlider = (displayVal) => {
     const ft = u.isMetric ? u.to(displayVal, "depth") : displayVal;
@@ -206,7 +213,6 @@ export default function MainOperatorScreen() {
 
   return (
     <div className="flex flex-col bg-[#070C14] text-slate-100 p-3 space-y-3" data-testid="main-operator-screen">
-      {/* 1. CONTROLS + SIM SCRUBBER */}
       <div className="bg-[#0D1526] p-3 rounded-2xl border border-slate-800 space-y-3 op-fade">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-3">
@@ -219,33 +225,35 @@ export default function MainOperatorScreen() {
               <button onClick={() => setFeedMode("STANDBY")} className={seg(feedMode === "STANDBY", "bg-slate-700 text-white")} data-testid="feed-standby-btn">STANDBY</button>
               <button onClick={() => setFeedMode("LIVE")} className={seg(feedMode === "LIVE", "bg-emerald-600 text-white")} data-testid="feed-live-btn">LIVE</button>
             </div>
-            <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${live ? "text-emerald-300 border-emerald-500/40 bg-emerald-500/10" : feedMode === "LIVE" ? "text-amber-300 border-amber-500/40 bg-amber-500/10" : "text-slate-400 border-slate-700"}`} data-testid="feed-status">
+            <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${live ? "text-emerald-300 border-emerald-500/40 bg-emerald-500/10" : feedMode === "LIVE" ? "text-amber-300 border-amber-500/40 bg-amber-500/10" : "text-slate-300 border-slate-700 bg-slate-900/60"}`}>
               {sourceLabel.toUpperCase()}
             </span>
-            <button onClick={() => setShowCrewSetup(true)} className="flex items-center gap-1.5 px-3 py-1 bg-slate-900 border border-slate-800 hover:border-orange-500/60 transition-colors rounded-lg text-xs font-bold text-orange-400" data-testid="crew-rates-btn">
+            <button onClick={() => setShowCrewSetup(true)} className="flex items-center gap-1.5 px-3 py-1 bg-slate-900 border border-slate-800 hover:border-orange-500/60 transition-colors rounded-lg text-[10px] font-bold uppercase tracking-wide text-slate-200">
               <Users className="w-3.5 h-3.5" /> Crew Rates
             </button>
           </div>
 
           <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs font-semibold" data-testid="view-style-toggle">
-            <button onClick={() => setViewStyle("3d-live")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors ${viewStyle === "3d-live" ? "bg-cyan-500 text-slate-950 font-black" : "text-slate-400 hover:text-slate-200"}`} data-testid="view-3d-live-btn">
+            <button onClick={() => setViewStyle("3d-live")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors ${viewStyle === "3d-live" ? "bg-cyan-500 text-slate-950" : "text-slate-300 hover:text-slate-100"}`} data-testid="3d-live-btn">
               <Box className="w-3.5 h-3.5" /> 3D Live (Enterprise)
             </button>
-            <button onClick={() => setViewStyle("pen-graph")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors ${viewStyle === "pen-graph" ? "bg-cyan-500 text-slate-950 font-bold" : "text-slate-400 hover:text-slate-200"}`} data-testid="view-pen-graph-btn">
+            <button onClick={() => setViewStyle("pen-graph")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors ${viewStyle === "pen-graph" ? "bg-cyan-500 text-slate-950" : "text-slate-300 hover:text-slate-100"}`} data-testid="pen-graph-btn">
               <Layers className="w-3.5 h-3.5" /> Old Pen Graph Style
             </button>
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-slate-800/60 text-xs">
-          <button onClick={() => setIsSimRunning((r) => !r)} disabled={live} className={`flex items-center gap-1 px-3 py-1 rounded-lg border font-bold transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${live ? "bg-cyan-500/15 border-cyan-500/50 text-cyan-300" : isSimRunning ? "bg-emerald-500/20 border-emerald-500/50 text-emerald-300" : "bg-rose-500/20 border-rose-500/50 text-rose-300"}`} data-testid="sim-play-pause-btn">
+          <button onClick={() => setIsSimRunning((r) => !r)} disabled={live} className={`flex items-center gap-1 px-3 py-1 rounded-lg border font-bold transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${live ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300" : "border-slate-700 bg-slate-950 text-slate-200"}`}>
             {isSimRunning && !live ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
             <span>{live ? "DAQ DRIVING" : isSimRunning ? "SIM RUNNING" : "PAUSED"}</span>
           </button>
           <div className="flex items-center gap-1 bg-slate-950 px-2 py-0.5 rounded-lg border border-slate-800">
             <span className="text-[10px] text-slate-400 uppercase font-bold mr-1">Speed:</span>
             {[1, 5, 10, 100].map((s) => (
-              <button key={s} onClick={() => setPlaybackSpeed(s)} className={`px-2 py-0.5 rounded text-[11px] font-bold transition-colors ${playbackSpeed === s ? "bg-orange-600 text-white" : "text-slate-400 hover:text-slate-200"}`} data-testid={`sim-speed-${s}x-btn`}>{s}x</button>
+              <button key={s} onClick={() => setPlaybackSpeed(s)} className={`px-2 py-0.5 rounded text-[11px] font-bold transition-colors ${playbackSpeed === s ? "bg-orange-600 text-white" : "text-slate-300 hover:text-white"}`}>
+                {s}×
+              </button>
             ))}
           </div>
           <input type="range" min={Math.round(u.val(minFt, "depth"))} max={Math.round(u.val(maxFt, "depth"))} step={1}
@@ -257,9 +265,8 @@ export default function MainOperatorScreen() {
         </div>
       </div>
 
-      {/* 2. READOUT CARDS */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
-        <MetricCard testId="metric-bit-depth" title="CT Bit Depth" value={u.show(counterFt + corr.offsetFt, "depth", 1)} unit={u.label("depth")} sub={`ctr ${u.show(counterFt, "depth", 1)} • off ${corr.offsetFt >= 0 ? "+" : ""}${u.show(corr.offsetFt, "depth", 1)} ${u.label("depth")}`} />
+        <MetricCard testId="metric-bit-depth" title="CT Bit Depth" value={u.show(counterFt + corr.offsetFt, "depth", 1)} unit={u.label("depth")} sub={`ctr ${u.show(counterFt, "depth", 1)} • off ${u.show(corr.offsetFt, "depth", 1)}`} />
         <MetricCard testId="metric-von-mises" title="Von Mises" value={telemetry.vonMises.toFixed(1)} unit="%SMYS" sub={`${sourceLabel} • 80% alert line`} barVal={telemetry.vonMises} />
         <MetricCard testId="metric-surface-weight" title="Surface Weight" value={u.show(telemetry.weight, "weight", 0)} unit={u.label("weight")} sub={sourceLabel} />
         <MetricCard testId="metric-internal-pressure" title="Internal Pressure" value={P(telemetry.internalPress)} unit={u.label("pressure")} sub={sourceLabel} />
@@ -267,56 +274,55 @@ export default function MainOperatorScreen() {
         <MetricCard testId="metric-net-dp" title="Net ΔP" value={P(telemetry.netDeltaP)} unit={u.label("pressure")} sub="internal − wellhead" />
       </div>
 
-      {/* 3. VIEWPORT */}
       {viewStyle === "3d-live" ? (
         <div className="space-y-3" data-testid="view-3d-live">
           <div className="bg-[#0D1526] border border-slate-800 rounded-2xl p-3 md:p-4 space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-sm font-bold tracking-wide text-slate-100 uppercase">Wellbore and plugs</h2>
-            {survey && <ViewerToolbar view={view3d} orbit={orbit} onCmd={sendCmd} onOrbit={() => setOrbit((o) => !o)} />}
-          </div>
-          <div className={`bg-[#070C14] border border-slate-800 rounded-2xl p-3 md:p-4 relative flex flex-col gap-3 md:block ${survey ? "md:h-[30rem]" : "md:h-72"} overflow-hidden`} data-testid="trajectory-panel">
-            <div className="order-2 md:absolute md:top-4 md:left-4 p-3 bg-slate-950/90 border border-slate-800 rounded-xl text-xs grid grid-cols-2 gap-1 md:block md:space-y-1 backdrop-blur z-10" data-testid="at-bit-readout">
-              <div className="col-span-2 text-[10px] font-bold text-orange-400 uppercase">At bit readout</div>
-              <div className="text-slate-300">MD: <span className="font-mono text-slate-100" data-testid="at-bit-md">{u.show(bitFt, "depth", 1)} {u.label("depth")}</span></div>
-              <div className="text-slate-300">TVD: <span className="font-mono text-slate-100" data-testid="at-bit-tvd">{u.show(atBit.tvd, "depth", 1)} {u.label("depth")}</span></div>
-              <div className="text-slate-300">Incl: <span className="font-mono text-slate-100" data-testid="at-bit-inc">{atBit.inc.toFixed(1)}°</span></div>
-              <div className="text-slate-300">DLS: <span className="font-mono text-slate-100" data-testid="at-bit-dls">{u.show(atBit.dls, "dls", 2)} {u.label("dls")}</span></div>
-              <div className="col-span-2 text-[10px] text-slate-500 font-mono pt-1" data-testid="trajectory-source">{survey ? `survey · ${survey.stations.length} stn · TD ${u.show(maxFt, "depth", 0)} ${u.label("depth")}` : "demo curve"}</div>
-              <div className="text-slate-300">Drag: <span className="font-mono text-slate-100">{u.show(telemetry.drag, "weight", 0)} {u.label("weight")}</span></div>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-sm font-bold tracking-wide text-slate-100 uppercase">Wellbore and plugs</h2>
+              {survey && <ViewerToolbar view={view3d} orbit={orbit} onCmd={sendCmd} onOrbit={() => setOrbit((o) => !o)} />}
             </div>
-            <div className="order-1 self-end md:absolute md:top-4 md:right-4 z-10 flex flex-wrap items-center justify-end gap-2">
-              {surveys.length > 0 ? (
-                <select value={surveyId || ""} onChange={(e) => setSurveyId(e.target.value)} style={{ fontSize: 10 }} className="bg-slate-950/90 border border-slate-800 focus:border-cyan-500 outline-none rounded-lg px-2 py-1 font-bold leading-tight text-slate-200 max-w-[180px]" data-testid="survey-select">
-                  {surveys.map((x) => <option key={x.survey_id} value={x.survey_id}>{x.well_name || x.survey_id}</option>)}
-                </select>
-              ) : (
-                <Link to="/wellbore" className="flex items-center gap-1 px-2 py-1 rounded-lg border border-cyan-500/50 bg-cyan-500/10 text-cyan-300 text-[10px] font-bold hover:bg-cyan-500/20 transition-colors" data-testid="upload-survey-link">
-                  <Upload className="w-3 h-3" /> Upload survey
-                </Link>
-              )}
-            <div className="flex bg-slate-950/90 p-0.5 rounded-lg border border-slate-800 text-[10px] font-bold z-10" data-testid="color-mode-toggle">
-              {["DLS", "Plain"].map((m) => (
-                <button key={m} onClick={() => setColorMode(m)} className={seg(colorMode === m, "bg-cyan-500 text-slate-950")} data-testid={`color-mode-${m.toLowerCase()}-btn`}>{m}</button>
-              ))}
-            </div>
-            </div>
-            <div className="order-3 md:absolute md:bottom-4 md:left-4 p-2 bg-slate-950/90 border border-slate-800 rounded-lg text-[10px] font-mono flex flex-wrap items-center gap-3 z-10">
-              <span className="text-slate-400 font-bold">DLS {u.label("dls")}:</span>
-              <span className="flex items-center gap-1"><span className="w-2 h-2 bg-emerald-500 rounded-sm" /><span className="text-slate-300">&lt; {u.show(DLS_WARN, "dls", 1)}</span></span>
-              <span className="flex items-center gap-1"><span className="w-2 h-2 bg-amber-400 rounded-sm" /><span className="text-slate-300">{u.show(DLS_WARN, "dls", 1)}–{u.show(DLS_CRIT, "dls", 1)}</span></span>
-              <span className="flex items-center gap-1"><span className="w-2 h-2 bg-rose-500 rounded-sm" /><span className="text-slate-300">&gt; {u.show(DLS_CRIT, "dls", 1)}</span></span>
-            </div>
-            {survey ? (
-              <div className="order-1 relative w-full h-[22rem] md:absolute md:inset-0 md:h-full" data-testid="survey-3d-view" data-plug-pins={plugs.map((p) => p.name).join(",")} data-bit-label={bitLabel} data-view={view3d} data-orbit={orbit ? "on" : "off"}>
-                <SurveyWellbore3D survey={survey} depthFt={bitFt} colorMode={colorMode} plugs={plugs} bitLabel={bitLabel}
-                  fmtDepth={fmtDepth} tickStepFt={tickStepFt} command={viewCmd} orbit={orbit} />
-                <ZoomButtons onCmd={sendCmd} />
+            <div className={`bg-[#070C14] border border-slate-800 rounded-2xl p-3 md:p-4 relative flex flex-col gap-3 md:block ${survey ? "md:h-[30rem]" : "md:h-72"} overflow-hidden`} data-testid="wellbore-panel">
+              <div className="order-2 md:absolute md:top-4 md:left-4 p-3 bg-slate-950/90 border border-slate-800 rounded-xl text-xs grid grid-cols-2 gap-1 md:block md:space-y-1 backdrop-blur z-10" data-testid="at-bit-panel">
+                <div className="col-span-2 text-[10px] font-bold text-orange-400 uppercase">At bit readout</div>
+                <div className="text-slate-300">MD: <span className="font-mono text-slate-100" data-testid="at-bit-md">{u.show(bitFt, "depth", 1)} {u.label("depth")}</span></div>
+                <div className="text-slate-300">TVD: <span className="font-mono text-slate-100" data-testid="at-bit-tvd">{u.show(atBit.tvd, "depth", 1)} {u.label("depth")}</span></div>
+                <div className="text-slate-300">Incl: <span className="font-mono text-slate-100" data-testid="at-bit-inc">{atBit.inc.toFixed(1)}°</span></div>
+                <div className="text-slate-300">DLS: <span className="font-mono text-slate-100" data-testid="at-bit-dls">{u.show(atBit.dls, "dls", 2)} {u.label("dls")}</span></div>
+                <div className="col-span-2 text-[10px] text-slate-500 font-mono pt-1" data-testid="trajectory-source">{survey ? `survey · ${survey.stations.length} stn · TD ${u.show(maxFt, "depth", 0)} ${u.label("depth")}` : "demo trajectory"}</div>
+                <div className="text-slate-300">Drag: <span className="font-mono text-slate-100">{u.show(telemetry.drag, "weight", 0)} {u.label("weight")}</span></div>
               </div>
-            ) : (
-              <canvas ref={canvas3DRef} className="order-1 w-full h-56 md:h-full block" data-testid="trajectory-canvas" />
-            )}
-          </div>
+              <div className="order-1 self-end md:absolute md:top-4 md:right-4 z-10 flex flex-wrap items-center justify-end gap-2">
+                {surveys.length > 0 ? (
+                  <select value={surveyId || ""} onChange={(e) => setSurveyId(e.target.value)} style={{ fontSize: 10 }} className="bg-slate-950/90 border border-slate-800 focus:border-cyan-500 outline-none rounded-lg px-2 py-1 text-slate-200" data-testid="survey-select">
+                    {surveys.map((x) => <option key={x.survey_id} value={x.survey_id}>{x.well_name || x.survey_id}</option>)}
+                  </select>
+                ) : (
+                  <Link to="/wellbore" className="flex items-center gap-1 px-2 py-1 rounded-lg border border-cyan-500/50 bg-cyan-500/10 text-cyan-300 text-[10px] font-bold hover:bg-cyan-500/20 transition-colors" data-testid="upload-survey-link">
+                    <Upload className="w-3 h-3" /> Upload survey
+                  </Link>
+                )}
+                <div className="flex bg-slate-950/90 p-0.5 rounded-lg border border-slate-800 text-[10px] font-bold z-10" data-testid="color-mode-toggle">
+                  {["DLS", "Plain"].map((m) => (
+                    <button key={m} onClick={() => setColorMode(m)} className={seg(colorMode === m, "bg-cyan-500 text-slate-950")} data-testid={`color-mode-${m.toLowerCase()}-btn`}>{m}</button>
+                  ))}
+                </div>
+              </div>
+              <div className="order-3 md:absolute md:bottom-4 md:left-4 p-2 bg-slate-950/90 border border-slate-800 rounded-lg text-[10px] font-mono flex flex-wrap items-center gap-3 z-10">
+                <span className="text-slate-400 font-bold">DLS {u.label("dls")}:</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 bg-emerald-500 rounded-sm" /><span className="text-slate-300">&lt; {u.show(DLS_WARN, "dls", 1)}</span></span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 bg-amber-400 rounded-sm" /><span className="text-slate-300">{u.show(DLS_WARN, "dls", 1)}–{u.show(DLS_CRIT, "dls", 1)}</span></span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 bg-rose-500 rounded-sm" /><span className="text-slate-300">&gt; {u.show(DLS_CRIT, "dls", 1)}</span></span>
+              </div>
+              {survey ? (
+                <div className="order-1 relative w-full h-[22rem] md:absolute md:inset-0 md:h-full" data-testid="survey-3d-view" data-plug-pins={plugs.map((p) => p.name).join(",")} data-bit-label={bitLabel}>
+                  <SurveyWellbore3D survey={survey} depthFt={bitFt} colorMode={colorMode} plugs={plugs} bitLabel={bitLabel}
+                    fmtDepth={fmtDepth} tickStepFt={tickStepFt} command={viewCmd} orbit={orbit} />
+                  <ZoomButtons onCmd={sendCmd} />
+                </div>
+              ) : (
+                <canvas ref={canvas3DRef} className="order-1 w-full h-56 md:h-full block" data-testid="trajectory-canvas" />
+              )}
+            </div>
           </div>
 
           <PlugTally plugs={plugs} depth={bitFt} u={u} isDemo={!survey} canDelete={!!survey && canEditPlugs}
@@ -341,11 +347,9 @@ export default function MainOperatorScreen() {
         </div>
       )}
 
-      {/* 4. DEPTH CORRELATION */}
       <DepthCorrelationPanel counterFt={counterFt} offsetFt={corr.offsetFt} moveTarget={corr.moveTarget} plugs={rawPlugs} log={corr.log}
         u={u} onOffset={corr.setOffset} onTarget={corr.setTarget} shared={!!survey} />
 
-      {/* 5. CHANNELS */}
       <ChannelsPanel channels={allChannels} groups={groups} activeSets={layout.active_sets} hidden={layout.hidden} telemetry={telemetry}
         history={historyRef.current} u={u} sourceLabel={sourceLabel} onToggleSet={layout.toggleSet} onHide={layout.hide} onOpenAdd={() => setShowManageChannels(true)} teamCfg={teamCfg} />
 
