@@ -113,6 +113,21 @@ Weighted score = (score/5) * 10 = ____
 
 ---
 
+## Draft evidence status (repository review, 2026-10-26)
+This is not a sign-off. No scores or blocker checkboxes above were changed.
+
+| Item | Evidence | State |
+| --- | --- | --- |
+| Blocker 1: Auth + RBAC | Backend RBAC tiers and tests exist; tests not run here | Unverified |
+| Blocker 2: Telemetry integrity | Frontend has `aegisTelemetry.test.js`; backend telemetry scenario tests exist; not run here | Unverified |
+| Blocker 3: Rollback tested | `evidence/staging-rollback-game-day.md` is **NOT RUN**, no time-to-restore | Open |
+| Blocker 4: Incident response | `INCIDENT_RESPONSE.md` added as a template; owners pending | Open |
+| Blocker 5: Support model | Support contacts/hours blank in `KNOWN_LIMITATIONS_AND_SUPPORT_POLICY.md` | Open |
+| CI | `ci.yml` only byte-compiles the backend; it does not run tests | Gap |
+| Backend tests | Could not run in the review sandbox (private package index unreachable) | Unverified |
+
+Current decision: **No-Go** until the open blockers are closed.
+
 ## Final result
 - Total weighted score: ____ / 100
 - Critical blockers clear: [ ] Yes [ ] No
