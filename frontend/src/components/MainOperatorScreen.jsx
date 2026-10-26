@@ -1,14 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
-import { Layers, Box, Play, Pause, RotateCcw, Upload } from "lucide-react";
+import { Layers, Box, Play, Pause, RotateCcw, Users, Upload } from "lucide-react";
 import { Link } from "react-router-dom";
 import { API } from "../context/AuthContext";
 import { useRig } from "../context/RigContext";
 import { UNIT_SYSTEMS } from "../lib/units";
 import { assessLiveTelemetrySample, TELEMETRY_POLL_INTERVAL_MS } from "../lib/aegisTelemetry";
 import {
-  SEED_TELEMETRY, CHANNELS, JOB_SETS, PLUGS, DEPTH_MIN_FT, DEPTH_MAX_FT, simTick, fromDaqSample,
+  SEED_TELEMETRY, CHANNELS, JOB_SETS, PLUGS, DEFAULT_CREW, DEPTH_MIN_FT, DEPTH_MAX_FT, simTick, fromDaqSample,
 } from "../lib/operatorConfig";
 import { stationAt, surveyTD, DLS_WARN, DLS_CRIT } from "../lib/surveyInterp";
 import SurveyWellbore3D from "./operator/SurveyWellbore3D";
@@ -22,11 +22,16 @@ import { ViewerToolbar, ZoomButtons } from "./operator/ViewerToolbar";
 import { useOperatorUnits } from "./operator/useOperatorUnits";
 import { MetricCard } from "./operator/OperatorCards";
 import { drawTrajectory, drawPens, prepCanvas, PENS } from "./operator/operatorCanvas";
+import { CrewRatesModal } from "./operator/CrewRatesModal";
 import { AddChannelModal } from "./operator/AddChannelModal";
 
+const CREW_KEY = "coilaegis_crew_rates_v1";
 const SIM_TICK_MS = 500;
 const CANVAS_DRAW_MS = 500;
-const MAX_HISTORY_SAMPLES = 100;
+const MAX_HISTORY_SAMPLES = 180;
+
+const loadLS = (k, fallback) => { try { return JSON.parse(localStorage.getItem(k)) || fallback; } catch { return fallback; } };
+const saveLS = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { console.debug("[Operator] save failed", e?.message); } };
 
 const seg = (active, on) => `px-2.5 py-1 rounded transition-colors ${active ? on : "text-slate-400 hover:text-slate-200"}`;
 const PEN_ON = {
@@ -46,6 +51,8 @@ export default function MainOperatorScreen() {
   const [isSimRunning, setIsSimRunning] = useState(true);
   const [colorMode, setColorMode] = useState("DLS");
   const [showManageChannels, setShowManageChannels] = useState(false);
+  const [showCrewSetup, setShowCrewSetup] = useState(false);
+  const [crewMembers, setCrewMembers] = useState(() => loadLS(CREW_KEY, DEFAULT_CREW));
   const layout = useChannelLayout();
   const teamCfg = useTeamChannelConfig();
   const [viewCmd, setViewCmd] = useState(null);
@@ -212,6 +219,7 @@ export default function MainOperatorScreen() {
     setTelemetry((prev) => ({ ...prev, depth: ft }));
   };
 
+  const saveCrew = (next) => { setCrewMembers(next); saveLS(CREW_KEY, next); setShowCrewSetup(false); toast.success("Crew rates saved"); };
   const addChannel = (ch) => { layout.addCustom(ch); toast.success(`Channel "${ch.title}" added`); };
   const restoreChannel = (id) => {
     const ch = allChannels.find((c) => (c.key || c.id) === id);
@@ -237,6 +245,9 @@ export default function MainOperatorScreen() {
             <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${live ? "text-emerald-300 border-emerald-500/40 bg-emerald-500/10" : feedMode === "LIVE" ? "text-amber-300 border-amber-500/40 bg-amber-500/10" : "text-slate-300 border-slate-700 bg-slate-900/60"}`}>
               {sourceLabel.toUpperCase()}
             </span>
+            <button onClick={() => setShowCrewSetup(true)} className="flex items-center gap-1.5 px-3 py-1 bg-slate-900 border border-slate-800 hover:border-orange-500/60 transition-colors rounded-lg text-[10px] font-bold uppercase tracking-wide text-slate-200">
+              <Users className="w-3.5 h-3.5" /> Crew Rates
+            </button>
           </div>
 
           <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs font-semibold" data-testid="view-style-toggle">
@@ -295,6 +306,7 @@ export default function MainOperatorScreen() {
                 <div className="text-slate-300">Incl: <span className="font-mono text-slate-100" data-testid="at-bit-inc">{atBit.inc.toFixed(1)}°</span></div>
                 <div className="text-slate-300">DLS: <span className="font-mono text-slate-100" data-testid="at-bit-dls">{u.show(atBit.dls, "dls", 2)} {u.label("dls")}</span></div>
                 <div className="col-span-2 text-[10px] text-slate-500 font-mono pt-1" data-testid="trajectory-source">{survey ? `survey · ${survey.stations.length} stn · TD ${u.show(maxFt, "depth", 0)} ${u.label("depth")}` : "simulated trajectory"}</div>
+                <div className="text-slate-300">Drag: <span className="font-mono text-slate-100">{u.show(telemetry.drag, "weight", 0)} {u.label("weight")}</span></div>
               </div>
               <div className="order-1 self-end md:absolute md:top-4 md:right-4 z-10 flex flex-wrap items-center justify-end gap-2">
                 {surveys.length > 0 ? (
@@ -363,6 +375,7 @@ export default function MainOperatorScreen() {
           depthLabel={u.label("depth")} toFt={(v) => (u.isMetric ? u.to(v, "depth") : v)} fromFt={(v) => u.val(v, "depth")}
           onSave={savePlug} onDelete={deletePlug} onClose={() => setShowPlugManager(false)} />
       )}
+      {showCrewSetup && <CrewRatesModal crew={crewMembers} onSave={saveCrew} onClose={() => setShowCrewSetup(false)} />}
       {showManageChannels && (
         <AddChannelModal pressLabel={u.label("pressure")} toPsi={(v) => u.to(v, "pressure")} custom={layout.custom}
           hiddenChannels={hiddenChannels} onRestore={restoreChannel} onAdd={addChannel} onRemove={layout.removeCustom} onClose={() => setShowManageChannels(false)} />

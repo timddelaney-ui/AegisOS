@@ -12,6 +12,28 @@ Aegis OS is the operating layer for hybrid edge/cloud coiled-tubing field operat
 ## Runtime access model
 Aegis OS enforces plan access through authenticated session data and backend tier checks. Beta unlocks are opt-in and environment-scoped; they are never enabled by default.
 
+## Local startup
+The backend ASGI application is `backend/server.py` (`server:app` when run from the `backend/` directory). Configure `backend/.env` with at least `MONGO_URL` and `DB_NAME`, and ensure the MongoDB instance is reachable.
+
+In one terminal:
+```bash
+cd backend
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python -m uvicorn server:app --host 0.0.0.0 --port 8000
+```
+
+In another terminal:
+```bash
+cd frontend
+cp .env.example .env
+yarn install
+yarn start
+```
+
+The frontend uses `REACT_APP_BACKEND_URL` to reach the backend; the example points to `http://localhost:8000`. The API is served under `/api`.
+
 ## Telemetry channel model
 The live operations layer tracks the following channels:
 
