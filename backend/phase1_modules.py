@@ -217,6 +217,7 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
 
     @api_router.post("/liveops/feed")
     async def feed_liveops(body: LiveSample, user: dict = Depends(require_user)):
+        require_crew(user)
         team_id = user.get("team_id")
         if not team_id:
             raise HTTPException(400, "No team.")
@@ -265,7 +266,7 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
 
     @api_router.post("/rbac/promote")
     async def rbac_promote(body: RolePromote, user: dict = Depends(require_user)):
-        require_supervisor(user)
+        require_management(user)
         if body.role not in ("guest", "crew", "supervisor", "management"):
             raise HTTPException(400, "role must be guest|crew|supervisor|management")
         # Only management can promote TO management
@@ -543,6 +544,7 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
 
     @api_router.post("/fatigue/feed")
     async def feed_fatigue(body: PressureFeed, user: dict = Depends(require_user)):
+        require_crew(user)
         team_id = user.get("team_id")
         if not team_id:
             raise HTTPException(400, "No team.")
@@ -822,6 +824,7 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
 
     @api_router.post("/certifications")
     async def create_cert(body: CertCreate, user: dict = Depends(require_user)):
+        require_crew(user)
         team_id = user.get("team_id")
         if not team_id:
             raise HTTPException(400, "No team.")
@@ -836,7 +839,9 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
             raise HTTPException(400, "expiry_date must be on or after issue_date.")
         cert_id = f"cert_{uuid.uuid4().hex[:12]}"
         now = now_utc()
-        target = await db.users.find_one({"user_id": target_uid}, {"_id": 0, "name": 1, "email": 1})
+        target = await db.users.find_one({"user_id": target_uid}, {"_id": 0, "name": 1, "email": 1, "team_id": 1})
+        if not target or target.get("team_id") != team_id:
+            raise HTTPException(404, "Crew member not found.")
         doc = {
             "cert_id": cert_id, "team_id": team_id, "user_id": target_uid,
             "user_name": (target or {}).get("name") or "", "user_email": (target or {}).get("email") or "",
@@ -885,6 +890,7 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
 
     @api_router.patch("/certifications/{cert_id}")
     async def patch_cert(cert_id: str, body: CertUpdate, user: dict = Depends(require_user)):
+        require_crew(user)
         doc = await db.certifications.find_one({"cert_id": cert_id, "team_id": user.get("team_id")}, {"_id": 0})
         if not doc:
             raise HTTPException(404, "Cert not found.")
@@ -964,6 +970,8 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
 
     @api_router.patch("/tasks/{task_id}")
     async def patch_task(task_id: str, body: TaskUpdate, user: dict = Depends(require_user)):
+        if not is_supervisor_or_higher(user):
+            require_crew(user)
         doc = await db.daily_tasks.find_one({"task_id": task_id, "team_id": user.get("team_id")}, {"_id": 0})
         if not doc:
             raise HTTPException(404, "Task not found.")
@@ -971,6 +979,9 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
         is_edit = any(getattr(body, k) is not None for k in ("title", "detail", "assignee_user_id", "due_date"))
         if is_edit and not is_supervisor_or_higher(user):
             raise HTTPException(403, "Only supervisors can edit task content.")
+        if not is_supervisor_or_higher(user):
+            if body.status != "done" or doc.get("assignee_user_id") != user["user_id"]:
+                raise HTTPException(403, "Crew can only complete their assigned tasks.")
         update: Dict[str, Any] = {"updated_at": now_utc()}
         if body.title is not None:            update["title"] = body.title.strip()[:200]
         if body.detail is not None:           update["detail"] = body.detail.strip() or None
@@ -1078,6 +1089,7 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
 
     @api_router.post("/parts-orders")
     async def create_parts_order(body: PartsOrderCreate, user: dict = Depends(require_user)):
+        require_crew(user)
         team_id = user.get("team_id")
         if not team_id:
             raise HTTPException(400, "No team.")
@@ -1427,6 +1439,7 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
 
     @api_router.post("/timecards/lines")
     async def create_tc_line(body: TimecardLineCreate, user: dict = Depends(require_user)):
+        require_crew(user)
         team_id = user.get("team_id")
         if not team_id:
             raise HTTPException(400, "No team.")
@@ -1468,6 +1481,7 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
     async def create_tc_shift(body: TimecardShiftBatch, user: dict = Depends(require_user)):
         """One shift = one date + one job #, but multiple activities at different rates
         (shop, field, travel, moving equipment, OT, per-diem day, etc.) in one submission."""
+        require_crew(user)
         team_id = user.get("team_id")
         if not team_id:
             raise HTTPException(400, "No team.")
@@ -1532,6 +1546,7 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
 
     @api_router.patch("/timecards/lines/{line_id}")
     async def patch_tc_line(line_id: str, body: TimecardLineUpdate, user: dict = Depends(require_user)):
+        require_crew(user)
         line = await db.timecard_lines.find_one({"line_id": line_id, "team_id": user.get("team_id")}, {"_id": 0})
         if not line:
             raise HTTPException(404, "Line not found.")
@@ -1564,6 +1579,7 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
 
     @api_router.delete("/timecards/lines/{line_id}")
     async def delete_tc_line(line_id: str, user: dict = Depends(require_user)):
+        require_crew(user)
         line = await db.timecard_lines.find_one({"line_id": line_id, "team_id": user.get("team_id")}, {"_id": 0})
         if not line:
             raise HTTPException(404, "Line not found.")
@@ -1581,6 +1597,7 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
 
     @api_router.post("/timecards/submit")
     async def submit_timecard(body: TCBatchAction, user: dict = Depends(require_user)):
+        require_crew(user)
         team_id = user.get("team_id")
         now = now_utc()
         n = 0
@@ -1793,7 +1810,7 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
 
     @api_router.post("/daq/configs/{config_id}/status")
     async def set_daq_status(config_id: str, body: DaqStatusPatch, user: dict = Depends(require_user)):
-        require_crew(user)
+        require_supervisor(user)
         cfg = await db.daq_configs.find_one({"config_id": config_id, "team_id": user.get("team_id")}, {"_id": 0})
         if not cfg:
             raise HTTPException(404, "Not found.")
@@ -2151,6 +2168,7 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
     @api_router.patch("/liveops/annotations/{annot_id}")
     async def update_annotation(annot_id: str, body: AnnotationUpdate, user: dict = Depends(require_user)):
         """Author or management can edit a manual annotation. Rig-sourced notes are immutable."""
+        require_crew(user)
         existing = await db.playback_annotations.find_one({"annot_id": annot_id, "team_id": user.get("team_id")}, {"_id": 0})
         if not existing:
             raise HTTPException(404, "Not found.")
@@ -2178,6 +2196,7 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
 
     @api_router.delete("/liveops/annotations/{annot_id}")
     async def delete_annotation(annot_id: str, user: dict = Depends(require_user)):
+        require_crew(user)
         existing = await db.playback_annotations.find_one({"annot_id": annot_id, "team_id": user.get("team_id")}, {"_id": 0})
         if not existing:
             raise HTTPException(404, "Not found.")
