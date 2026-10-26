@@ -14,6 +14,7 @@ The release manager must confirm and record all of the following before authoriz
 
 - A staging-only target URL, release-candidate commit and deployed image/build identifier.
 - The prior known-good image/build identifier and the platform's supported rollback action.
+- The platform-configured staging health check; the frontend `/health/*` endpoints attach to the webpack dev server and must not be assumed to represent deployed staging health.
 - A named operator authorized to deploy and roll back, a QA observer, and an incident/alert observer.
 - A reversible, staging-only fault mechanism that exercises the normal detection path without changing production traffic or persistent data.
 - A staging test account and representative non-sensitive test data for read-only smoke checks.
