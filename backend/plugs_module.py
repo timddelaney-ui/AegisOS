@@ -110,7 +110,7 @@ def build_router(require_user, db) -> APIRouter:
 
     @r.post("/surveys/{survey_id}/plugs")
     async def add_plug(survey_id: str, body: PlugIn, user: dict = Depends(require_user)):
-        require_crew(user)
+        require_supervisor(user)
         survey = await _survey(survey_id, user.get("team_id"))
         _validate(body, survey)
         await _unique_name(survey_id, user.get("team_id"), body.name)
@@ -173,7 +173,7 @@ def build_router(require_user, db) -> APIRouter:
 
     @r.post("/surveys/{survey_id}/correlation")
     async def set_correlation(survey_id: str, body: CorrelationIn, user: dict = Depends(require_user)):
-        require_crew(user)
+        require_supervisor(user)
         team_id = user.get("team_id")
         await _survey(survey_id, team_id)
         prev = await db.depth_correlations.find_one({"survey_id": survey_id, "team_id": team_id}, {"_id": 0}) or {}
@@ -207,7 +207,7 @@ def build_router(require_user, db) -> APIRouter:
 
     @r.put("/team/channel-config")
     async def put_team_channels(body: TeamChannelConfigIn, user: dict = Depends(require_user)):
-        require_crew(user)
+        require_supervisor(user)
         if any(not i or len(i) > 40 for i in body.order):
             raise HTTPException(422, "Channel ids must be 1-40 characters.")
         if len(body.names) > 200:
