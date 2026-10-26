@@ -71,3 +71,7 @@ The repository includes operational coverage for:
 - multi-encoder drift detection and slippage warnings
 - Von Mises stress envelope checks
 - historical sync / latency payload assessments
+
+## Beta telemetry operations
+- [Telemetry SLOs and acceptance criteria](docs/telemetry-slo.md)
+- [Beta support runbook](docs/beta-support-runbook.md)

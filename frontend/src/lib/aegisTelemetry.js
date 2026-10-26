@@ -9,6 +9,52 @@
  */
 
 const DEFAULT_FLUID_KEYS = ["acid", "frSlug", "mmfrSlugs", "gelPills", "waterFlush"];
+export const TELEMETRY_POLL_INTERVAL_MS = 2000;
+export const TELEMETRY_STALE_AFTER_MS = 5000;
+
+const PRIMARY_LIVE_CHANNELS = ["depth_ft", "weight_lb", "pressure_psi"];
+const LIVE_SAMPLE_CHANNELS = [
+  ...PRIMARY_LIVE_CHANNELS,
+  "traction_pressure_psi",
+  "p_internal_psi",
+  "p_external_psi",
+  "axial_force_lbf",
+  "vm_utilization",
+  "fatigue_worst",
+];
+
+export function assessLiveTelemetrySample(sample, nowMs = Date.now(), pollSucceeded = true) {
+  if (!pollSucceeded) return { state: "SIM_FALLBACK", reason: "upstream-outage", missingChannels: [] };
+  if (!sample) return { state: "SIM_FALLBACK", reason: "missing-sample", missingChannels: [] };
+  if (typeof sample !== "object" || Array.isArray(sample)) {
+    return { state: "SIM_FALLBACK", reason: "malformed-payload", missingChannels: [] };
+  }
+
+  const timestampMs = Date.parse(sample.created_at);
+  if (!Number.isFinite(timestampMs)) {
+    return { state: "SIM_FALLBACK", reason: "malformed-payload", missingChannels: [] };
+  }
+
+  const providedChannels = LIVE_SAMPLE_CHANNELS.filter((channel) => sample[channel] != null);
+  if (providedChannels.some((channel) => typeof sample[channel] !== "number" || !Number.isFinite(sample[channel]))) {
+    return { state: "SIM_FALLBACK", reason: "malformed-payload", missingChannels: [] };
+  }
+
+  const missingChannels = PRIMARY_LIVE_CHANNELS.filter((channel) => !Number.isFinite(sample[channel]));
+  if (missingChannels.length === PRIMARY_LIVE_CHANNELS.length) {
+    return { state: "SIM_FALLBACK", reason: "missing-channels", missingChannels };
+  }
+
+  const ageMs = Number(nowMs) - timestampMs;
+  if (sample.is_historical_sync || ageMs > TELEMETRY_STALE_AFTER_MS) {
+    return { state: "STALE", reason: "delayed-sample", ageMs, missingChannels };
+  }
+  if (ageMs < -TELEMETRY_STALE_AFTER_MS) {
+    return { state: "SIM_FALLBACK", reason: "malformed-payload", missingChannels };
+  }
+
+  return { state: "LIVE", reason: null, ageMs: Math.max(0, ageMs), missingChannels };
+}
 
 export function normalizeFluidChannels(input = {}) {
   const values = {
@@ -121,7 +167,7 @@ export function evaluateHistoricalPayload(payload = {}, nowMs = Date.now()) {
     latencyMs = Math.max(0, now - timestampMs);
   }
 
-  const stale = historicalSync || latencyMs > 5000;
+  const stale = historicalSync || latencyMs > TELEMETRY_STALE_AFTER_MS;
   const status = stale ? "stale-or-historical" : "fresh";
 
   return {
