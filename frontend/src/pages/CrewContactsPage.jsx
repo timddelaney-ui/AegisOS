@@ -3,7 +3,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import {
-  ArrowLeft, Users, Mail, Plus, Trash2, Pencil, X, Star, StarOff, Check,
+  ArrowLeft, Users, Mail, Phone, Plus, Trash2, Pencil, X, Star, StarOff, Check,
 } from "lucide-react";
 import { API, useAuth } from "../context/AuthContext";
 import ExcelHeader from "../components/ExcelHeader";
@@ -20,7 +20,7 @@ const CrewContactsPage = () => {
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState({ name: "", email: "", role: "", is_default_recipient: true });
+  const [form, setForm] = useState({ name: "", email: "", phone: "", role: "", is_default_recipient: true });
   const [busy, setBusy] = useState(false);
 
   const refresh = async () => {
@@ -35,12 +35,12 @@ const CrewContactsPage = () => {
 
   const openCreate = () => {
     setEditing(null);
-    setForm({ name: "", email: "", role: "", is_default_recipient: true });
+    setForm({ name: "", email: "", phone: "", role: "", is_default_recipient: true });
     setOpen(true);
   };
   const openEdit = (c) => {
     setEditing(c);
-    setForm({ name: c.name, email: c.email, role: c.role || "", is_default_recipient: !!c.is_default_recipient });
+    setForm({ name: c.name, email: c.email, phone: c.phone || "", role: c.role || "", is_default_recipient: !!c.is_default_recipient });
     setOpen(true);
   };
 
@@ -97,7 +97,7 @@ const CrewContactsPage = () => {
         </button>
         <div className="w-px h-5 bg-[#D4D4D4]" />
         <h1 className="text-[13px] sm:text-sm font-bold text-[#262626] flex-1 truncate">
-          Crew Email Contacts <span className="hidden sm:inline text-[#595959] font-normal">— Shift-End Recipients</span>
+          Crew Contacts <span className="hidden sm:inline text-[#595959] font-normal">— Shift-End Email + Text Recipients</span>
         </h1>
         {hasTeam && (
           <button
@@ -120,7 +120,7 @@ const CrewContactsPage = () => {
 
           <div className="bg-[#DBEAFE] border border-[#BFDBFE] rounded-xl p-3">
             <p className="text-[12px] text-[#0C4A6E] leading-snug">
-              <strong>These contacts receive shift-end handover emails.</strong> Mark everyone who <em>always</em> gets the digest as a <strong>default recipient</strong> ({defaultCount} currently default). Supervisors can still add one-off addresses per send. Emails show the supervisor's name in the From line and Reply-To goes to the supervisor's account.
+              <strong>These contacts receive shift-end handovers.</strong> Mark everyone who <em>always</em> gets the digest as a <strong>default recipient</strong> ({defaultCount} currently default). Add email for handover email sends and phone for SMS sends. Supervisors can still add one-off recipients per send.
             </p>
           </div>
 
@@ -158,6 +158,11 @@ const CrewContactsPage = () => {
                       <Mail className="inline w-3 h-3 mr-1" />{c.email}
                       {c.role && <> · {c.role}</>}
                     </p>
+                    {c.phone && (
+                      <p className="text-[11px] text-[#595959] truncate">
+                        <Phone className="inline w-3 h-3 mr-1" />{c.phone}
+                      </p>
+                    )}
                   </div>
                   <div className="flex items-center gap-1 flex-shrink-0">
                     <button
@@ -231,6 +236,17 @@ const CrewContactsPage = () => {
                   <option value="">—</option>
                   {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
                 </select>
+              </label>
+              <label className="block">
+                <span className="text-[11px] font-semibold text-[#333]">Phone (for texting)</span>
+                <input
+                  data-testid="cc-form-phone"
+                  value={form.phone}
+                  onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+                  placeholder="+14035551234"
+                  className="w-full px-2.5 py-2 border border-[#CCC] rounded text-sm"
+                />
+                <span className="text-[10px] text-[#595959]">Use E.164 format with country code.</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer" data-testid="cc-form-default-wrap">
                 <input

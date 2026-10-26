@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
-import { X, Copy, Check, Loader2, FileText, ClipboardCheck, Package, Wrench, ListChecks, Paperclip, Mail, Send, Users, Zap } from "lucide-react";
+import { X, Copy, Check, Loader2, FileText, ClipboardCheck, Package, Wrench, ListChecks, Paperclip, Mail, Send, Users, Zap, Smartphone } from "lucide-react";
 import { API } from "../context/AuthContext";
 import { useRig, rigLabel } from "../context/RigContext";
 import AttachmentUploader from "./AttachmentUploader";
@@ -73,6 +73,12 @@ const HandoverModal = ({ open, onClose }) => {
   const [recipients, setRecipients] = useState("");
   const [emailNote, setEmailNote] = useState("");
   const [sending, setSending] = useState(false);
+  const [smsOpen, setSmsOpen] = useState(false);
+  const [smsRecipients, setSmsRecipients] = useState("");
+  const [smsNote, setSmsNote] = useState("");
+  const [sendingSms, setSendingSms] = useState(false);
+  const [previewingSms, setPreviewingSms] = useState(false);
+  const [smsPreview, setSmsPreview] = useState(null);
   const [savedContacts, setSavedContacts] = useState([]);
   const [selectedContactIds, setSelectedContactIds] = useState(new Set());
   const [showContacts, setShowContacts] = useState(false);
@@ -116,6 +122,16 @@ const HandoverModal = ({ open, onClose }) => {
     setRecipients(merged.join(", "));
     setShowContacts(false);
     toast.success(`Added ${emails.length} saved contact${emails.length === 1 ? "" : "s"}`);
+  };
+
+  const loadSavedCrewPhones = () => {
+    const picked = savedContacts.filter((c) => selectedContactIds.has(c.contact_id));
+    const phones = picked.map((c) => c.phone).filter(Boolean);
+    const existing = smsRecipients.split(/[,;\s\n]+/).map((r) => r.trim()).filter(Boolean);
+    const merged = Array.from(new Set([...existing, ...phones]));
+    setSmsRecipients(merged.join(", "));
+    setShowContacts(false);
+    toast.success(`Added ${phones.length} saved phone${phones.length === 1 ? "" : "s"}`);
   };
 
   const toggleContact = (cid) => {
@@ -195,6 +211,62 @@ const HandoverModal = ({ open, onClose }) => {
     } finally { setSendingShiftEnd(false); }
   };
 
+  const previewShiftEndSms = async () => {
+    const numbers = smsRecipients
+      .split(/[,;\s\n]+/)
+      .map((r) => r.trim())
+      .filter(Boolean);
+    setPreviewingSms(true);
+    setSmsPreview(null);
+    try {
+      const { data } = await axios.post(`${API}/crew/shift-end-sms-preview`, {
+        rig_id: rigId,
+        hours,
+        extra_numbers: numbers,
+        note: smsNote || null,
+      }, { withCredentials: true });
+      setSmsPreview(data);
+      if (!data.numbers?.length) {
+        toast.error("No phone recipients resolved. Add crew contact phones or extra numbers.");
+      }
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Preview failed.");
+    } finally {
+      setPreviewingSms(false);
+    }
+  };
+
+  const sendShiftEndSms = async () => {
+    const numbers = smsRecipients
+      .split(/[,;\s\n]+/)
+      .map((r) => r.trim())
+      .filter(Boolean);
+    setSendingSms(true);
+    try {
+      const { data } = await axios.post(`${API}/crew/shift-end-sms`, {
+        rig_id: rigId,
+        hours,
+        extra_numbers: numbers,
+        note: smsNote || null,
+      }, { withCredentials: true });
+      if (data.status === "sent") {
+        toast.success(`Shift-end text sent to ${data.sent.length} recipient${data.sent.length === 1 ? "" : "s"}.`);
+      } else if (data.status === "partial") {
+        toast.warning(`Partial send: ${data.sent.length} sent, ${data.failed.length} failed.`);
+      } else {
+        toast.error("SMS failed for all recipients.");
+      }
+      setSmsPreview(data);
+    } catch (e) {
+      const detail = e.response?.data?.detail;
+      const status = e.response?.status;
+      if (status === 503) toast.error("SMS isn't configured yet — ask your admin to wire provider credentials.");
+      else toast.error(detail || `SMS send failed (HTTP ${status || "?"}).`);
+    } finally {
+      setSendingSms(false);
+    }
+  };
+
   if (!open) return null;
 
   return (
@@ -245,11 +317,19 @@ const HandoverModal = ({ open, onClose }) => {
             </button>
             <button
               data-testid="handover-email-open"
-              onClick={() => setEmailOpen((v) => !v)}
+              onClick={() => { setEmailOpen((v) => !v); setSmsOpen(false); }}
               disabled={!summary || loading}
               className={`text-[12px] font-bold px-3 py-1.5 rounded flex items-center gap-1.5 disabled:opacity-50 ${emailOpen ? "bg-[#C44A08] text-white" : "border border-[#C44A08] text-[#C44A08] hover:bg-[#FFF7EF]"}`}
             >
               <Mail className="w-3.5 h-3.5" /> <span className="hidden xs:inline sm:inline">Email</span>
+            </button>
+            <button
+              data-testid="handover-sms-open"
+              onClick={() => { setSmsOpen((v) => !v); setEmailOpen(false); }}
+              disabled={!summary || loading}
+              className={`text-[12px] font-bold px-3 py-1.5 rounded flex items-center gap-1.5 disabled:opacity-50 ${smsOpen ? "bg-[#0056B3] text-white" : "border border-[#0056B3] text-[#0056B3] hover:bg-[#EFF6FF]"}`}
+            >
+              <Smartphone className="w-3.5 h-3.5" /> <span className="hidden xs:inline sm:inline">Text</span>
             </button>
             <button
               data-testid="handover-copy"
@@ -275,6 +355,103 @@ const HandoverModal = ({ open, onClose }) => {
                 >
                   <Users className="w-3 h-3" /> Use saved crew ({savedContacts.length})
                 </button>
+              )}
+
+              {smsOpen && (
+                <div className="px-3 py-2.5 bg-[#EFF6FF] border-b border-[#BFDBFE] space-y-2" data-testid="handover-sms-panel">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <Smartphone className="w-3.5 h-3.5 text-[#0056B3]" />
+                    <span className="text-[11px] font-bold text-[#0056B3] uppercase tracking-wide">Send shift-end by text</span>
+                    {savedContacts.length > 0 && (
+                      <button
+                        data-testid="handover-use-saved-crew-phones"
+                        onClick={() => setShowContacts((v) => !v)}
+                        className="ml-auto text-[11px] font-bold text-[#0056B3] inline-flex items-center gap-1 border border-[#0056B3] px-2 py-0.5 rounded hover:bg-[#DBEAFE]"
+                      >
+                        <Users className="w-3 h-3" /> Use saved crew ({savedContacts.length})
+                      </button>
+                    )}
+                  </div>
+                  {showContacts && (
+                    <div className="bg-white border border-[#BFDBFE] rounded p-2 max-h-40 overflow-y-auto" data-testid="handover-contacts-picker-sms">
+                      {savedContacts.map((c) => (
+                        <label
+                          key={c.contact_id}
+                          data-testid={`handover-sms-contact-${c.contact_id}`}
+                          className="flex items-center gap-2 py-1 px-1 hover:bg-[#EFF6FF] rounded cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedContactIds.has(c.contact_id)}
+                            onChange={() => toggleContact(c.contact_id)}
+                            className="w-3.5 h-3.5 accent-[#0056B3]"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[12px] font-semibold text-[#262626] truncate">
+                              {c.name}
+                              {c.is_default_recipient && <span className="ml-1.5 text-[9px] text-[#0056B3] font-bold">DEFAULT</span>}
+                            </p>
+                            <p className="text-[10px] text-[#595959] truncate">{c.phone || "No phone"}{c.role ? ` · ${c.role}` : ""}</p>
+                          </div>
+                        </label>
+                      ))}
+                      <div className="flex justify-end pt-1 mt-1 border-t border-[#F0F0F0]">
+                        <button
+                          data-testid="handover-contacts-apply-sms"
+                          onClick={loadSavedCrewPhones}
+                          className="text-[11px] font-bold text-white bg-[#0056B3] hover:bg-[#003D82] px-2 py-0.5 rounded"
+                        >
+                          Add {selectedContactIds.size} to numbers
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  <textarea
+                    data-testid="handover-sms-recipients"
+                    value={smsRecipients}
+                    onChange={(e) => setSmsRecipients(e.target.value)}
+                    rows={2}
+                    placeholder="Phone numbers in E.164 format, comma/space/newline separated (e.g. +14035551234)"
+                    className="w-full px-2 py-1.5 border border-[#93C5FD] rounded text-[13px] font-mono"
+                  />
+                  <input
+                    data-testid="handover-sms-note"
+                    value={smsNote}
+                    onChange={(e) => setSmsNote(e.target.value)}
+                    placeholder="Cover note for text (optional)"
+                    className="w-full px-2 py-1.5 border border-[#93C5FD] rounded text-sm"
+                    maxLength={240}
+                  />
+                  <div className="flex items-center gap-2">
+                    <button
+                      data-testid="handover-sms-preview"
+                      onClick={previewShiftEndSms}
+                      disabled={previewingSms || !summary}
+                      className="text-[12px] font-bold text-[#0056B3] border border-[#0056B3] hover:bg-[#DBEAFE] px-3 py-1.5 rounded flex items-center gap-1.5 disabled:opacity-50 tap-44"
+                    >
+                      {previewingSms ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Previewing…</> : "Preview text"}
+                    </button>
+                    <button
+                      data-testid="handover-sms-send"
+                      onClick={sendShiftEndSms}
+                      disabled={sendingSms || !summary}
+                      className="text-[12px] font-bold text-white bg-[#0056B3] hover:bg-[#003D82] px-3 py-1.5 rounded flex items-center gap-1.5 disabled:opacity-50 tap-44"
+                    >
+                      {sendingSms ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Sending…</> : <><Send className="w-3.5 h-3.5" /> Send text</>}
+                    </button>
+                    <span className="text-[10px] text-[#595959] italic">
+                      Text uses default-recipient crew phones plus any extra numbers.
+                    </span>
+                  </div>
+                  {smsPreview && (
+                    <div className="bg-white border border-[#BFDBFE] rounded p-2 space-y-1" data-testid="handover-sms-preview-body">
+                      <div className="text-[11px] text-[#0C4A6E]">
+                        <strong>{smsPreview.numbers?.length || 0}</strong> recipient(s) · provider: <strong>{smsPreview.provider || "none"}</strong> · configured: <strong>{smsPreview.configured ? "yes" : "no"}</strong>
+                      </div>
+                      <pre className="text-[11px] whitespace-pre-wrap break-words text-[#262626] bg-[#F8FAFC] border border-[#E2E8F0] rounded p-2 max-h-48 overflow-auto">{smsPreview.body_text || ""}</pre>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
             {showContacts && (

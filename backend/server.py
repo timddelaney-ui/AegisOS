@@ -1007,6 +1007,10 @@ GEMINI_MODEL = "gemini-2.5-flash"
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 RESEND_FROM_EMAIL = os.environ.get("RESEND_FROM_EMAIL", "onboarding@resend.dev")
 FEEDBACK_INBOX = os.environ.get("FEEDBACK_INBOX", "timddelaney@gmail.com")
+SMS_PROVIDER = (os.environ.get("SMS_PROVIDER", "none") or "none").strip().lower()
+SMS_FROM_NUMBER = (os.environ.get("SMS_FROM_NUMBER", "") or "").strip()
+TWILIO_ACCOUNT_SID = (os.environ.get("TWILIO_ACCOUNT_SID", "") or "").strip()
+TWILIO_AUTH_TOKEN = (os.environ.get("TWILIO_AUTH_TOKEN", "") or "").strip()
 try:
     import resend as _resend
     if RESEND_API_KEY:
@@ -2148,6 +2152,61 @@ async def crew_handover_summary(rig_id: str, hours: int = 12, user: dict = Depen
 import html as _html
 
 _EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
+_E164_RE = re.compile(r"^\+[1-9]\d{7,14}$")
+
+
+def _normalize_phone(raw: str) -> Optional[str]:
+    """Normalize a phone number to strict E.164 (+15551234567)."""
+    s = (raw or "").strip()
+    if not s:
+        return None
+    cleaned = re.sub(r"[^\d+]", "", s)
+    if cleaned.startswith("00"):
+        cleaned = f"+{cleaned[2:]}"
+    if not cleaned.startswith("+"):
+        if len(cleaned) == 11 and cleaned.startswith("1"):
+            cleaned = f"+{cleaned}"
+        elif len(cleaned) == 10:
+            cleaned = f"+1{cleaned}"
+        else:
+            return None
+    if not _E164_RE.match(cleaned):
+        return None
+    return cleaned
+
+
+def _sms_configured() -> bool:
+    return (
+        SMS_PROVIDER == "twilio"
+        and bool(SMS_FROM_NUMBER)
+        and bool(TWILIO_ACCOUNT_SID)
+        and bool(TWILIO_AUTH_TOKEN)
+    )
+
+
+async def _send_sms_twilio(to_number: str, body_text: str) -> str:
+    """Dispatch one SMS through Twilio REST and return provider message SID."""
+    def _do_send() -> str:
+        url = f"https://api.twilio.com/2010-04-01/Accounts/{TWILIO_ACCOUNT_SID}/Messages.json"
+        resp = requests.post(
+            url,
+            auth=(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN),
+            data={"From": SMS_FROM_NUMBER, "To": to_number, "Body": body_text},
+            timeout=12,
+        )
+        if resp.status_code >= 400:
+            try:
+                detail = resp.json().get("message") or resp.text
+            except Exception:
+                detail = resp.text
+            raise RuntimeError(f"Twilio send failed ({resp.status_code}): {detail[:220]}")
+        payload = resp.json()
+        sid = payload.get("sid")
+        if not sid:
+            raise RuntimeError("Twilio send failed: missing sid in response")
+        return sid
+
+    return await asyncio.to_thread(_do_send)
 
 
 class HandoverEmailRequest(BaseModel):
@@ -2359,6 +2418,7 @@ async def email_dossier(body: DossierEmailRequest, user: dict = Depends(require_
 class CrewContactCreate(BaseModel):
     name: str
     email: str
+    phone: Optional[str] = None         # E.164 (+15551234567)
     role: Optional[str] = None            # Supervisor / Tool Push / Day Op / Night Op / Office / Other
     is_default_recipient: bool = True     # auto-select on shift-end send
 
@@ -2366,6 +2426,7 @@ class CrewContactCreate(BaseModel):
 class CrewContactUpdate(BaseModel):
     name: Optional[str] = None
     email: Optional[str] = None
+    phone: Optional[str] = None
     role: Optional[str] = None
     is_default_recipient: Optional[bool] = None
 
@@ -2377,13 +2438,22 @@ async def create_crew_contact(body: CrewContactCreate, user: dict = Depends(requ
         raise HTTPException(400, "Join or create a team first.")
     name = body.name.strip()
     email = (body.email or "").strip().lower()
+    phone = _normalize_phone(body.phone or "")
     if not name:
         raise HTTPException(400, "Name required.")
     if not _EMAIL_RE.match(email):
         raise HTTPException(400, "Valid email required.")
+    if body.phone is not None and body.phone.strip() and not phone:
+        raise HTTPException(400, "Valid phone required (E.164, e.g. +14035551234).")
     # Prevent duplicates per team
-    dup = await db.crew_contacts.find_one({"team_id": team_id, "email": email, "is_deleted": {"$ne": True}})
+    dup = await db.crew_contacts.find_one({
+        "team_id": team_id,
+        "is_deleted": {"$ne": True},
+        "$or": ([{"email": email}] + ([{"phone": phone}] if phone else [])),
+    })
     if dup:
+        if phone and dup.get("phone") == phone:
+            raise HTTPException(409, f"'{phone}' is already saved for this crew.")
         raise HTTPException(409, f"'{email}' is already saved for this crew.")
     cid = f"cc_{uuid.uuid4().hex[:12]}"
     now = datetime.now(timezone.utc)
@@ -2392,6 +2462,7 @@ async def create_crew_contact(body: CrewContactCreate, user: dict = Depends(requ
         "team_id": team_id,
         "name": name,
         "email": email,
+        "phone": phone,
         "role": (body.role or "").strip() or None,
         "is_default_recipient": bool(body.is_default_recipient),
         "added_by_user_id": user["user_id"],
@@ -2436,10 +2507,33 @@ async def update_crew_contact(contact_id: str, body: CrewContactUpdate, user: di
         if not _EMAIL_RE.match(e):
             raise HTTPException(400, "Valid email required.")
         update["email"] = e
+    if body.phone is not None:
+        p = _normalize_phone(body.phone)
+        if body.phone.strip() and not p:
+            raise HTTPException(400, "Valid phone required (E.164, e.g. +14035551234).")
+        update["phone"] = p
     if body.role is not None:
         update["role"] = body.role.strip() or None
     if body.is_default_recipient is not None:
         update["is_default_recipient"] = bool(body.is_default_recipient)
+    if "email" in update:
+        dup_q: Dict[str, Any] = {
+            "team_id": team_id,
+            "contact_id": {"$ne": contact_id},
+            "is_deleted": {"$ne": True},
+            "email": update["email"],
+        }
+        if await db.crew_contacts.find_one(dup_q, {"_id": 0}):
+            raise HTTPException(409, f"'{update['email']}' is already saved for this crew.")
+    if "phone" in update and update.get("phone"):
+        dup_q = {
+            "team_id": team_id,
+            "contact_id": {"$ne": contact_id},
+            "is_deleted": {"$ne": True},
+            "phone": update["phone"],
+        }
+        if await db.crew_contacts.find_one(dup_q, {"_id": 0}):
+            raise HTTPException(409, f"'{update['phone']}' is already saved for this crew.")
     update["updated_at"] = datetime.now(timezone.utc)
     await db.crew_contacts.update_one({"contact_id": contact_id}, {"$set": update})
     doc = await db.crew_contacts.find_one({"contact_id": contact_id}, {"_id": 0})
@@ -2469,6 +2563,14 @@ class ShiftEndHandoverRequest(BaseModel):
     include_contact_ids: Optional[List[str]] = None  # override default-recipient set
     note: Optional[str] = None                        # supervisor's cover note
     subject: Optional[str] = None
+
+
+class ShiftEndSmsRequest(BaseModel):
+    rig_id: str
+    hours: int = 12
+    extra_numbers: Optional[List[str]] = None
+    include_contact_ids: Optional[List[str]] = None
+    note: Optional[str] = None
 
 
 async def _build_shift_end_body(team_id: str, rig_id: str, hours: int) -> str:
@@ -2638,6 +2740,129 @@ async def preview_shift_end(body: ShiftEndHandoverRequest, user: dict = Depends(
         "from_display": f"{user.get('name') or user['email'].split('@')[0]} via CT Pocket <{RESEND_FROM_EMAIL}>",
         "reply_to": user.get("email"),
         "configured": bool(RESEND_API_KEY and _resend is not None),
+    }
+
+
+def _build_sms_text_from_handover(body_text: str, note: Optional[str]) -> str:
+    compact = (body_text or "").replace("\r\n", "\n").replace("\r", "\n")
+    compact = re.sub(r"\n{3,}", "\n\n", compact).strip()
+    if note:
+        compact = f"{note.strip()}\n\n{compact}".strip()
+    # Keep messages bounded to avoid extreme segmentation costs and truncation.
+    if len(compact) > 1200:
+        compact = f"{compact[:1192].rstrip()}…"
+    return compact
+
+
+async def _resolve_shift_end_sms_numbers(team_id: str, body: ShiftEndSmsRequest) -> List[str]:
+    contact_query: Dict[str, Any] = {"team_id": team_id, "is_deleted": {"$ne": True}}
+    if body.include_contact_ids is not None:
+        contact_query["contact_id"] = {"$in": body.include_contact_ids}
+    else:
+        contact_query["is_default_recipient"] = True
+    contacts = await db.crew_contacts.find(contact_query, {"_id": 0}).to_list(200)
+
+    numbers: List[str] = []
+    seen = set()
+    for c in contacts:
+        p = _normalize_phone(c.get("phone") or "")
+        if p and p not in seen:
+            seen.add(p)
+            numbers.append(p)
+    for raw in body.extra_numbers or []:
+        p = _normalize_phone(raw or "")
+        if p and p not in seen:
+            seen.add(p)
+            numbers.append(p)
+    return numbers
+
+
+@api_router.post("/crew/shift-end-sms-preview")
+async def preview_shift_end_sms(body: ShiftEndSmsRequest, user: dict = Depends(require_user)):
+    team_id = user.get("team_id")
+    if not team_id:
+        raise HTTPException(400, "Join or create a team first.")
+    if not body.rig_id:
+        raise HTTPException(400, "rig_id required.")
+
+    numbers = await _resolve_shift_end_sms_numbers(team_id, body)
+    body_text = await _build_shift_end_body(team_id, body.rig_id, body.hours or 12)
+    sms_text = _build_sms_text_from_handover(body_text, body.note)
+
+    return {
+        "numbers": numbers,
+        "body_text": sms_text,
+        "configured": _sms_configured(),
+        "provider": SMS_PROVIDER,
+        "from_number": SMS_FROM_NUMBER if _sms_configured() else None,
+    }
+
+
+@api_router.post("/crew/shift-end-sms")
+async def send_shift_end_sms(body: ShiftEndSmsRequest, user: dict = Depends(require_user)):
+    team_id = user.get("team_id")
+    if not team_id:
+        raise HTTPException(400, "Join or create a team first.")
+    if not body.rig_id:
+        raise HTTPException(400, "rig_id required.")
+
+    numbers = await _resolve_shift_end_sms_numbers(team_id, body)
+    if not numbers:
+        raise HTTPException(400, "No phone recipients — save at least one crew contact phone or add extra numbers.")
+    if len(numbers) > 20:
+        raise HTTPException(400, "Max 20 recipients per shift-end text send.")
+
+    if not _sms_configured():
+        raise HTTPException(
+            503,
+            "SMS sending isn't configured yet. Set SMS_PROVIDER=twilio, SMS_FROM_NUMBER, TWILIO_ACCOUNT_SID, and TWILIO_AUTH_TOKEN.",
+        )
+
+    body_text = await _build_shift_end_body(team_id, body.rig_id, body.hours or 12)
+    sms_text = _build_sms_text_from_handover(body_text, body.note)
+
+    sent: List[Dict[str, str]] = []
+    failed: List[Dict[str, str]] = []
+    for number in numbers:
+        try:
+            sid = await _send_sms_twilio(number, sms_text)
+            sent.append({"number": number, "provider_id": sid})
+        except Exception as e:
+            failed.append({"number": number, "error": str(e)[:220]})
+
+    try:
+        await db.handover_sms.insert_one({
+            "team_id": team_id,
+            "rig_id": body.rig_id,
+            "sender_email": user["email"],
+            "sender_name": user.get("name") or user["email"].split("@")[0],
+            "provider": SMS_PROVIDER,
+            "from_number": SMS_FROM_NUMBER,
+            "to_numbers": numbers,
+            "sent": sent,
+            "failed": failed,
+            "message_preview": sms_text[:600],
+            "hours": body.hours or 12,
+            "sent_at": datetime.now(timezone.utc),
+        })
+    except Exception:
+        pass
+
+    if sent and not failed:
+        status = "sent"
+    elif sent:
+        status = "partial"
+    else:
+        status = "failed"
+    return {
+        "status": status,
+        "sent": sent,
+        "failed": failed,
+        "recipients": numbers,
+        "numbers": numbers,
+        "provider": SMS_PROVIDER,
+        "configured": _sms_configured(),
+        "body_text": sms_text,
     }
 
 
