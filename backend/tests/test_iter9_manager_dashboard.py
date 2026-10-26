@@ -63,6 +63,50 @@ def _cleanup(db, uid, token):
     db.user_sessions.delete_one({"session_token": token})
 
 
+def test_rbac_promotion_requires_management(db, admin_session):
+    admin = admin_session.get(f"{BASE_URL}/api/auth/me").json()
+    team_id = admin.get("team_id")
+    supervisor_id, supervisor_token, supervisor = _make_throwaway_user(db, role="field_manager", team_id=team_id)
+    target_id, target_token, _ = _make_throwaway_user(db, role="crew", team_id=team_id)
+    try:
+        denied = supervisor.post(f"{BASE_URL}/api/rbac/promote", json={
+            "user_id": target_id, "role": "management",
+        })
+        assert denied.status_code == 403
+
+        allowed = admin_session.post(f"{BASE_URL}/api/rbac/promote", json={
+            "user_id": target_id, "role": "supervisor",
+        })
+        assert allowed.status_code == 200, allowed.text
+        assert db.users.find_one({"user_id": target_id})["role"] == "field_manager"
+    finally:
+        _cleanup(db, supervisor_id, supervisor_token)
+        _cleanup(db, target_id, target_token)
+
+
+def test_task_edits_are_limited_to_supervisors_and_assignee(db, admin_session):
+    team_id = admin_session.get(f"{BASE_URL}/api/auth/me").json().get("team_id")
+    assigned_id, assigned_token, assigned = _make_throwaway_user(db, role="crew", team_id=team_id)
+    other_id, other_token, other = _make_throwaway_user(db, role="crew", team_id=team_id)
+    task_id = None
+    try:
+        created = admin_session.post(f"{BASE_URL}/api/tasks", json={
+            "title": "TEST authorization task", "assignee_user_id": assigned_id,
+        })
+        assert created.status_code == 200, created.text
+        task_id = created.json()["task_id"]
+
+        assert other.patch(f"{BASE_URL}/api/tasks/{task_id}", json={"status": "done"}).status_code == 403
+        assert assigned.patch(f"{BASE_URL}/api/tasks/{task_id}", json={"title": "Escalated"}).status_code == 403
+        assert assigned.patch(f"{BASE_URL}/api/tasks/{task_id}", json={"status": "open"}).status_code == 403
+        assert assigned.patch(f"{BASE_URL}/api/tasks/{task_id}", json={"status": "done"}).status_code == 200
+    finally:
+        if task_id:
+            admin_session.delete(f"{BASE_URL}/api/tasks/{task_id}")
+        _cleanup(db, assigned_id, assigned_token)
+        _cleanup(db, other_id, other_token)
+
+
 # ---------- Regression: /api/auth/me returns role field ----------
 def test_auth_me_returns_role_default_crew(admin_session, db):
     r = admin_session.get(f"{BASE_URL}/api/auth/me")

@@ -27,7 +27,10 @@ def users():
     db = c[env["DB_NAME"]]
     exp = datetime.now(timezone.utc) + timedelta(days=2)
     wid = os.environ.get("PYTEST_XDIST_WORKER", "gw")
-    spec = {"crew": ("crew", TEAM), "guest": ("guest", TEAM), "other": ("field_manager", f"TEST_team_cc_{wid}")}
+    spec = {
+        "crew": ("crew", TEAM), "guest": ("guest", TEAM),
+        "supervisor": ("field_manager", TEAM), "other": ("field_manager", f"TEST_team_cc_{wid}"),
+    }
     out = {}
     for k, (role, team) in spec.items():
         uid, tok = f"TEST_cc_{wid}_{k}", f"TEST_cc_tok_{wid}_{k}"
@@ -82,15 +85,19 @@ class TestTeamChannelConfig:
         assert users["mgmt"].put(URL, json={"order": "spp", "names": {}}).status_code == 422
         assert users["mgmt"].put(URL, json={"order": [], "names": ["a"]}).status_code == 422
 
-    def test_shared_with_crew_and_crew_can_write(self, users):
+    def test_shared_with_crew_but_crew_cannot_write(self, users):
         users["mgmt"].put(URL, json={"order": ["whp", "spp"], "names": {"whp": "Wellhead A"}})
         g = users["crew"].get(URL).json()
         assert g["order"] == ["whp", "spp"] and g["names"] == {"whp": "Wellhead A"}
         r = users["crew"].put(URL, json={"order": ["spp", "whp"], "names": {"spp": "Crew Name"}})
+        assert r.status_code == 403
+        g = users["mgmt"].get(URL).json()
+        assert g["order"] == ["whp", "spp"] and g["names"] == {"whp": "Wellhead A"}
+
+    def test_supervisor_can_write(self, users):
+        r = users["supervisor"].put(URL, json={"order": ["whp"], "names": {}})
         assert r.status_code == 200, r.text
         assert r.json()["updated_by"].startswith("test_cc_")
-        g = users["mgmt"].get(URL).json()
-        assert g["order"] == ["spp", "whp"] and g["names"] == {"spp": "Crew Name"}
 
     def test_guest_can_read_but_403_on_write(self, users):
         assert users["guest"].get(URL).status_code == 200

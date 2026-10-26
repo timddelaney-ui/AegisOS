@@ -6,6 +6,7 @@ import { Link } from "react-router-dom";
 import { API } from "../context/AuthContext";
 import { useRig } from "../context/RigContext";
 import { UNIT_SYSTEMS } from "../lib/units";
+import { assessLiveTelemetrySample, TELEMETRY_POLL_INTERVAL_MS } from "../lib/aegisTelemetry";
 import {
   SEED_TELEMETRY, CHANNELS, JOB_SETS, PLUGS, DEFAULT_CREW, DEPTH_MIN_FT, DEPTH_MAX_FT, simTick, fromDaqSample,
 } from "../lib/operatorConfig";
@@ -26,10 +27,8 @@ import { AddChannelModal } from "./operator/AddChannelModal";
 
 const CREW_KEY = "coilaegis_crew_rates_v1";
 const SIM_TICK_MS = 500;
-const LIVE_POLL_MS = 2000;
 const CANVAS_DRAW_MS = 500;
 const MAX_HISTORY_SAMPLES = 180;
-const MIN_LIVE_SAMPLE_INTERVAL_MS = 1000;
 
 const loadLS = (k, fallback) => { try { return JSON.parse(localStorage.getItem(k)) || fallback; } catch { return fallback; } };
 const saveLS = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { console.debug("[Operator] save failed", e?.message); } };
@@ -41,18 +40,13 @@ const PEN_ON = {
   blue: "bg-blue-500/20 border-blue-500 text-blue-300", purple: "bg-purple-500/20 border-purple-500 text-purple-300",
 };
 
-const isFresh = (s) => {
-  const ts = s?.created_at || "";
-  const parsed = Date.parse(/Z|[+-]\d\d:?\d\d$/.test(ts) ? ts : `${ts}Z`);
-  return Number.isFinite(parsed) && Date.now() - parsed < 5000;
-};
-
 export default function MainOperatorScreen() {
   const u = useOperatorUnits();
   const { rigId } = useRig();
   const [viewStyle, setViewStyle] = useState("3d-live");
   const [feedMode, setFeedMode] = useState("SIM");
   const [liveStale, setLiveStale] = useState(false);
+  const [missingLiveChannels, setMissingLiveChannels] = useState([]);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [isSimRunning, setIsSimRunning] = useState(true);
   const [colorMode, setColorMode] = useState("DLS");
@@ -71,7 +65,6 @@ export default function MainOperatorScreen() {
   const canvas3DRef = useRef(null);
   const historyRef = useRef([]);
   const lastCanvasDraw = useRef({ trajectory: 0, pens: 0 });
-  const lastLiveSampleAt = useRef(0);
   const [surveys, setSurveys] = useState([]);
   const [surveyId, setSurveyId] = useState(null);
   const [resizeTick, setResizeTick] = useState(0);
@@ -156,25 +149,29 @@ export default function MainOperatorScreen() {
   }, [isSimRunning, feedMode, playbackSpeed, liveStale, minFt, maxFt]);
 
   useEffect(() => {
-    if (feedMode !== "LIVE") { setLiveStale(false); return; }
+    if (feedMode !== "LIVE") { setLiveStale(false); setMissingLiveChannels([]); return; }
     let cancelled = false;
     const poll = async () => {
-      const now = Date.now();
-      if (now - lastLiveSampleAt.current < MIN_LIVE_SAMPLE_INTERVAL_MS) return;
-      lastLiveSampleAt.current = now;
       try {
         const r = await axios.get(`${API}/liveops/stream`, { params: { limit: 1, rig_id: rigId }, withCredentials: true });
         const s = r.data?.samples?.[0];
         if (cancelled) return;
-        if (s && isFresh(s)) { setLiveStale(false); setTelemetry((prev) => push(fromDaqSample(prev, s))); }
-        else setLiveStale(true);
+        const health = assessLiveTelemetrySample(s);
+        if (health.state === "LIVE") {
+          setLiveStale(false);
+          setMissingLiveChannels(health.missingChannels);
+          setTelemetry((prev) => push(fromDaqSample(prev, s)));
+        } else {
+          setLiveStale(true);
+          setMissingLiveChannels([]);
+        }
       } catch (e) {
-        if (!cancelled) setLiveStale(true);
+        if (!cancelled) { setLiveStale(true); setMissingLiveChannels([]); }
         console.debug("[Operator] live poll failed", e?.response?.status || e?.message);
       }
     };
     poll();
-    const id = setInterval(poll, LIVE_POLL_MS);
+    const id = setInterval(poll, TELEMETRY_POLL_INTERVAL_MS);
     return () => { cancelled = true; clearInterval(id); };
   }, [feedMode, rigId]);
 
@@ -210,7 +207,7 @@ export default function MainOperatorScreen() {
   }, [telemetry, viewStyle, activePens, resizeTick]);
 
   const live = feedMode === "LIVE" && !liveStale;
-  const sourceLabel = feedMode === "STANDBY" ? "standby • feed held" : live ? "live DAQ" : feedMode === "LIVE" ? "DAQ stale • sim fallback" : "simulated";
+  const sourceLabel = feedMode === "STANDBY" ? "standby • feed held" : live ? `live DAQ${missingLiveChannels.length ? ` • missing ${missingLiveChannels.join(", ")}` : ""}` : feedMode === "LIVE" ? "DAQ stale • sim fallback" : "simulated";
   const P = (v) => u.show(v, "pressure");
 
   const allChannels = useMemo(() => [...CHANNELS, ...layout.custom], [layout.custom]);
