@@ -32,7 +32,10 @@ def mongo():
 @pytest.fixture(scope="module")
 def users(mongo):
     exp = datetime.now(timezone.utc) + timedelta(days=2)
-    spec = {"crew": ("crew", TEAM), "guest": ("guest", TEAM), "other": ("field_manager", "team_9af2d0d38747")}
+    spec = {
+        "crew": ("crew", TEAM), "guest": ("guest", TEAM),
+        "supervisor": ("field_manager", TEAM), "other": ("field_manager", "team_9af2d0d38747"),
+    }
     out = {}
     wid = os.environ.get("PYTEST_XDIST_WORKER", "gw")  # per-worker users: xdist loadscope splits classes
     for k, (role, team) in spec.items():
@@ -86,12 +89,19 @@ class TestCorrelation:
         assert d["move_target"] == "plugs"
         assert d["entry"]["plug_name"] == "P1" and d["entry"]["counter_ft"] == 8403.5 and d["entry"]["prev_offset_ft"] == 12.35
 
-    def test_shared_with_crew_and_crew_can_post(self, users):
+    def test_shared_with_crew_but_crew_cannot_update(self, users):
         g = users["crew"].get(f"{API}/surveys/{SURVEY}/correlation").json()
         assert g["offset_ft"] == -3.5 and g["move_target"] == "plugs"
+        before = users["mgmt"].get(f"{API}/surveys/{SURVEY}/correlation").json()
         r = users["crew"].post(f"{API}/surveys/{SURVEY}/correlation", json={"offset_ft": 1, "reason": "nudge"})
-        assert r.status_code == 200
-        assert users["mgmt"].get(f"{API}/surveys/{SURVEY}/correlation").json()["updated_by"] .endswith("_crew@example.com")
+        assert r.status_code == 403
+        after = users["mgmt"].get(f"{API}/surveys/{SURVEY}/correlation").json()
+        assert after["updated_by"] == before["updated_by"] and after["offset_ft"] == before["offset_ft"]
+
+    def test_supervisor_can_update(self, users):
+        r = users["supervisor"].post(f"{API}/surveys/{SURVEY}/correlation", json={"offset_ft": 1, "reason": "nudge"})
+        assert r.status_code == 200, r.text
+        assert users["mgmt"].get(f"{API}/surveys/{SURVEY}/correlation").json()["updated_by"].startswith("test_cor_")
 
     def test_guest_forbidden(self, users):
         r = users["guest"].post(f"{API}/surveys/{SURVEY}/correlation", json={"offset_ft": 1})

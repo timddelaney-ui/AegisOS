@@ -34,7 +34,10 @@ def mongo():
 def users(mongo):
     """Create TEST_ crew / guest / other-team-supervisor users with sessions."""
     exp = datetime.now(timezone.utc) + timedelta(days=2)
-    spec = {"crew": ("crew", TEAM), "guest": ("guest", TEAM), "other": ("field_manager", "team_9af2d0d38747")}
+    spec = {
+        "crew": ("crew", TEAM), "guest": ("guest", TEAM),
+        "supervisor": ("field_manager", TEAM), "other": ("field_manager", "team_9af2d0d38747"),
+    }
     out = {}
     for k, (role, team) in spec.items():
         uid = f"TEST_plug_{k}"
@@ -81,6 +84,19 @@ class TestPlugList:
 
 
 class TestPlugCreateValidation:
+    def test_supervisor_can_create_plug(self, users):
+        r = users["supervisor"].post(f"{API}/surveys/{SURVEY}/plugs", json=_plug("TEST_SUPERVISOR", 5000, 5002))
+        assert r.status_code == 200, r.text
+        assert users["supervisor"].delete(f"{API}/plugs/{r.json()['plug_id']}").status_code == 200
+
+    def test_crew_cannot_create_plug(self, users):
+        r = users["crew"].post(f"{API}/surveys/{SURVEY}/plugs", json=_plug("TEST_CREW", 5000, 5002))
+        assert r.status_code == 403
+
+    def test_guest_cannot_create_plug(self, users):
+        r = users["guest"].post(f"{API}/surveys/{SURVEY}/plugs", json=_plug("TEST_GUEST", 5000, 5002))
+        assert r.status_code == 403
+
     @pytest.mark.parametrize("body,code", [
         (_plug(top=5002, bottom=5000), 422),
         (_plug(top=9999, bottom=10001), 422),
