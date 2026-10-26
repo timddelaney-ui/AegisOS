@@ -1076,7 +1076,7 @@ def _parse_utc(value) -> Optional[datetime]:
 
 
 # Iter 21 — Free-for-all mode. Flip this env var to "false" to re-enable paid gating.
-FREE_FOR_ALL = os.environ.get("CT_FREE_FOR_ALL", "true").strip().lower() in ("1", "true", "yes", "on")
+FREE_FOR_ALL = os.environ.get("CT_FREE_FOR_ALL", "false").strip().lower() in ("1", "true", "yes", "on")
 
 
 def _user_is_pro(user: dict) -> bool:
