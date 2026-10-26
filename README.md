@@ -34,6 +34,17 @@ yarn start
 
 The frontend uses `REACT_APP_BACKEND_URL` to reach the backend; the example points to `http://localhost:8000`. The API is served under `/api`.
 
+### Optional messaging configuration
+
+- **Handover email** uses Resend:
+  - `RESEND_API_KEY`
+  - `RESEND_FROM_EMAIL` (defaults to `onboarding@resend.dev`)
+- **Shift-end SMS** uses Twilio when enabled:
+  - `SMS_PROVIDER=twilio`
+  - `SMS_FROM_NUMBER` (E.164, for example `+14035551234`)
+  - `TWILIO_ACCOUNT_SID`
+  - `TWILIO_AUTH_TOKEN`
+
 ## Telemetry channel model
 The live operations layer tracks the following channels:
 
