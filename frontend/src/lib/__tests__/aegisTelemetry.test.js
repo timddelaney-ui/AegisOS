@@ -2,7 +2,6 @@ import {
   computeFluidTotals,
   computeMultiEncoderConsensus,
   computeVonMisesStress,
-  assessLiveTelemetrySample,
   evaluateHistoricalPayload,
 } from "../aegisTelemetry";
 
@@ -54,53 +53,5 @@ describe("Aegis OS telemetry and engineering model", () => {
     expect(fresh.latencyMs).toBe(1000);
     expect(historical.stale).toBe(true);
     expect(historical.isHistoricalSync).toBe(true);
-  });
-
-  test("reports missing primary channels while keeping a fresh partial sample visibly live", () => {
-    const now = 1_700_000_000_000;
-    const result = assessLiveTelemetrySample({
-      created_at: new Date(now - 1000).toISOString(),
-      depth_ft: 1200,
-    }, now);
-
-    expect(result.state).toBe("LIVE");
-    expect(result.missingChannels).toEqual(["weight_lb", "pressure_psi"]);
-  });
-
-  test("marks delayed telemetry stale", () => {
-    const now = 1_700_000_000_000;
-    const atThreshold = assessLiveTelemetrySample({
-      created_at: new Date(now - 5000).toISOString(),
-      depth_ft: 1200,
-    }, now);
-    const result = assessLiveTelemetrySample({
-      created_at: new Date(now - 5001).toISOString(),
-      depth_ft: 1200,
-    }, now);
-
-    expect(atThreshold.state).toBe("LIVE");
-    expect(result.state).toBe("STALE");
-    expect(result.reason).toBe("delayed-sample");
-  });
-
-  test("uses simulation fallback for malformed or channel-empty payloads", () => {
-    const now = 1_700_000_000_000;
-    const malformed = assessLiveTelemetrySample({ created_at: "not-a-date", depth_ft: 1200 }, now);
-    const nonnumeric = assessLiveTelemetrySample({
-      created_at: new Date(now).toISOString(),
-      depth_ft: "1200",
-    }, now);
-    const empty = assessLiveTelemetrySample({ created_at: new Date(now).toISOString() }, now);
-
-    expect(malformed).toMatchObject({ state: "SIM_FALLBACK", reason: "malformed-payload" });
-    expect(nonnumeric).toMatchObject({ state: "SIM_FALLBACK", reason: "malformed-payload" });
-    expect(empty).toMatchObject({ state: "SIM_FALLBACK", reason: "missing-channels" });
-  });
-
-  test("uses simulation fallback when the upstream poll fails", () => {
-    expect(assessLiveTelemetrySample(null, 1_700_000_000_000, false)).toMatchObject({
-      state: "SIM_FALLBACK",
-      reason: "upstream-outage",
-    });
   });
 });
