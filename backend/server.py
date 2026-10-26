@@ -28,8 +28,11 @@ client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ["DB_NAME"]]
 
 # Stripe
-stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "sk_test_emergent")
+IS_PRODUCTION = os.environ.get("APP_ENV", "").lower() == "production"
+stripe.api_key = os.environ.get("STRIPE_SECRET_KEY") or ("" if IS_PRODUCTION else "sk_test_emergent")
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+if IS_PRODUCTION and not (os.environ.get("STRIPE_SECRET_KEY") and STRIPE_WEBHOOK_SECRET):
+    raise RuntimeError("STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET are required when APP_ENV=production")
 
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
@@ -4127,12 +4130,27 @@ api_router.include_router(_build_plugs_router(require_user=require_user, db=db))
 
 
 # ============ APP CONFIG ============
+@api_router.get("/health")
+async def health():
+    try:
+        await client.admin.command("ping")
+    except Exception:
+        raise HTTPException(status_code=503, detail="database unavailable")
+    return {"status": "ok"}
+
+
 app.include_router(api_router)
+
+_cors_origins = [o.strip() for o in os.environ.get("CORS_ORIGINS", "").split(",") if o.strip()]
+if IS_PRODUCTION and (not _cors_origins or "*" in _cors_origins):
+    raise RuntimeError("CORS_ORIGINS must list explicit origins when APP_ENV=production")
 
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origin_regex=".*",
+    allow_origins=[o for o in _cors_origins if o != "*"],
+    # Non-production default keeps previous permissive behaviour for local/preview use.
+    allow_origin_regex=None if IS_PRODUCTION else ".*",
     allow_methods=["*"],
     allow_headers=["*"],
 )
