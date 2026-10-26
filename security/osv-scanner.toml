@@ -6,19 +6,9 @@ ignoreUntil = 2026-11-25
 reason = "No fixed PyJWT release is listed; monitor upstream and remove this exception when patched."
 
 [[IgnoredVulns]]
-id = "GHSA-wj6h-64fc-37mp"
-ignoreUntil = 2026-11-25
-reason = "No fixed ecdsa release is listed; monitor upstream and remove this exception when patched."
-
-[[IgnoredVulns]]
-id = "GHSA-3qf3-8w2g-rqmx"
-ignoreUntil = 2026-11-25
-reason = "No fixed python-jose release is listed; monitor upstream and remove this exception when patched."
-
-[[IgnoredVulns]]
 id = "GHSA-86w9-cpqp-85rv"
 ignoreUntil = 2026-11-25
-reason = "No fixed node-forge release is listed; monitor upstream and remove this exception when patched."
+reason = "The latest published node-forge release, 1.4.0, remains affected; reassess and remove this exception when an upstream fix is available."
 
 [[IgnoredVulns]]
 id = "GHSA-rj75-hqrm-r3gf"
