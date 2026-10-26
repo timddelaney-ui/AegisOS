@@ -1,1 +1,41 @@
 # Add reviewed, time-limited vulnerability exceptions here. See dependency-scan-policy.md.
+
+[[IgnoredVulns]]
+id = "GHSA-gvp8-978c-rx2q"
+ignoreUntil = 2026-11-25
+reason = "No fixed PyJWT release is listed; monitor upstream and remove this exception when patched."
+
+[[IgnoredVulns]]
+id = "GHSA-wj6h-64fc-37mp"
+ignoreUntil = 2026-11-25
+reason = "No fixed ecdsa release is listed; monitor upstream and remove this exception when patched."
+
+[[IgnoredVulns]]
+id = "GHSA-3qf3-8w2g-rqmx"
+ignoreUntil = 2026-11-25
+reason = "No fixed python-jose release is listed; monitor upstream and remove this exception when patched."
+
+[[IgnoredVulns]]
+id = "GHSA-86w9-cpqp-85rv"
+ignoreUntil = 2026-11-25
+reason = "No fixed node-forge release is listed; monitor upstream and remove this exception when patched."
+
+[[IgnoredVulns]]
+id = "GHSA-rj75-hqrm-r3gf"
+ignoreUntil = 2026-11-25
+reason = "The fix requires postcss-selector-parser 7, incompatible with this tree's 6.x consumers; upgrade those consumers and remove this exception."
+
+[[IgnoredVulns]]
+id = "GHSA-2p49-hgcm-8545"
+ignoreUntil = 2026-11-25
+reason = "The fix requires SVGO 2 or later; the current SVGR chain requires SVGO 1, so upgrade that chain and remove this exception."
+
+[[IgnoredVulns]]
+id = "GHSA-4vpr-x523-8j87"
+ignoreUntil = 2026-11-25
+reason = "The fix requires SVGO 2 or later; the current SVGR chain requires SVGO 1, so upgrade that chain and remove this exception."
+
+[[IgnoredVulns]]
+id = "GHSA-w27v-7q3p-w38r"
+ignoreUntil = 2026-11-25
+reason = "The fix requires SVGO 2 or later; the current SVGR chain requires SVGO 1, so upgrade that chain and remove this exception."
