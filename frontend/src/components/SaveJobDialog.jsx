@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { X, Save, Loader2, User, Users } from "lucide-react";
-import axios from "axios";
-import { API } from "../context/AuthContext";
+import { toast } from "sonner";
+import { postResilient } from "../lib/fieldStore";
 
 const SaveJobDialog = ({ sheetKey, sheetTitle, unitSystem, values, hasTeam, onClose, onSaved }) => {
   const [title, setTitle] = useState(`${sheetTitle} — ${new Date().toLocaleDateString()}`);
@@ -13,15 +13,17 @@ const SaveJobDialog = ({ sheetKey, sheetTitle, unitSystem, values, hasTeam, onCl
     if (!title.trim()) return;
     setSaving(true); setError(null);
     try {
-      const { data } = await axios.post(
-        `${API}/jobs`,
+      const res = await postResilient(
+        "/jobs",
         { sheet_key: sheetKey, title: title.trim(), unit_system: unitSystem, values, visibility },
-        { withCredentials: true }
+        { kind: "job" },
       );
-      onSaved && onSaved(data);
+      if (res.status === "rejected") { setError(res.error || "Failed to save"); setSaving(false); return; }
+      if (res.status === "queued") toast.warning("Saved on this device — will upload when signal returns");
+      onSaved && onSaved(res.data);
       onClose();
     } catch (e) {
-      setError(e.response?.data?.detail || "Failed to save");
+      setError("Failed to save");
     }
     setSaving(false);
   };

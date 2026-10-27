@@ -5,9 +5,13 @@ import App from "./App";
 import { AuthProvider } from "./context/AuthContext";
 import { RigProvider } from "./context/RigContext";
 import "./index.css";
+import { hydrateKv, startFieldSync } from "./lib/fieldStore";
+import { applyStoredTheme } from "./lib/cabinTheme";
+
+applyStoredTheme();
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
-root.render(
+const render = () => root.render(
   <React.StrictMode>
     <BrowserRouter>
       <AuthProvider>
@@ -18,3 +22,10 @@ root.render(
     </BrowserRouter>
   </React.StrictMode>
 );
+
+// Restore IndexedDB snapshots into localStorage BEFORE first render so every
+// useState initializer sees the last saved field state (cap the wait at 1.5 s).
+Promise.race([hydrateKv(), new Promise((r) => setTimeout(r, 1500))]).finally(() => {
+  render();
+  startFieldSync();
+});

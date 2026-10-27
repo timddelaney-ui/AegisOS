@@ -38,7 +38,7 @@ import DaqConfigPage from "./pages/DaqConfigPage";
 import SecurityCompliancePage from "./pages/SecurityCompliancePage";
 import ShareRedeemPage from "./pages/ShareRedeemPage";
 import { ActiveReelProvider } from "./context/ActiveReelContext";
-import { UnitProvider } from "./context/UnitContext";
+import { UnitProvider, useUnits } from "./context/UnitContext";
 import { TierProvider, useTier } from "./context/TierContext";
 import TierTutorial, { useTierTutorial } from "./components/TierTutorial";
 import { UpgradeModal, TierProtectedRoute } from "./components/TierGate";
@@ -59,6 +59,7 @@ import { workbookData } from "./mock/workbookData";
 import { sheetInService } from "./lib/serviceCatalog";
 import { Loader2, Clock } from "lucide-react";
 import axios from "axios";
+import FieldToolsBar from "./components/FieldToolsBar";
 import "./App.css";
 
 // Sheets included in the 30-day free trial
@@ -88,7 +89,10 @@ const Workbook = () => {
   const location = useLocation();
   const initialLoadJob = location.state?.loadJob;
   const [currentSheet, setCurrentSheet] = useState(initialLoadJob?.sheet_key || "Pipe_Stretch");
-  const [unitSystem, setUnitSystem] = useState(initialLoadJob?.unit_system || "met");
+  // Single source of truth: the global UnitContext (sheets use "imp"/"met" internally).
+  const { system, setSystem } = useUnits();
+  const unitSystem = system === "metric" ? "met" : "imp";
+  const setUnitSystem = (v) => setSystem(v === "met" ? "metric" : "imperial");
   const [loadedValues, setLoadedValues] = useState(initialLoadJob?.values || null);
   const [hasTeam, setHasTeam] = useState(false);
   const { user } = useAuth();
@@ -114,6 +118,7 @@ const Workbook = () => {
 
   // Clear location state after consumption
   useEffect(() => {
+    if (initialLoadJob?.unit_system) setUnitSystem(initialLoadJob.unit_system);
     if (initialLoadJob) {
       window.history.replaceState({}, "");
     }
@@ -234,6 +239,7 @@ const AppRouter = () => {
   }
   return (
     <>
+      <FieldToolsBar />
       <TrainingModeBanner />
       <BetaFeedbackDrawer />
       <Routes>

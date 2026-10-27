@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Pin, Play, Save, Sparkles, Brain, AlertOctagon, X } from "lucide-react";
 import axios from "axios";
 import { workbookData, getDefaultValue } from "../mock/workbookData";
+import { validateSheetValues, convertSheetValues } from "../lib/inputSafety";
+import { getStateSync, setState, walAppend } from "../lib/fieldStore";
 import SaveJobDialog from "./SaveJobDialog";
 import ResultsPanel from "./ResultsPanel";
 import AIPanel from "./AIPanel";
@@ -111,18 +113,45 @@ const SheetContent = ({ sheetKey, unitSystem, onUnitChange, initialValues, hasTe
   const { user } = useAuth();
   const { rigId } = useRig();
 
+  const skipPersist = useRef(false);
+  const snapKey = `sheet_inputs:${sheetKey}`;
+
+  // Restore order: loaded job → last autosaved entry (converted if the unit system changed) → defaults.
   useEffect(() => {
+    skipPersist.current = true;
     if (initialValues) {
       setValues(initialValues);
       return;
     }
-    const initial = {};
-    params.forEach((p, i) => {
-      initial[i] = getDefaultValue(p, unitSystem);
-    });
-    setValues(initial);
+    const defaults = {};
+    params.forEach((p, i) => { defaults[i] = getDefaultValue(p, unitSystem); });
+    const saved = getStateSync(snapKey, null);
+    if (saved?.values) {
+      let restored = saved.values;
+      if (saved.unitSystem !== unitSystem) {
+        restored = convertSheetValues(data.imp, data.met, saved.values, unitSystem === "met");
+        params.forEach((_, i) => { if (restored[i] === "" && saved.values[i] !== "") restored[i] = defaults[i]; });
+      }
+      setValues(restored);
+      return;
+    }
+    setValues(defaults);
     // eslint-disable-next-line
   }, [sheetKey, unitSystem, initialValues]);
+
+  // Autosave every keystroke (sync localStorage + IndexedDB) so a crash loses nothing.
+  useEffect(() => {
+    if (skipPersist.current) { skipPersist.current = false; return undefined; }
+    if (!Object.keys(values).length) return undefined;
+    setState(snapKey, { unitSystem, values });
+    const t = setTimeout(() => walAppend("sheet_inputs", { sheetKey, unitSystem, values }), 600);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line
+  }, [values]);
+
+  // Strict parsing: comma decimals normalised, bad/implausible entries flagged and withheld from every calc.
+  const { clean, errors } = useMemo(() => validateSheetValues(params, values), [params, values]);
+  const errorCount = Object.keys(errors).length;
 
   const handleInputChange = (idx, val) => {
     setValues((prev) => ({ ...prev, [idx]: val }));
@@ -135,28 +164,28 @@ const SheetContent = ({ sheetKey, unitSystem, onUnitChange, initialValues, hasTe
 
   // Live compute results whenever inputs or unit system change
   const results = useMemo(
-    () => computeResults(sheetKey, values, params, unitSystem),
-    [sheetKey, values, params, unitSystem]
+    () => computeResults(sheetKey, clean, params, unitSystem),
+    [sheetKey, clean, params, unitSystem]
   );
 
   // Watchdog: debounced server-side safety-eval; fires Skipper alert into team chat.
   // Only runs when the user is on a team.
   useEffect(() => {
     if (!hasTeam) return;
-    const payload = buildWatchdogPayload(sheetKey, values, params, unitSystem, results);
+    const payload = buildWatchdogPayload(sheetKey, clean, params, unitSystem, results);
     const hasSignal = Object.values(payload).some((v) => v !== null && v !== undefined && !isNaN(v));
     if (!hasSignal) return;
     const t = setTimeout(() => {
       axios.post(`${API}/crew/safety-eval`, { sheet_key: sheetKey, values: payload, rig_id: rigId }, { withCredentials: true }).catch(() => {});
     }, 1500);
     return () => clearTimeout(t);
-  }, [sheetKey, values, params, unitSystem, results, hasTeam, rigId]);
+  }, [sheetKey, clean, params, unitSystem, results, hasTeam, rigId]);
 
   // Client-side INSTANT flash: same threshold logic as the server, but fires immediately with
   // a client-side quip so the tool push sees the hazard before the 1.5s server round-trip.
   // Non-persistent — the durable crew-channel alert is still the server watchdog's job.
   useEffect(() => {
-    const payload = buildWatchdogPayload(sheetKey, values, params, unitSystem, results);
+    const payload = buildWatchdogPayload(sheetKey, clean, params, unitSystem, results);
     const rules = CLIENT_THRESHOLDS[sheetKey] || [];
     for (const rule of rules) {
       try {
@@ -174,7 +203,7 @@ const SheetContent = ({ sheetKey, unitSystem, onUnitChange, initialValues, hasTe
         }
       } catch { /* ignore */ }
     }
-  }, [sheetKey, values, params, unitSystem, results]);
+  }, [sheetKey, clean, params, unitSystem, results]);
 
   // Build a compact context object for the AI
   const buildAIContext = () => {
@@ -266,8 +295,10 @@ const SheetContent = ({ sheetKey, unitSystem, onUnitChange, initialValues, hasTe
                   value={values[idx] || ""}
                   onChange={(e) => handleInputChange(idx, e.target.value)}
                   data-testid={`sheet-input-${idx}`}
-                  className="w-full bg-[#FAFAFA] border border-[#CCC] px-2 py-1.5 rounded-sm text-[13px] font-semibold text-[#111] outline-none focus:border-[#FF6B1A] focus:bg-white focus:ring-2 focus:ring-[#FF6B1A]/10"
+                  aria-invalid={!!errors[idx]}
+                  className={`w-full bg-[#FAFAFA] border border-[#CCC] px-2 py-2 rounded-sm text-[14px] font-semibold text-[#111] outline-none focus:border-[#FF6B1A] focus:bg-white focus:ring-2 focus:ring-[#FF6B1A]/10 ${errors[idx] ? "aegis-invalid" : ""}`}
                 />
+                {errors[idx] && <div className="aegis-field-error" data-testid={`sheet-error-${idx}`}>{errors[idx]}</div>}
               </td>
             </tr>
           ))}
@@ -275,7 +306,13 @@ const SheetContent = ({ sheetKey, unitSystem, onUnitChange, initialValues, hasTe
       </table>
 
       {/* Live-calculated results */}
-      <ResultsPanel data={results} />
+      {errorCount > 0 ? (
+        <div role="alert" data-testid="sheet-invalid-banner" className="bg-[#C00000] text-white rounded p-3 text-sm font-bold">
+          ⚠ {errorCount} invalid input{errorCount > 1 ? "s" : ""} — results are WITHHELD until corrected (red fields).
+        </div>
+      ) : (
+        <ResultsPanel data={results} />
+      )}
 
       {/* AI action buttons */}
       <div className="grid grid-cols-2 gap-2">

@@ -7,13 +7,14 @@ Imported by server.py — relies on `api_router`, `db`, `require_user`,
 """
 
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form, Response
-from pydantic import BaseModel
-from typing import List, Optional, Dict, Any
+from pydantic import BaseModel, Field
+from typing import List, Optional, Dict, Any, Literal
 from datetime import datetime, timezone, timedelta
 import csv
 import io
 import math
 import uuid
+from pymongo.errors import DuplicateKeyError
 
 
 # ---------- RBAC: four-role mapping with legacy aliases ----------
@@ -91,6 +92,27 @@ def ser(doc: Optional[dict]) -> Optional[dict]:
         else:
             out[k] = v
     return out
+
+
+MAX_REPLAY_AGE = timedelta(days=14)
+MAX_CLOCK_SKEW = timedelta(minutes=10)
+
+
+def parse_event_at(raw: Optional[str], now: Optional[datetime] = None) -> datetime:
+    """Client-supplied event time for offline replay; falls back to server time when
+    missing, unparseable, in the future, or older than MAX_REPLAY_AGE."""
+    now = now or now_utc()
+    if not raw:
+        return now
+    try:
+        dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except Exception:
+        return now
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    if dt > now + MAX_CLOCK_SKEW or dt < now - MAX_REPLAY_AGE:
+        return now
+    return dt
 
 
 def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _is_admin):
@@ -202,18 +224,22 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
     LIVEOPS_MAX_SAMPLES = 3600  # ~1 hr @ 1 Hz, PER (team_id, rig_id)
 
     class LiveSample(BaseModel):
-        rig_id: Optional[str] = None
-        reel_id: Optional[str] = None
-        weight_lb: Optional[float] = None
-        pressure_psi: Optional[float] = None
-        traction_pressure_psi: Optional[float] = None
-        depth_ft: Optional[float] = None
-        p_internal_psi: Optional[float] = None
-        p_external_psi: Optional[float] = None
-        axial_force_lbf: Optional[float] = None
-        vm_utilization: Optional[float] = None   # 0..1 Von Mises / 80%-SMYS envelope util
-        fatigue_worst: Optional[float] = None    # 0..1 reel worst-node damage snapshot
-        source: str = "simulated"  # 'simulated' | 'wits' | 'modbus' | 'manual'
+        rig_id: Optional[str] = Field(None, max_length=64)
+        reel_id: Optional[str] = Field(None, max_length=64)
+        weight_lb: Optional[float] = Field(None, ge=-1e7, le=1e7, allow_inf_nan=False)
+        pressure_psi: Optional[float] = Field(None, ge=0, le=30000, allow_inf_nan=False)
+        traction_pressure_psi: Optional[float] = Field(None, ge=0, le=30000, allow_inf_nan=False)
+        depth_ft: Optional[float] = Field(None, ge=0, le=100000, allow_inf_nan=False)
+        p_internal_psi: Optional[float] = Field(None, ge=0, le=30000, allow_inf_nan=False)
+        p_external_psi: Optional[float] = Field(None, ge=0, le=30000, allow_inf_nan=False)
+        axial_force_lbf: Optional[float] = Field(None, ge=-1e7, le=1e7, allow_inf_nan=False)
+        vm_utilization: Optional[float] = Field(None, ge=0, le=10, allow_inf_nan=False)   # 0..1 Von Mises / 80%-SMYS envelope util
+        fatigue_worst: Optional[float] = Field(None, ge=0, le=1, allow_inf_nan=False)    # 0..1 reel worst-node damage snapshot
+        source: str = Field("simulated", max_length=32)  # 'simulated' | 'wits' | 'modbus' | 'manual'
+        client_id: Optional[str] = Field(None, min_length=8, max_length=64)  # idempotency key (offline replay)
+        event_at: Optional[str] = Field(None, max_length=40)                 # when the sample was actually taken
+
+    _liveops_index_ready = {"ok": False}
 
     @api_router.post("/liveops/feed")
     async def feed_liveops(body: LiveSample, user: dict = Depends(require_user)):
@@ -221,9 +247,26 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
         team_id = user.get("team_id")
         if not team_id:
             raise HTTPException(400, "No team.")
+        if body.reel_id and body.source == "simulated":
+            reel = await db.reels.find_one({"reel_id": body.reel_id, "team_id": team_id}, {"_id": 0, "sandbox": 1})
+            if reel and not reel.get("sandbox"):
+                raise HTTPException(400, "Simulated data cannot be attached to a real reel. Use a sandbox reel.")
         now = now_utc()
-        doc = {**body.model_dump(), "team_id": team_id, "created_at": now, "user_email": user["email"]}
-        await db.liveops_samples.insert_one(doc)
+        event_at = parse_event_at(body.event_at, now)
+        if body.client_id and not _liveops_index_ready["ok"]:
+            await db.liveops_samples.create_index(
+                [("team_id", 1), ("client_id", 1)], unique=True,
+                partialFilterExpression={"client_id": {"$type": "string"}},
+            )
+            _liveops_index_ready["ok"] = True
+        payload = body.model_dump(exclude={"event_at"})
+        if not body.client_id:
+            payload.pop("client_id", None)
+        doc = {**payload, "team_id": team_id, "created_at": event_at, "event_at": event_at, "received_at": now, "user_email": user["email"]}
+        try:
+            await db.liveops_samples.insert_one(doc)
+        except DuplicateKeyError:
+            return {"duplicate": True, "client_id": body.client_id}
         # Keep only the last N samples per (team, rig) — pruned opportunistically
         rig_scope = {"team_id": team_id, "rig_id": body.rig_id}
         count = await db.liveops_samples.count_documents(rig_scope)
@@ -309,20 +352,21 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
     # Reel = full physical pipe asset. Intervals = tapered sections (OD, ID derived from WT, grade, length).
     #   grade: QT-800 | QT-900 | QT-1000 | CT-110
     class ReelInterval(BaseModel):
-        start_md_ft: float = 0.0
-        end_md_ft: float
-        od_in: float
-        wt_in: float
+        start_md_ft: float = Field(0.0, ge=0, le=100000, allow_inf_nan=False)
+        end_md_ft: float = Field(..., gt=0, le=100000, allow_inf_nan=False)
+        od_in: float = Field(..., gt=0, le=10, allow_inf_nan=False)
+        wt_in: float = Field(..., gt=0, le=2, allow_inf_nan=False)
         grade: str = "QT-900"
-        smys_psi: Optional[int] = None  # if omitted, derived from grade
+        smys_psi: Optional[int] = Field(None, gt=0, le=200000)  # if omitted, derived from grade
 
     class ReelCreate(BaseModel):
         name: str
         serial: Optional[str] = None
-        total_length_ft: float
+        total_length_ft: float = Field(..., gt=0, le=100000, allow_inf_nan=False)
         intervals: List[ReelInterval]
         notes: Optional[str] = None
         source: Optional[str] = None  # 'manual'|'csv'|'json'
+        sandbox: bool = False  # training/simulation reel — only sandbox reels accept simulated feeds
 
     class ReelUpdate(BaseModel):
         name: Optional[str] = None
@@ -357,6 +401,7 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
             "total_length_ft": body.total_length_ft,
             "intervals": intervals,
             "source": body.source or "manual",
+            "sandbox": bool(body.sandbox),
             "notes": (body.notes or "").strip() or None,
             "retired": False,
             "is_active": False,
@@ -536,11 +581,15 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
         return max(50.0, base_nf * grade_factor)
 
     class PressureFeed(BaseModel):
-        reel_id: str
-        depth_ft: float
-        traction_pressure_psi: float
-        cycle_count: int = 1  # bending events this feed window
-        source: str = "manual"  # 'manual' | 'simulated' | 'daq'
+        reel_id: str = Field(..., max_length=64)
+        depth_ft: float = Field(..., ge=0, le=100000, allow_inf_nan=False)
+        traction_pressure_psi: float = Field(..., ge=0, le=30000, allow_inf_nan=False)
+        cycle_count: int = Field(1, ge=1, le=100)  # bending events this feed window
+        source: Literal["manual", "simulated", "daq"] = "manual"
+        client_id: Optional[str] = Field(None, min_length=8, max_length=64)  # idempotency key
+        event_at: Optional[str] = Field(None, max_length=40)
+
+    _fatigue_index_ready = {"ok": False}
 
     @api_router.post("/fatigue/feed")
     async def feed_fatigue(body: PressureFeed, user: dict = Depends(require_user)):
@@ -553,51 +602,82 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
             raise HTTPException(404, "Reel not found.")
         if reel.get("retired"):
             raise HTTPException(400, "Reel retired. Reset or activate a new reel.")
+        if body.source == "simulated" and not reel.get("sandbox"):
+            raise HTTPException(400, "Simulated feed blocked: this is a real reel. Use a sandbox reel for simulation.")
 
-        state = await db.reel_fatigue.find_one({"reel_id": body.reel_id}, {"_id": 0})
+        state = await db.reel_fatigue.find_one({"reel_id": body.reel_id, "team_id": team_id}, {"_id": 0})
         spacing = int((state or {}).get("spacing_ft") or NODE_SPACING_FT_DEFAULT)
         total = reel.get("total_length_ft") or (reel["intervals"][-1]["end_md_ft"] if reel.get("intervals") else 10000)
+        if body.depth_ft > total + 1e-6:
+            raise HTTPException(422, f"Depth {body.depth_ft:.0f} ft exceeds reel length {total:.0f} ft.")
         n_nodes = _node_count(total, spacing)
-        damage = (state or {}).get("damage") or [0.0] * n_nodes
-        if len(damage) < n_nodes:
-            damage += [0.0] * (n_nodes - len(damage))
-        damage = damage[:n_nodes]
 
-        # Which node is currently bending at the gooseneck / reel-core?
-        # Model: every bend event affects THREE nodes (reel core + gooseneck zone)
+        now = now_utc()
+        event_at = parse_event_at(body.event_at, now)
+
+        # Idempotency: claim the client_id before touching damage so a replay is a no-op.
+        if body.client_id:
+            if not _fatigue_index_ready["ok"]:
+                await db.reel_fatigue_events.create_index(
+                    [("team_id", 1), ("client_id", 1)], unique=True,
+                    partialFilterExpression={"client_id": {"$type": "string"}},
+                )
+                _fatigue_index_ready["ok"] = True
+            try:
+                await db.reel_fatigue_events.insert_one({
+                    "reel_id": body.reel_id, "team_id": team_id, "client_id": body.client_id,
+                    "status": "pending", "created_at": now,
+                })
+            except DuplicateKeyError:
+                cur = await db.reel_fatigue.find_one({"reel_id": body.reel_id, "team_id": team_id}, {"_id": 0}) or {}
+                dmg = cur.get("damage") or [0.0] * n_nodes
+                return {"reel_id": body.reel_id, "duplicate": True, "spacing_ft": spacing, "node_count": n_nodes,
+                        "damage": dmg, "worst_damage": max(dmg) if dmg else 0.0, "derate_warning": (max(dmg) if dmg else 0.0) >= 0.8}
+
+        # Make sure the ledger exists and is long enough, then apply damage with atomic $inc.
+        await db.reel_fatigue.update_one(
+            {"reel_id": body.reel_id, "team_id": team_id},
+            {"$setOnInsert": {"reel_id": body.reel_id, "team_id": team_id, "spacing_ft": spacing,
+                              "node_count": n_nodes, "damage": [0.0] * n_nodes, "created_at": now}},
+            upsert=True,
+        )
+        cur_len = len((state or {}).get("damage") or [])
+        if state and cur_len < n_nodes:
+            await db.reel_fatigue.update_one(
+                {"reel_id": body.reel_id, "team_id": team_id},
+                {"$push": {"damage": {"$each": [0.0] * (n_nodes - cur_len)}}},
+            )
+
         bend_node = min(int(body.depth_ft / spacing), n_nodes - 1)
         uplift = max(0.5, min(2.5, 1 + PRESSURE_UPLIFT_K * (body.traction_pressure_psi / P_REF_PSI - 1)))
         # Phase 2 Module 4: multiply by reel's K_t (gripper block stress concentration)
-        k_t = float(reel.get("k_t") or 1.0)
-        uplift *= k_t
-        # Nodes that bend during the trip
-        affected = sorted(set([
-            bend_node,
-            max(0, bend_node - 1),
-            min(n_nodes - 1, bend_node + 1),
-        ]))
+        uplift *= float(reel.get("k_t") or 1.0)
+        # Nodes that bend during the trip (reel core + gooseneck zone)
+        affected = sorted({bend_node, max(0, bend_node - 1), min(n_nodes - 1, bend_node + 1)})
         new_events: List[Dict[str, Any]] = []
+        inc: Dict[str, float] = {}
         for ni in affected:
             md = ni * spacing
             seg = _interval_at(reel, md) or (reel.get("intervals") or [{}])[0]
             od_in = seg.get("od_in", 2.0)
             smys = seg.get("smys_psi", 90000)
-            # Each bend event = 1 cycle through reel-core-radius wrap (worst) counted via Miner
             nf = _nf_cycles(od_in, REEL_CORE_RADIUS_FT, smys)
-            damage[ni] = min(1.0, damage[ni] + (body.cycle_count * uplift) / nf)
-            new_events.append({"node_idx": ni, "md_ft": md, "nf_cycles": nf, "damage_add": body.cycle_count * uplift / nf})
+            add = body.cycle_count * uplift / nf
+            inc[f"damage.{ni}"] = add
+            new_events.append({"node_idx": ni, "md_ft": md, "nf_cycles": nf, "damage_add": add})
 
-        update = {
-            "reel_id": body.reel_id, "team_id": team_id,
-            "spacing_ft": spacing, "node_count": n_nodes,
-            "damage": damage, "updated_at": now_utc(),
-            "last_pressure_psi": body.traction_pressure_psi,
-            "last_depth_ft": body.depth_ft,
-            "last_source": body.source,
-        }
-        await db.reel_fatigue.update_one({"reel_id": body.reel_id}, {"$set": update, "$setOnInsert": {"created_at": now_utc()}}, upsert=True)
-        # append event audit
-        await db.reel_fatigue_events.insert_one({
+        after = await db.reel_fatigue.find_one_and_update(
+            {"reel_id": body.reel_id, "team_id": team_id},
+            {"$inc": inc, "$set": {
+                "spacing_ft": spacing, "node_count": n_nodes, "updated_at": now,
+                "last_pressure_psi": body.traction_pressure_psi,
+                "last_depth_ft": body.depth_ft, "last_source": body.source,
+            }},
+            return_document=True, projection={"_id": 0},
+        )
+        damage = [min(1.0, float(d)) for d in (after or {}).get("damage", [])]
+
+        event_doc = {
             "reel_id": body.reel_id, "team_id": team_id,
             "pressure_psi": body.traction_pressure_psi,
             "depth_ft": body.depth_ft,
@@ -606,8 +686,15 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
             "source": body.source,
             "events": new_events,
             "user_email": user["email"],
-            "created_at": now_utc(),
-        })
+            "status": "applied",
+            "created_at": now,
+            "event_at": event_at,
+        }
+        if body.client_id:
+            await db.reel_fatigue_events.update_one(
+                {"team_id": team_id, "client_id": body.client_id}, {"$set": event_doc})
+        else:
+            await db.reel_fatigue_events.insert_one(event_doc)
         worst = max(damage) if damage else 0.0
         return {"reel_id": body.reel_id, "spacing_ft": spacing, "node_count": n_nodes, "damage": damage, "worst_damage": worst, "derate_warning": worst >= 0.8}
 
