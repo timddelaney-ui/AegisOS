@@ -11,7 +11,12 @@ import axios from "axios";
 import { API } from "../context/AuthContext";
 
 export const DB_NAME = "aegis_field_v1";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
+const STATUS_INDEX = "by_status_created";
+const DRAIN_BATCH = 100;
+const MIN_GAP_MS = 2000;
+const BACKOFF_BASE_MS = 15000;
+const BACKOFF_MAX_MS = 5 * 60 * 1000;
 const STORES = { outbox: "client_id", wal: null, kv: "key" };
 const LS_PREFIX = "aegis_kv_";
 const LS_FALLBACK = "aegis_fb_";
@@ -39,9 +44,12 @@ const openDb = () => {
       req.onupgradeneeded = () => {
         const db = req.result;
         Object.entries(STORES).forEach(([name, keyPath]) => {
-          if (db.objectStoreNames.contains(name)) return;
-          db.createObjectStore(name, keyPath ? { keyPath } : { autoIncrement: true });
+          if (!db.objectStoreNames.contains(name)) {
+            db.createObjectStore(name, keyPath ? { keyPath } : { autoIncrement: true });
+          }
         });
+        const outbox = req.transaction.objectStore("outbox");
+        if (!outbox.indexNames.contains(STATUS_INDEX)) outbox.createIndex(STATUS_INDEX, ["status", "created_at"]);
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => resolve(null);
@@ -87,6 +95,25 @@ const adapter = {
     const db = await openDb();
     if (db) return tx(db, store, "readonly", (s) => s.getAll());
     return fbRead(store);
+  },
+  // Items with the given status, oldest first, read through the index (no full-store scan).
+  async byStatus(status, limit) {
+    const db = await openDb();
+    if (db) {
+      const range = IDBKeyRange.bound([status, ""], [status, "\uffff"]);
+      return tx(db, "outbox", "readonly", (s) => s.index(STATUS_INDEX).getAll(range, limit));
+    }
+    const rows = fbRead("outbox").filter((x) => x.status === status);
+    rows.sort((a, b) => (a.created_at < b.created_at ? -1 : 1));
+    return limit ? rows.slice(0, limit) : rows;
+  },
+  async countByStatus(status) {
+    const db = await openDb();
+    if (db) {
+      const range = IDBKeyRange.bound([status, ""], [status, "\uffff"]);
+      return tx(db, "outbox", "readonly", (s) => s.index(STATUS_INDEX).count(range));
+    }
+    return fbRead("outbox").filter((x) => x.status === status).length;
   },
   async del(store, key) {
     const db = await openDb();
@@ -162,8 +189,7 @@ const listeners = new Set();
 let pending = 0;
 const notify = async () => {
   try {
-    const all = await adapter.getAll("outbox");
-    pending = all.filter((x) => x.status === "pending").length;
+    pending = await adapter.countByStatus("pending");
   } catch { /* ignore */ }
   listeners.forEach((fn) => { try { fn(pending); } catch { /* ignore */ } });
   try { window.dispatchEvent(new CustomEvent("aegis:outbox-change", { detail: { pending } })); } catch { /* ignore */ }
@@ -184,34 +210,53 @@ async function settle(item, patch) {
 }
 
 let draining = false;
-export async function drainOutbox() {
+let lastRunAt = 0;
+let failures = 0;
+let nextAllowedAt = 0;
+
+export async function drainOutbox({ force = false } = {}) {
   if (draining) return { sent: 0, left: pending };
+  const now = Date.now();
+  if (!force && (now - lastRunAt < MIN_GAP_MS || now < nextAllowedAt)) return { sent: 0, left: pending };
   draining = true;
+  lastRunAt = now;
   let sent = 0;
+  let stalled = false;
   try {
-    const all = (await adapter.getAll("outbox")).filter((x) => x.status === "pending");
-    all.sort((a, b) => (a.created_at < b.created_at ? -1 : 1));
-    for (const item of all) {
-      try {
-        await trySend(item);
-        await settle(item, { status: "sent", sent_at: new Date().toISOString(), attempts: (item.attempts || 0) + 1 });
-        sent += 1;
-      } catch (e) {
-        const code = e?.response?.status;
-        if (code && PERMANENT.has(code)) {
-          const detail = e.response?.data?.detail;
-          await settle(item, { status: "rejected", attempts: (item.attempts || 0) + 1,
-            last_error: typeof detail === "string" ? detail : `HTTP ${code}` });
-          continue;
+    while (!stalled) {
+      const batch = await adapter.byStatus("pending", DRAIN_BATCH);
+      if (!batch.length) break;
+      for (const item of batch) {
+        try {
+          await trySend(item);
+          await settle(item, { status: "sent", sent_at: new Date().toISOString(), attempts: (item.attempts || 0) + 1 });
+          sent += 1;
+        } catch (e) {
+          const code = e?.response?.status;
+          if (code && PERMANENT.has(code)) {
+            const detail = e.response?.data?.detail;
+            await settle(item, { status: "rejected", attempts: (item.attempts || 0) + 1,
+              last_error: typeof detail === "string" ? detail : `HTTP ${code}` });
+            continue;
+          }
+          await settle(item, { attempts: (item.attempts || 0) + 1, last_error: code ? `HTTP ${code}` : "offline" });
+          stalled = true; // offline / auth / 5xx — keep order, retry later
+          break;
         }
-        await settle(item, { attempts: (item.attempts || 0) + 1, last_error: code ? `HTTP ${code}` : "offline" });
-        break; // offline / auth / 5xx — keep order, retry later
       }
+      if (batch.length < DRAIN_BATCH) break;
     }
-    const done = (await adapter.getAll("outbox")).filter((x) => x.status === "sent");
-    if (done.length > SENT_KEEP) {
-      done.sort((a, b) => (a.created_at < b.created_at ? -1 : 1));
-      await Promise.all(done.slice(0, done.length - SENT_KEEP).map((x) => adapter.del("outbox", x.client_id)));
+    if (stalled) {
+      failures += 1;
+      nextAllowedAt = Date.now() + Math.min(BACKOFF_BASE_MS * 2 ** (failures - 1), BACKOFF_MAX_MS);
+    } else {
+      failures = 0;
+      nextAllowedAt = 0;
+    }
+    const doneCount = await adapter.countByStatus("sent");
+    if (doneCount > SENT_KEEP) {
+      const done = await adapter.byStatus("sent", doneCount - SENT_KEEP);
+      await Promise.all(done.map((x) => adapter.del("outbox", x.client_id)));
     }
   } finally {
     draining = false;
@@ -266,8 +311,8 @@ export function startFieldSync() {
   if (started || typeof window === "undefined") return;
   started = true;
   migrateLegacyQueue().finally(() => { notify(); drainOutbox(); });
-  setInterval(drainOutbox, 15000);
-  window.addEventListener("online", drainOutbox);
+  setInterval(() => drainOutbox(), 15000);
+  window.addEventListener("online", () => { failures = 0; nextAllowedAt = 0; drainOutbox(); });
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") drainOutbox(); });
   navigator.serviceWorker?.addEventListener?.("message", (e) => {
     if (e.data?.type === "AEGIS_DRAIN" || e.data?.type === "AEGIS_OUTBOX_CHANGED") drainOutbox();
