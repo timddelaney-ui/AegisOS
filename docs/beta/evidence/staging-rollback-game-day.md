@@ -1,12 +1,12 @@
 # Staging rollback game-day evidence
 
-**Status: NOT RUN — staging execution and measurements are pending.**
-**Record prepared:** 2026-10-26
-**Environment:** Staging (target not supplied)
+**Status: BLOCKED — execution attempt started 2026-10-27 but no reachable staging target was supplied.**
+**Record prepared:** 2026-10-26 (updated 2026-10-27)
+**Environment:** Staging (target unresolved / inaccessible from current runner)
 **Release candidate / deployment ID:** Not recorded
 **Previous known-good release:** Not recorded
 
-This is an execution worksheet, not evidence of a completed drill. The repository checkout provides no staging URL, deployment access, or staging rollback procedure. The existing deployment note at `deployer-agent-docs/RCA_eced1a83-afca-4e8e-b335-709d8d9dd6e1.MD` describes a successful production deployment, not a staging rollback; it cannot be used as drill evidence. Do not fill in measurements or mark checks passed until the drill is run against staging.
+This is an execution worksheet, not evidence of a completed drill. The repository checkout still does not provide a validated staging URL, deployment access, or staging rollback procedure. A connectivity attempt from the current runner failed DNS resolution for the previously referenced preview hostname; therefore no rollback timings could be captured. The existing deployment note at `deployer-agent-docs/RCA_eced1a83-afca-4e8e-b335-709d8d9dd6e1.MD` describes a successful production deployment, not a staging rollback; it cannot be used as drill evidence. Do not fill in measurements or mark checks passed until the drill is run against staging.
 
 ## Before the drill
 

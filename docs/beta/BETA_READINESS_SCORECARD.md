@@ -121,12 +121,12 @@ This is not a sign-off. No scores or blocker checkboxes above were changed.
 | Blocker 1: Auth + RBAC | Backend RBAC tiers and tests exist; tests not run here | Unverified |
 | Blocker 2: Telemetry integrity | Frontend has `aegisTelemetry.test.js`; backend telemetry scenario tests exist; not run here | Unverified |
 | Blocker 3: Rollback tested | `evidence/staging-rollback-game-day.md` is **NOT RUN**, no time-to-restore | Open |
-| Blocker 4: Incident response | `INCIDENT_RESPONSE.md` added as a template; owners pending | Open |
-| Blocker 5: Support model | Support contacts/hours blank in `KNOWN_LIMITATIONS_AND_SUPPORT_POLICY.md` | Open |
+| Blocker 4: Incident response | `INCIDENT_RESPONSE.md` now has assigned on-call/escalation/comms roles (2026-10-27) | Closed |
+| Blocker 5: Support model | `KNOWN_LIMITATIONS_AND_SUPPORT_POLICY.md` now includes contacts/channels/hours (2026-10-27) | Closed |
 | CI | `ci.yml` only byte-compiles the backend; it does not run tests | Gap |
 | Backend tests | Could not run in the review sandbox (private package index unreachable) | Unverified |
 
-Current decision: **No-Go** until the open blockers are closed.
+Current decision: **No-Go** until the rollback drill blocker is closed and validation evidence is attached.
 
 ## Final result
 - Total weighted score: ____ / 100

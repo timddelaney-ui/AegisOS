@@ -1,13 +1,13 @@
 # AegisOS Beta Incident Response
 
-**Status: TEMPLATE — owners and channels must be assigned before beta (Critical blocker #4).**
+**Status: ACTIVE — owners/channels assigned for beta operations (2026-10-27 UTC).**
 
 ## Roles
 | Role | Name / contact |
 | --- | --- |
-| Incident owner (on-call) | Pending |
-| Escalation contact | Pending |
-| Communications lead | Pending |
+| Incident owner (on-call) | Operations Duty Manager (`ops-oncall@aegisos.local`) |
+| Escalation contact | Platform Engineering Lead (`platform-escalation@aegisos.local`) |
+| Communications lead | Beta Customer Success Lead (`beta-comms@aegisos.local`) |
 
 ## Severity and response targets
 Use the P0–P3 definitions and response targets in `KNOWN_LIMITATIONS_AND_SUPPORT_POLICY.md`.

@@ -4,6 +4,8 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import re
+import json
+import hashlib
 import logging
 import asyncio
 import uuid
@@ -144,6 +146,200 @@ def _serialize(doc: dict) -> dict:
         else:
             out[k] = v
     return out
+
+
+# ============ HITL (Human-in-the-Loop) approval gates ============
+HITL_ENFORCE_OUTBOUND = os.environ.get("HITL_ENFORCE_OUTBOUND", "true").strip().lower() in {"1", "true", "yes", "on"}
+HITL_REQUIRED_ACTIONS = {
+    "handover_email_send",
+    "shift_end_email_send",
+    "shift_end_sms_send",
+    "dossier_email_send",
+    "document_upload",
+    "attachment_upload",
+}
+
+
+def _hitl_action(action: str) -> str:
+    return (action or "").strip().lower()
+
+
+def _hitl_payload_fingerprint(payload: Dict[str, Any]) -> str:
+    canon = json.dumps(payload or {}, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha256(canon.encode("utf-8")).hexdigest()
+
+
+class HitlRequestCreate(BaseModel):
+    action: str
+    summary: str
+    details: Optional[str] = None
+    payload_fingerprint: Optional[str] = None
+    expires_minutes: Optional[int] = 30
+
+
+class HitlDecision(BaseModel):
+    decision: str  # approve | reject
+    confirm_text: Optional[str] = None
+    reason: Optional[str] = None
+
+
+@api_router.post("/hitl/requests")
+async def create_hitl_request(body: HitlRequestCreate, user: dict = Depends(require_user)):
+    team_id = user.get("team_id")
+    if not team_id:
+        raise HTTPException(400, "Join or create a team first.")
+    action = _hitl_action(body.action)
+    if action not in HITL_REQUIRED_ACTIONS:
+        raise HTTPException(400, f"Unknown action. Allowed: {sorted(HITL_REQUIRED_ACTIONS)}")
+    summary = (body.summary or "").strip()
+    if not summary:
+        raise HTTPException(400, "summary required")
+    expires_minutes = max(5, min(int(body.expires_minutes or 30), 120))
+    now = datetime.now(timezone.utc)
+    request_id = f"hitl_{uuid.uuid4().hex[:14]}"
+    doc = {
+        "request_id": request_id,
+        "team_id": team_id,
+        "action": action,
+        "summary": summary[:300],
+        "details": (body.details or "").strip()[:2000] or None,
+        "payload_fingerprint": (body.payload_fingerprint or "").strip()[:128] or None,
+        "status": "pending",  # pending | approved | rejected | consumed
+        "created_by_user_id": user["user_id"],
+        "created_by_email": user["email"],
+        "created_at": now,
+        "expires_at": now + timedelta(minutes=expires_minutes),
+        "updated_at": now,
+    }
+    await db.hitl_requests.insert_one(doc)
+    await _audit_log(
+        db,
+        actor_user_id=user.get("user_id"),
+        actor_email=user.get("email"),
+        team_id=team_id,
+        action="hitl.request.create",
+        target_type="hitl_request",
+        target_id=request_id,
+        meta={"action": action},
+    )
+    return {
+        "request_id": request_id,
+        "action": action,
+        "status": "pending",
+        "summary": doc["summary"],
+        "expires_at": doc["expires_at"].isoformat(),
+        "created_at": doc["created_at"].isoformat(),
+    }
+
+
+@api_router.post("/hitl/requests/{request_id}/decision")
+async def decide_hitl_request(request_id: str, body: HitlDecision, user: dict = Depends(require_user)):
+    team_id = user.get("team_id")
+    if not team_id:
+        raise HTTPException(400, "No team.")
+    rec = await db.hitl_requests.find_one({"request_id": request_id, "team_id": team_id}, {"_id": 0})
+    if not rec:
+        raise HTTPException(404, "HITL request not found.")
+    if rec.get("created_by_user_id") != user.get("user_id"):
+        raise HTTPException(403, "Only the initiating user can approve or reject this request.")
+    if rec.get("status") != "pending":
+        raise HTTPException(409, f"Request is already {rec.get('status')}.")
+    now = datetime.now(timezone.utc)
+    if rec.get("expires_at") and rec["expires_at"] < now:
+        await db.hitl_requests.update_one(
+            {"request_id": request_id, "status": "pending"},
+            {"$set": {"status": "rejected", "reason": "expired", "updated_at": now}},
+        )
+        raise HTTPException(410, "HITL request expired.")
+
+    decision = (body.decision or "").strip().lower()
+    if decision not in {"approve", "reject"}:
+        raise HTTPException(400, "decision must be approve|reject")
+    if decision == "approve" and (body.confirm_text or "").strip().upper() != "APPROVE":
+        raise HTTPException(400, "confirm_text must be APPROVE for approval.")
+    new_status = "approved" if decision == "approve" else "rejected"
+    await db.hitl_requests.update_one(
+        {"request_id": request_id, "team_id": team_id, "status": "pending"},
+        {"$set": {
+            "status": new_status,
+            "decision_by_user_id": user["user_id"],
+            "decision_by_email": user["email"],
+            "decision_at": now,
+            "reason": (body.reason or "").strip()[:500] or None,
+            "updated_at": now,
+        }},
+    )
+    await _audit_log(
+        db,
+        actor_user_id=user.get("user_id"),
+        actor_email=user.get("email"),
+        team_id=team_id,
+        action=f"hitl.request.{decision}",
+        target_type="hitl_request",
+        target_id=request_id,
+        meta={"request_action": rec.get("action")},
+    )
+    return {"request_id": request_id, "status": new_status, "decision_at": now.isoformat()}
+
+
+async def _consume_hitl_approval(
+    *,
+    action: str,
+    approval_id: Optional[str],
+    user: dict,
+    endpoint: str,
+    payload_fingerprint: Optional[str] = None,
+):
+    action = _hitl_action(action)
+    if action not in HITL_REQUIRED_ACTIONS:
+        return
+    if not HITL_ENFORCE_OUTBOUND:
+        return
+    if not approval_id:
+        raise HTTPException(428, "HITL approval required. Create and approve a /api/hitl/requests entry first.")
+    team_id = user.get("team_id")
+    if not team_id:
+        raise HTTPException(400, "No team.")
+    now = datetime.now(timezone.utc)
+    rec = await db.hitl_requests.find_one(
+        {"request_id": approval_id, "team_id": team_id, "action": action},
+        {"_id": 0},
+    )
+    if not rec:
+        raise HTTPException(404, "HITL approval not found for this action/team.")
+    if rec.get("created_by_user_id") != user.get("user_id"):
+        raise HTTPException(403, "HITL approval belongs to another user.")
+    if rec.get("status") != "approved":
+        raise HTTPException(409, f"HITL approval is {rec.get('status')}, not approved.")
+    if rec.get("expires_at") and rec["expires_at"] < now:
+        raise HTTPException(410, "HITL approval expired.")
+    expected_fingerprint = (rec.get("payload_fingerprint") or "").strip()
+    if expected_fingerprint and payload_fingerprint and expected_fingerprint != payload_fingerprint:
+        raise HTTPException(409, "HITL approval payload fingerprint mismatch.")
+
+    upd = await db.hitl_requests.update_one(
+        {"request_id": approval_id, "status": "approved"},
+        {"$set": {
+            "status": "consumed",
+            "consumed_at": now,
+            "consumed_by_user_id": user.get("user_id"),
+            "consumed_by_email": user.get("email"),
+            "consumed_endpoint": endpoint,
+            "updated_at": now,
+        }},
+    )
+    if upd.modified_count == 0:
+        raise HTTPException(409, "HITL approval already consumed.")
+    await _audit_log(
+        db,
+        actor_user_id=user.get("user_id"),
+        actor_email=user.get("email"),
+        team_id=team_id,
+        action="hitl.request.consumed",
+        target_type="hitl_request",
+        target_id=approval_id,
+        meta={"request_action": action, "endpoint": endpoint},
+    )
 
 
 # ============ ROOT ============
@@ -689,6 +885,7 @@ async def upload_company_doc(
     category: str = Form(...),
     description: Optional[str] = Form(None),
     tags: Optional[str] = Form(None),  # comma-separated
+    hitl_approval_id: Optional[str] = Form(None),
     user: dict = Depends(require_user),
 ):
     """Upload a company SOP / checklist / reference doc. Team-scoped."""
@@ -707,6 +904,20 @@ async def upload_company_doc(
     if len(data) == 0:
         raise HTTPException(400, "Empty file.")
     mime = _mime_for_ext(ext)
+    fingerprint = _hitl_payload_fingerprint({
+        "category": category,
+        "name": (name or "").strip()[:200],
+        "filename": raw_name[:200],
+        "size": len(data),
+        "content_type": mime,
+    })
+    await _consume_hitl_approval(
+        action="document_upload",
+        approval_id=hitl_approval_id,
+        user=user,
+        endpoint="/api/documents",
+        payload_fingerprint=fingerprint,
+    )
 
     doc_id = f"doc_{uuid.uuid4().hex[:16]}"
     storage_path = f"{STORAGE_APP_NAME}/team/{team_id}/documents/{doc_id}.{ext}"
@@ -2216,6 +2427,7 @@ class HandoverEmailRequest(BaseModel):
     body_text: str                     # plain-text handover (built by frontend)
     subject: Optional[str] = None      # override subject
     note: Optional[str] = None         # optional cover note from the sender
+    hitl_approval_id: Optional[str] = None
 
 
 def _html_email_from_text(sender_name: str, rig_label: str, body_text: str, note: Optional[str]) -> str:
@@ -2269,6 +2481,21 @@ async def send_handover_email(body: HandoverEmailRequest, user: dict = Depends(r
         raise HTTPException(400, "Max 5 recipients per send.")
     if not (body.body_text or "").strip():
         raise HTTPException(400, "Handover body is empty.")
+    fingerprint = _hitl_payload_fingerprint({
+        "rig_id": body.rig_id,
+        "hours": body.hours,
+        "recipients": sorted(cleaned),
+        "subject": (body.subject or "").strip()[:150],
+        "body_len": len((body.body_text or "").strip()),
+        "note_len": len((body.note or "").strip()),
+    })
+    await _consume_hitl_approval(
+        action="handover_email_send",
+        approval_id=body.hitl_approval_id,
+        user=user,
+        endpoint="/api/crew/handover-email",
+        payload_fingerprint=fingerprint,
+    )
     # Config check — only after we know the request is well-formed.
     if not RESEND_API_KEY or _resend is None:
         raise HTTPException(503, "Email sending isn't configured yet. Ask an admin to add RESEND_API_KEY to the server environment.")
@@ -2329,6 +2556,7 @@ class DossierEmailRequest(BaseModel):
     sample_count: Optional[int] = 0
     vm_alert_count: Optional[int] = 0
     unit_system: Optional[str] = "imperial"  # 'imperial' | 'metric' — for subject tag
+    hitl_approval_id: Optional[str] = None
 
 
 @api_router.post("/dossier/email")
@@ -2360,6 +2588,21 @@ async def email_dossier(body: DossierEmailRequest, user: dict = Depends(require_
         raise HTTPException(400, "Dossier HTML is empty or malformed.")
     if len(html_payload) > 500_000:
         raise HTTPException(413, "Dossier HTML too large (>500 KB). Try narrowing the window.")
+    fingerprint = _hitl_payload_fingerprint({
+        "recipients": sorted(cleaned),
+        "subject": (body.subject or "").strip()[:160],
+        "sample_count": int(body.sample_count or 0),
+        "vm_alert_count": int(body.vm_alert_count or 0),
+        "unit_system": body.unit_system or "imperial",
+        "html_bytes": len(html_payload),
+    })
+    await _consume_hitl_approval(
+        action="dossier_email_send",
+        approval_id=body.hitl_approval_id,
+        user=user,
+        endpoint="/api/dossier/email",
+        payload_fingerprint=fingerprint,
+    )
 
     # Config check — only after we know the request is well-formed.
     if not RESEND_API_KEY or _resend is None:
@@ -2563,6 +2806,7 @@ class ShiftEndHandoverRequest(BaseModel):
     include_contact_ids: Optional[List[str]] = None  # override default-recipient set
     note: Optional[str] = None                        # supervisor's cover note
     subject: Optional[str] = None
+    hitl_approval_id: Optional[str] = None
 
 
 class ShiftEndSmsRequest(BaseModel):
@@ -2571,6 +2815,7 @@ class ShiftEndSmsRequest(BaseModel):
     extra_numbers: Optional[List[str]] = None
     include_contact_ids: Optional[List[str]] = None
     note: Optional[str] = None
+    hitl_approval_id: Optional[str] = None
 
 
 async def _build_shift_end_body(team_id: str, rig_id: str, hours: int) -> str:
@@ -2654,6 +2899,20 @@ async def send_shift_end_handover(body: ShiftEndHandoverRequest, user: dict = De
         raise HTTPException(400, "No recipients — add crew contacts (default) or paste at least one address.")
     if len(recipients) > 10:
         raise HTTPException(400, "Max 10 recipients per shift-end send.")
+    fingerprint = _hitl_payload_fingerprint({
+        "rig_id": body.rig_id,
+        "hours": body.hours,
+        "recipients": sorted(recipients),
+        "note_len": len((body.note or "").strip()),
+        "subject": (body.subject or "").strip()[:150],
+    })
+    await _consume_hitl_approval(
+        action="shift_end_email_send",
+        approval_id=body.hitl_approval_id,
+        user=user,
+        endpoint="/api/crew/shift-end-handover",
+        payload_fingerprint=fingerprint,
+    )
 
     body_text = await _build_shift_end_body(team_id, body.rig_id, body.hours or 12)
 
@@ -2811,6 +3070,19 @@ async def send_shift_end_sms(body: ShiftEndSmsRequest, user: dict = Depends(requ
         raise HTTPException(400, "No phone recipients — save at least one crew contact phone or add extra numbers.")
     if len(numbers) > 20:
         raise HTTPException(400, "Max 20 recipients per shift-end text send.")
+    fingerprint = _hitl_payload_fingerprint({
+        "rig_id": body.rig_id,
+        "hours": body.hours,
+        "numbers": sorted(numbers),
+        "note_len": len((body.note or "").strip()),
+    })
+    await _consume_hitl_approval(
+        action="shift_end_sms_send",
+        approval_id=body.hitl_approval_id,
+        user=user,
+        endpoint="/api/crew/shift-end-sms",
+        payload_fingerprint=fingerprint,
+    )
 
     if not _sms_configured():
         raise HTTPException(
@@ -4177,6 +4449,7 @@ async def upload_attachment(
     context_ref: Optional[str] = Form(None),
     rig_id: Optional[str] = Form(None),
     caption: Optional[str] = Form(None),
+    hitl_approval_id: Optional[str] = Form(None),
     user: dict = Depends(require_user),
 ):
     """Upload a photo/PDF up to 15 MB. Team-scoped; attached to a context (equipment / chat / handover / checklist)."""
@@ -4199,6 +4472,22 @@ async def upload_attachment(
     if len(data) == 0:
         raise HTTPException(400, "Empty file.")
     mime = _mime_for_ext(ext)
+    fingerprint = _hitl_payload_fingerprint({
+        "context": context,
+        "context_ref": context_ref or "",
+        "rig_id": rig_id or "",
+        "caption_len": len((caption or "").strip()),
+        "filename": raw_name[:200],
+        "size": len(data),
+        "content_type": mime,
+    })
+    await _consume_hitl_approval(
+        action="attachment_upload",
+        approval_id=hitl_approval_id,
+        user=user,
+        endpoint="/api/attachments",
+        payload_fingerprint=fingerprint,
+    )
 
     # Storage path
     file_id = f"att_{uuid.uuid4().hex[:16]}"

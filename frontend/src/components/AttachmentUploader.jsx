@@ -3,12 +3,20 @@ import axios from "axios";
 import { Paperclip, X, Loader2, FileText, Trash2, Image as ImageIcon, Download } from "lucide-react";
 import { API, useAuth } from "../context/AuthContext";
 import { useRig } from "../context/RigContext";
+import { requestHitlApproval } from "../lib/hitl";
 
 const ALLOWED_MIME = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "application/pdf"];
 const ACCEPT_ATTR = ".jpg,.jpeg,.png,.webp,.heic,.heif,.pdf,image/*,application/pdf";
 const MAX_BYTES = 15 * 1024 * 1024;
 
 const humanSize = (n) => (n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
+const payloadFingerprint = async (obj) => {
+  if (!globalThis.crypto?.subtle) return "";
+  const keys = Object.keys(obj).sort();
+  const canonical = JSON.stringify(Object.fromEntries(keys.map((k) => [k, obj[k]])));
+  const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(canonical));
+  return Array.from(new Uint8Array(hash)).map((b) => b.toString(16).padStart(2, "0")).join("");
+};
 
 /**
  * AttachmentThumb — renders an image inline (fetched as blob to avoid leaking cookies to CDNs)
@@ -128,11 +136,27 @@ const AttachmentUploader = ({ context, contextRef, onUploaded, hideList = false,
     if (bad) { setError(bad); return; }
     setError(null); setUploading(true);
     try {
+      const fp = await payloadFingerprint({
+        context,
+        context_ref: contextRef || "",
+        rig_id: rigId || "",
+        caption_len: 0,
+        filename: file.name,
+        size: file.size,
+        content_type: file.type || "",
+      });
+      const hitlApprovalId = await requestHitlApproval({
+        action: "attachment_upload",
+        summary: `Upload attachment: ${file.name} (${humanSize(file.size)})`,
+        details: `context=${context}${contextRef ? ` context_ref=${contextRef}` : ""}${rigId ? ` rig=${rigId}` : ""}`,
+        payloadFingerprint: fp,
+      });
       const fd = new FormData();
       fd.append("file", file);
       fd.append("context", context);
       if (contextRef) fd.append("context_ref", contextRef);
       if (rigId)      fd.append("rig_id", rigId);
+      fd.append("hitl_approval_id", hitlApprovalId);
       const { data } = await axios.post(`${API}/attachments`, fd, {
         withCredentials: true,
         headers: { "Content-Type": "multipart/form-data" },
@@ -140,7 +164,11 @@ const AttachmentUploader = ({ context, contextRef, onUploaded, hideList = false,
       onUploaded && onUploaded(data);
       await loadList();
     } catch (e) {
-      setError(e.response?.data?.detail || "Upload failed.");
+      if (e?.message === "Approval cancelled.") {
+        setError("Upload cancelled.");
+      } else {
+        setError(e.response?.data?.detail || "Upload failed.");
+      }
     } finally {
       setUploading(false);
       if (inputRef.current) inputRef.current.value = "";
