@@ -5,10 +5,18 @@ import { X, Copy, Check, Loader2, FileText, ClipboardCheck, Package, Wrench, Lis
 import { API } from "../context/AuthContext";
 import { useRig, rigLabel } from "../context/RigContext";
 import AttachmentUploader from "./AttachmentUploader";
+import { requestHitlApproval } from "../lib/hitl";
 
 // 24-hour military-time display across the handover.
 import { fmtDateTime } from "../lib/timeFormat";
 const fmt = (iso) => fmtDateTime(iso);
+const payloadFingerprint = async (obj) => {
+  if (!globalThis.crypto?.subtle) return "";
+  const keys = Object.keys(obj).sort();
+  const canonical = JSON.stringify(Object.fromEntries(keys.map((k) => [k, obj[k]])));
+  const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(canonical));
+  return Array.from(new Uint8Array(hash)).map((b) => b.toString(16).padStart(2, "0")).join("");
+};
 
 const buildText = (rigLabelStr, s) => {
   if (!s) return "";
@@ -167,12 +175,27 @@ const HandoverModal = ({ open, onClose }) => {
     if (list.length > 5) { toast.error("Max 5 recipients per send."); return; }
     setSending(true);
     try {
+      const fp = await payloadFingerprint({
+        rig_id: rigId,
+        hours,
+        recipients: [...list].sort(),
+        subject: "",
+        body_len: text.length,
+        note_len: (emailNote || "").trim().length,
+      });
+      const hitlApprovalId = await requestHitlApproval({
+        action: "handover_email_send",
+        summary: `Send handover email to ${list.length} recipient${list.length === 1 ? "" : "s"}`,
+        details: `${rigLabel(rigId)} · ${hours}h window`,
+        payloadFingerprint: fp,
+      });
       const { data } = await axios.post(`${API}/crew/handover-email`, {
         rig_id: rigId,
         hours,
         recipients: list,
         body_text: text,
         note: emailNote || null,
+        hitl_approval_id: hitlApprovalId,
       }, { withCredentials: true });
       toast.success(`Handover emailed to ${data.recipients.length} recipient${data.recipients.length === 1 ? "" : "s"}.`);
       setEmailOpen(false);
@@ -197,10 +220,17 @@ const HandoverModal = ({ open, onClose }) => {
     if (!window.confirm(confirmMsg)) return;
     setSendingShiftEnd(true);
     try {
+      const recipients = defaults.map((c) => (c.email || "").trim().toLowerCase()).filter(Boolean);
+      const hitlApprovalId = await requestHitlApproval({
+        action: "shift_end_email_send",
+        summary: `Send shift-end handover to ${recipients.length} default recipient${recipients.length === 1 ? "" : "s"}`,
+        details: `${rigLabel(rigId)} · ${hours}h window`,
+      });
       const { data } = await axios.post(`${API}/crew/shift-end-handover`, {
         rig_id: rigId,
         hours,
         note: emailNote || null,
+        hitl_approval_id: hitlApprovalId,
       }, { withCredentials: true });
       toast.success(`Shift-end emailed to ${data.recipients.length} recipient${data.recipients.length === 1 ? "" : "s"}`);
     } catch (e) {
@@ -243,11 +273,17 @@ const HandoverModal = ({ open, onClose }) => {
       .filter(Boolean);
     setSendingSms(true);
     try {
+      const hitlApprovalId = await requestHitlApproval({
+        action: "shift_end_sms_send",
+        summary: `Send shift-end SMS to ${numbers.length || "resolved"} recipient(s)`,
+        details: `${rigLabel(rigId)} · ${hours}h window`,
+      });
       const { data } = await axios.post(`${API}/crew/shift-end-sms`, {
         rig_id: rigId,
         hours,
         extra_numbers: numbers,
         note: smsNote || null,
+        hitl_approval_id: hitlApprovalId,
       }, { withCredentials: true });
       if (data.status === "sent") {
         toast.success(`Shift-end text sent to ${data.sent.length} recipient${data.sent.length === 1 ? "" : "s"}.`);

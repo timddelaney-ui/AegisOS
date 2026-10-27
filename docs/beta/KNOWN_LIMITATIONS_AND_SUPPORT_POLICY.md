@@ -29,10 +29,10 @@ AegisOS is currently in **beta**. Features, workflows, and UI behavior may chang
 - Long-term data archival/compliance guarantees
 
 ## Support channels
-- Primary support contact: __________________
-- Secondary/escalation contact: _____________
-- Support channel(s): ______________________
-- Support hours/timezone: __________________
+- Primary support contact: Operations Duty Manager (`ops-oncall@aegisos.local`)
+- Secondary/escalation contact: Platform Engineering Lead (`platform-escalation@aegisos.local`)
+- Support channel(s): `#aegisos-beta-support` (Slack), `beta-support@aegisos.local` (email), incident bridge on demand for P0/P1
+- Support hours/timezone: 06:00–20:00 America/Edmonton (Mon–Sun); P0 paging 24/7
 
 ## Severity levels & response targets
 

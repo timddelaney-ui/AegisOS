@@ -45,6 +45,21 @@ The frontend uses `REACT_APP_BACKEND_URL` to reach the backend; the example poin
   - `TWILIO_ACCOUNT_SID`
   - `TWILIO_AUTH_TOKEN`
 
+### Outbound HITL policy
+
+- Mandatory outbound Human-in-the-Loop approval gates are controlled by:
+  - `HITL_ENFORCE_OUTBOUND=true` (backend env)
+- Protected actions: document upload, attachment upload, handover email, shift-end email, shift-end SMS, and dossier email.
+
+### Staging readiness probe
+
+Run the read-only checker:
+
+```bash
+cd backend
+STAGING_BASE_URL="https://<staging-host>" python scripts/staging_connectivity_check.py
+```
+
 ## Telemetry channel model
 The live operations layer tracks the following channels:
 

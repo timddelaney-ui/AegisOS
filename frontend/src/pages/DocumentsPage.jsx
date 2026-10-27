@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { API, useAuth } from "../context/AuthContext";
 import ExcelHeader from "../components/ExcelHeader";
+import { requestHitlApproval } from "../lib/hitl";
 
 const CATEGORIES = [
   { id: "sop", label: "SOPs", Icon: Shield, tint: "bg-[#DBEAFE] text-[#0056B3]" },
@@ -22,6 +23,13 @@ const CATEGORIES = [
 const CAT_LABEL = Object.fromEntries(CATEGORIES.map((c) => [c.id, c.label]));
 
 const prettySize = (b) => (b < 1024 ? `${b} B` : b < 1024 * 1024 ? `${(b/1024).toFixed(0)} KB` : `${(b/1024/1024).toFixed(1)} MB`);
+const payloadFingerprint = async (obj) => {
+  if (!globalThis.crypto?.subtle) return "";
+  const keys = Object.keys(obj).sort();
+  const canonical = JSON.stringify(Object.fromEntries(keys.map((k) => [k, obj[k]])));
+  const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(canonical));
+  return Array.from(new Uint8Array(hash)).map((b) => b.toString(16).padStart(2, "0")).join("");
+};
 
 const DocumentsPage = () => {
   const navigate = useNavigate();
@@ -77,6 +85,22 @@ const DocumentsPage = () => {
     if (upTags.trim()) form.append("tags", upTags.trim());
     setUploading(true);
     try {
+      const ext = (upFile.name.split(".").pop() || "").toLowerCase();
+      const mime = upFile.type || (ext === "pdf" ? "application/pdf" : "application/octet-stream");
+      const fp = await payloadFingerprint({
+        category: upCategory,
+        name: upName.trim().slice(0, 200),
+        filename: upFile.name.slice(0, 200),
+        size: upFile.size,
+        content_type: mime,
+      });
+      const hitlApprovalId = await requestHitlApproval({
+        action: "document_upload",
+        summary: `Upload document: ${upName.trim()} (${prettySize(upFile.size)})`,
+        details: `category=${upCategory}${upDescription.trim() ? ` · ${upDescription.trim().slice(0, 100)}` : ""}`,
+        payloadFingerprint: fp,
+      });
+      form.append("hitl_approval_id", hitlApprovalId);
       await axios.post(`${API}/documents`, form, {
         withCredentials: true,
         headers: { "Content-Type": "multipart/form-data" },
