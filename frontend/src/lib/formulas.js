@@ -17,35 +17,40 @@
  * results are converted back to the caller's unit system for display.
  */
 
+import { parseNumericInput } from "./inputSafety";
+
 // -------- Unit conversions ----------------------------------------------------
 export const conv = {
-  m_to_ft: (m) => m * 3.28084,
-  ft_to_m: (ft) => ft / 3.28084,
+  m_to_ft: (m) => m / 0.3048,
+  ft_to_m: (ft) => ft * 0.3048,
   mm_to_in: (mm) => mm / 25.4,
   in_to_mm: (i) => i * 25.4,
-  daN_to_lb: (daN) => daN * 2.24809,
-  lb_to_daN: (lb) => lb / 2.24809,
-  MPa_to_psi: (mpa) => mpa * 145.038,
-  psi_to_MPa: (psi) => psi / 145.038,
-  psi_to_kPa: (psi) => psi * 6.8948,
-  m3_to_bbl: (m3) => m3 * 6.28981,
-  bbl_to_m3: (b) => b / 6.28981,
-  Lmin_to_bpm: (L) => L * 0.00628981,
-  bpm_to_Lmin: (b) => b / 0.00628981,
-  gpm_to_Lmin: (g) => g * 3.78541,
-  kgm3_to_ppg: (k) => k / 119.826,
-  ppg_to_kgm3: (p) => p * 119.826,
+  daN_to_lb: (daN) => (daN * 10) / 4.4482216152605,
+  lb_to_daN: (lb) => (lb * 4.4482216152605) / 10,
+  MPa_to_psi: (mpa) => mpa * 145.0377377,
+  psi_to_MPa: (psi) => psi / 145.0377377,
+  psi_to_kPa: (psi) => psi * 6.894757293168361,
+  m3_to_bbl: (m3) => m3 / 0.158987294928,
+  bbl_to_m3: (b) => b * 0.158987294928,
+  Lmin_to_bpm: (L) => L / 158.987294928,
+  bpm_to_Lmin: (b) => b * 158.987294928,
+  gpm_to_Lmin: (g) => g * 3.785411784,
+  kgm3_to_ppg: (k) => k / 119.826427317,
+  ppg_to_kgm3: (p) => p * 119.826427317,
   scfm_to_sm3min: (s) => s * 0.0283168,
   sm3min_to_scfm: (s) => s / 0.0283168,
   C_to_F: (c) => (c * 9) / 5 + 32,
   F_to_C: (f) => ((f - 32) * 5) / 9,
   ftmin_to_mmin: (v) => v * 0.3048,
-  psi_per_ft_to_kPa_per_m: (g) => g * 22.621,          // 1 psi/ft = 22.621 kPa/m
-  psi_per_1000ft_to_kPa_per_1000m: (g) => g * 22.621,  // same numeric factor / 1000 dropped
-  bbl_per_ft_to_m3_per_m: (c) => c * 0.5216,           // 1 bbl/ft = 0.5216 m³/m
+  psi_per_ft_to_kPa_per_m: (g) => (g * 6.894757293168361) / 0.3048,          // 1 psi/ft = 22.6206 kPa/m
+  psi_per_1000ft_to_kPa_per_1000m: (g) => (g * 6.894757293168361) / 0.3048,  // same ratio
+  bbl_per_ft_to_m3_per_m: (c) => (c * 0.158987294928) / 0.3048,              // 1 bbl/ft = 0.52158 m³/m
   in2_to_mm2: (a) => a * 645.16,
-  hhp_to_kw: (hp) => hp * 0.7457,
+  hhp_to_kw: (hp) => hp * 0.74569987,
 };
+
+// 1 lbf/ft = 4.4482216152605 N / 0.3048 m = 14.5939 N/m = 1.45939 daN/m
+export const LBFT_TO_DAN_M = 4.4482216152605 / 0.3048 / 10;
 
 // -------- Unified presenter --------------------------------------------------
 // Given an Imperial value + kind, returns {value, unit} in requested unitSystem.
@@ -102,8 +107,9 @@ function grab(values, params, unitSystem, patterns) {
     const label = params[i];
     const l = label.toLowerCase();
     if (patterns.some((p) => l.includes(p.toLowerCase()))) {
-      const raw = parseFloat(values[i]);
-      if (isNaN(raw)) return null;
+      const parsed = parseNumericInput(values[i]);
+      if (parsed.empty || parsed.error) return null;
+      const raw = parsed.value;
       if (unitSystem === "imp") return raw;
       // Convert Metric input to Imperial based on unit hint in the label
       if (l.includes("(mm)")) return conv.mm_to_in(raw);
@@ -196,9 +202,9 @@ function lockUpResults(block, u) {
   const warnings = [];
 
   // Weight per foot — manual format since "weight_per_length" isn't a fmt kind.
-  const wpf_val = u === "imp" ? block.wpf_fluid : block.wpf_fluid * 1.48816;  // lb/ft → daN/m
+  const wpf_val = u === "imp" ? block.wpf_fluid : block.wpf_fluid * LBFT_TO_DAN_M;  // lbf/ft → daN/m
   const wpf_unit = u === "imp" ? "lb/ft" : "daN/m";
-  const wpf_air_val = u === "imp" ? block.wpf_air : block.wpf_air * 1.48816;
+  const wpf_air_val = u === "imp" ? block.wpf_air : block.wpf_air * LBFT_TO_DAN_M;
 
   results.push({
     label: "CT buoyed weight (per unit)",
@@ -226,7 +232,7 @@ function lockUpResults(block, u) {
     ...fmt(block.friction_loss_lb, u, "force", 0),
     note: u === "imp"
       ? `${block.friction_rate_lb_per_ft.toFixed(2)} lb per foot of current MD`
-      : `${(block.friction_rate_lb_per_ft * 0.457).toFixed(2)} daN per metre of current MD`,
+      : `${(block.friction_rate_lb_per_ft * LBFT_TO_DAN_M).toFixed(2)} daN per metre of current MD`,
   });
   if (block.lockup_additional_ft === Infinity) {
     results.push({

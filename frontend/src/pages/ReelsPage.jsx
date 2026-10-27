@@ -24,7 +24,7 @@ const ReelCard = ({ reel, isActive, canWrite, onActivate, onDelete }) => (
           {reel.retired && <span className="text-[9px] font-bold bg-[#F3F4F6] text-[#595959] px-1.5 py-0.5 rounded uppercase">Retired</span>}
         </div>
         <p className="text-[11px] text-[#595959] mt-0.5">
-          {reel.serial ? `S/N ${reel.serial} · ` : ""}
+          {reel.sandbox ? "SANDBOX · " : ""}{reel.serial ? `S/N ${reel.serial} · ` : ""}
           {Math.round(reel.total_length_ft)} ft · {reel.intervals?.length || 0} interval(s) · {reel.source}
         </p>
       </div>
@@ -56,6 +56,7 @@ export default function ReelsPage() {
   const [showNew, setShowNew] = useState(false);
   const [name, setName] = useState("");
   const [serial, setSerial] = useState("");
+  const [sandbox, setSandbox] = useState(false);
   const [intervals, setIntervals] = useState([emptyInterval()]);
   const [file, setFile] = useState(null);
   const [uploadName, setUploadName] = useState("");
@@ -72,7 +73,7 @@ export default function ReelsPage() {
     if (!name.trim()) return toast.error("Reel name required");
     if (intervals.length === 0) return toast.error("At least one interval needed");
     try {
-      await axios.post(`${API}/reels`, { name, serial: serial || undefined, total_length_ft: totalLen, intervals, source: "manual" }, { withCredentials: true });
+      await axios.post(`${API}/reels`, { name, serial: serial || undefined, total_length_ft: totalLen, intervals, source: "manual", sandbox }, { withCredentials: true });
       toast.success("Reel created");
       setShowNew(false); setName(""); setSerial(""); setIntervals([emptyInterval()]);
       refresh();
@@ -126,6 +127,10 @@ export default function ReelsPage() {
                   <input data-testid="new-reel-name" placeholder="Name (e.g. 2in QT-900 Blue)" value={name} onChange={(e) => setName(e.target.value)} className="border rounded px-2 py-1 text-sm" />
                   <input placeholder="Serial (optional)" value={serial} onChange={(e) => setSerial(e.target.value)} className="border rounded px-2 py-1 text-sm" />
                 </div>
+                <label className="flex items-center gap-2 text-xs font-bold text-[#595959]">
+                  <input type="checkbox" data-testid="new-reel-sandbox" checked={sandbox} onChange={(e) => setSandbox(e.target.checked)} />
+                  Sandbox / training reel (only reel type that accepts simulated feeds)
+                </label>
                 <div className="space-y-1">
                   <div className="grid grid-cols-6 gap-1 text-[10px] font-bold uppercase text-[#595959]">
                     <span>Start ft</span><span>End ft</span><span>OD in</span><span>WT in</span><span>Grade</span><span></span>

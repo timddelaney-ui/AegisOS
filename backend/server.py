@@ -68,6 +68,8 @@ class JobCreate(BaseModel):
     unit_system: str
     values: Dict[str, Any]
     visibility: str = "private"  # private | team
+    client_id: Optional[str] = None  # idempotency key for offline replay
+    event_at: Optional[str] = None
 
 
 class JobUpdate(BaseModel):
@@ -693,8 +695,13 @@ async def get_my_team(user: dict = Depends(require_user)):
 # ============ JOB ROUTES ============
 @api_router.post("/jobs")
 async def save_job(body: JobCreate, user: dict = Depends(require_user)):
+    if body.client_id:
+        existing = await db.jobs.find_one({"user_id": user["user_id"], "client_id": body.client_id}, {"_id": 0})
+        if existing:
+            return _serialize(existing)
     job_id = f"job_{uuid.uuid4().hex[:12]}"
     doc = {
+        "client_id": body.client_id,
         "job_id": job_id,
         "user_id": user["user_id"],
         "user_name": user["name"],

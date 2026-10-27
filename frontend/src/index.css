@@ -330,3 +330,36 @@ code {
 @keyframes op-pop-in { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: none; } }
 .op-fade { animation: op-fade-in 280ms ease-out both; }
 .op-pop { animation: op-pop-in 180ms ease-out both; }
+
+/* ───────── Cabin field-use layer ───────── */
+html { background: #fff; }
+
+/* Night cabin: whole-page inversion keeps every hard-coded light surface dark; media is re-inverted. */
+html[data-theme="night"] { filter: invert(0.92) hue-rotate(180deg) brightness(0.8) contrast(0.95); background: #fff; }
+html[data-theme="night"] img,
+html[data-theme="night"] video,
+html[data-theme="night"] canvas { filter: invert(1) hue-rotate(180deg); }
+
+/* Direct sunlight: stronger contrast, heavier borders, larger type. */
+html[data-theme="sunlight"] { filter: contrast(1.2) saturate(1.1); font-size: 112.5%; }
+html[data-theme="sunlight"] input,
+html[data-theme="sunlight"] select,
+html[data-theme="sunlight"] textarea { border: 2px solid #000 !important; color: #000 !important; }
+html[data-theme="sunlight"] button { border-width: 2px; font-weight: 800; }
+
+/* Glove-sized touch targets on tablets / phones. */
+@media (pointer: coarse) {
+  button, select, [role="button"],
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]) {
+    min-height: 44px;
+  }
+}
+
+/* Invalid input — impossible to miss in any theme. */
+.aegis-invalid {
+  border: 2px solid #c00000 !important;
+  background: #ffe5e5 !important;
+  color: #7a0000 !important;
+}
+.aegis-field-error { color: #c00000; font-size: 11px; font-weight: 700; margin-top: 2px; }
+@media print { .aegis-no-print { display: none !important; } }

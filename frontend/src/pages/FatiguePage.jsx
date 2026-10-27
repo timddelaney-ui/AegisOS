@@ -8,16 +8,39 @@ import { damageColor, injectorSkateMechanics, DEFAULT_SKATE, intervalAt } from "
 import { isSupervisorOrHigher } from "../lib/roles";
 import { Play, Pause, RotateCcw, Zap, AlertTriangle, Gauge } from "lucide-react";
 import ShareLinksButton from "../components/ShareLinksButton";
+import { useUnits } from "../context/UnitContext";
+import { postResilient, getStateSync, setState as saveSnapshot, walAppend } from "../lib/fieldStore";
+import { parseNumericInput, plausibilityError } from "../lib/inputSafety";
 
 export default function FatiguePage() {
   const { user } = useAuth();
   const canReset = isSupervisorOrHigher(user);
   const { activeReel, currentDepth, setCurrentDepth } = useActiveReel();
   const [state, setState] = useState(null);
-  const [pressure, setPressure] = useState(1200);
+  const units = useUnits();
+  const saved = useMemo(() => getStateSync("fatigue_inputs", null), []);
+  const [pressure, setPressure] = useState(saved?.pressure ?? 1200);
   const [simOn, setSimOn] = useState(false);
-  const [depth, setDepth] = useState(currentDepth || 0);
+  const [depth, setDepth] = useState(saved?.depth ?? currentDepth ?? 0); // canonical ft
+  const [depthText, setDepthText] = useState(null); // raw typed text while editing (display units)
+  const [cycles, setCycles] = useState(() => getStateSync("fatigue_cycles", {}));
   const timerRef = useRef(null);
+
+  const depthParsed = depthText === null ? null : parseNumericInput(depthText);
+  const depthErr = depthParsed && (depthParsed.empty ? "Enter a depth" : depthParsed.error
+    || plausibilityError(`Depth (${units.label("depth")})`, depthParsed.value));
+  const pressureParsed = parseNumericInput(pressure);
+  const pressureErr = pressureParsed.empty ? "Enter a pressure" : pressureParsed.error
+    || plausibilityError("Traction pressure (psi)", pressureParsed.value);
+  const totalFt = activeReel?.total_length_ft;
+  const lengthErr = !depthErr && totalFt && depth > totalFt ? `Exceeds reel length (${units.fmt(totalFt, "depth")})` : null;
+  const inputsInvalid = !!(depthErr || pressureErr || lengthErr);
+  const sandbox = !!activeReel?.sandbox;
+
+  useEffect(() => {
+    saveSnapshot("fatigue_inputs", { depth, pressure });
+    walAppend("fatigue_inputs", { depth_ft: depth, pressure_psi: pressure, reel_id: activeReel?.reel_id });
+  }, [depth, pressure, activeReel?.reel_id]);
 
   const refresh = async () => {
     if (!activeReel) return;
@@ -28,19 +51,24 @@ export default function FatiguePage() {
 
   const feed = async (overrides = {}) => {
     if (!activeReel) return toast.error("No active reel");
-    try {
-      const r = await axios.post(`${API}/fatigue/feed`, {
-        reel_id: activeReel.reel_id,
-        depth_ft: overrides.depth ?? depth,
-        traction_pressure_psi: overrides.pressure ?? Number(pressure),
-        cycle_count: 1,
-        source: overrides.source || "manual",
-      }, { withCredentials: true });
-      setState(r.data);
-      if (r.data.derate_warning) toast.warning(`Derate warning — worst node at ${(r.data.worst_damage * 100).toFixed(0)}% life used`);
-    } catch (e) {
-      toast.error(e.response?.data?.detail || "Feed failed");
-    }
+    const isSim = overrides.source === "simulated";
+    if (!isSim && inputsInvalid) return toast.error(depthErr || pressureErr || lengthErr);
+    if (isSim && !sandbox) return toast.error("Simulation is only allowed on a sandbox reel");
+    const res = await postResilient("/fatigue/feed", {
+      reel_id: activeReel.reel_id,
+      depth_ft: overrides.depth ?? depth,
+      traction_pressure_psi: overrides.pressure ?? Number(pressureParsed.value),
+      cycle_count: 1,
+      source: overrides.source || "manual",
+    }, { kind: "fatigue" });
+    if (res.status === "rejected") return toast.error(`Feed rejected: ${res.error}`);
+    // Cycle is durably logged on this device whether or not the server has it yet.
+    const next = { ...cycles, [activeReel.reel_id]: (cycles[activeReel.reel_id] || 0) + 1 };
+    setCycles(next); saveSnapshot("fatigue_cycles", next);
+    if (res.status === "queued") return toast.warning("Saved offline — cycle will sync automatically when signal returns");
+    const d = res.data;
+    if (d && !d.duplicate) setState(d);
+    if (d?.derate_warning) toast.warning(`Derate warning — worst node at ${(d.worst_damage * 100).toFixed(0)}% life used`);
   };
 
   // Simulated feed (Phase 1 convenience — animates without hardware)
@@ -70,13 +98,13 @@ export default function FatiguePage() {
   const nodes = state?.damage || [];
   const spacing = state?.spacing_ft || 100;
 
-  const totalFt = useMemo(() => (nodes.length - 1) * spacing, [nodes, spacing]);
+  const stringFt = useMemo(() => (nodes.length - 1) * spacing, [nodes, spacing]);
 
   // Injector-skate ovality + fatigue scaling (local client-side preview — Phase 2 pathway).
   const seg = useMemo(() => intervalAt(activeReel, depth) || { od_in: 2.0, wt_in: 0.175 }, [activeReel, depth]);
   const skate = useMemo(() => injectorSkateMechanics({
-    skate_pressure_psi: pressure, OD: seg.od_in, WT: seg.wt_in,
-  }), [pressure, seg.od_in, seg.wt_in]);
+    skate_pressure_psi: pressureErr ? 0 : pressureParsed.value, OD: seg.od_in, WT: seg.wt_in,
+  }), [pressure, pressureErr, seg.od_in, seg.wt_in]);
 
   return (
     <div className="min-h-screen bg-[#F3F3F3]">
@@ -89,17 +117,31 @@ export default function FatiguePage() {
         )}
 
         <div className="bg-white border border-[#D4D4D4] rounded-lg p-3 grid gap-2 sm:grid-cols-4 text-xs">
-          <label className="flex flex-col"><span className="font-bold text-[#595959]">Depth (ft)</span>
-            <input data-testid="fatigue-depth" type="number" value={depth} onChange={(e) => setDepth(Number(e.target.value) || 0)} className="border rounded px-2 py-1" />
+          <label className="flex flex-col"><span className="font-bold text-[#595959]">Depth ({units.label("depth")})</span>
+            <input data-testid="fatigue-depth" type="text" inputMode="decimal"
+              value={depthText ?? String(Number(units.from(depth, "depth").toFixed(2)))}
+              onChange={(e) => {
+                setDepthText(e.target.value);
+                const p = parseNumericInput(e.target.value);
+                if (!p.empty && !p.error && !plausibilityError("Depth (ft)", units.to(p.value, "depth"))) setDepth(units.to(p.value, "depth"));
+              }}
+              onBlur={() => { if (!depthErr) setDepthText(null); }}
+              aria-invalid={!!(depthErr || lengthErr)}
+              className={`border rounded px-2 py-1 ${depthErr || lengthErr ? "aegis-invalid" : ""}`} />
+            {(depthErr || lengthErr) && <span className="aegis-field-error" data-testid="fatigue-depth-error">{depthErr || lengthErr}</span>}
           </label>
           <label className="flex flex-col"><span className="font-bold text-[#595959]">Traction pressure (psi)</span>
-            <input data-testid="fatigue-pressure" type="number" value={pressure} onChange={(e) => setPressure(e.target.value)} className="border rounded px-2 py-1" />
+            <input data-testid="fatigue-pressure" type="text" inputMode="decimal" value={pressure}
+              onChange={(e) => setPressure(e.target.value)} aria-invalid={!!pressureErr}
+              className={`border rounded px-2 py-1 ${pressureErr ? "aegis-invalid" : ""}`} />
+            {pressureErr && <span className="aegis-field-error" data-testid="fatigue-pressure-error">{pressureErr}</span>}
           </label>
           <div className="flex flex-col justify-center gap-2">
-            <button data-testid="fatigue-feed-btn" onClick={() => feed()} className="bg-[#FF6B1A] text-white px-3 py-1.5 text-xs font-bold rounded flex items-center justify-center gap-1"><Zap className="w-3.5 h-3.5" />Advance 1 cycle</button>
+            <button data-testid="fatigue-feed-btn" disabled={inputsInvalid} onClick={() => feed()} className="bg-[#FF6B1A] disabled:opacity-40 text-white px-3 py-1.5 text-xs font-bold rounded flex items-center justify-center gap-1"><Zap className="w-3.5 h-3.5" />Advance 1 cycle</button>
+            {activeReel && <span className="text-[10px] text-[#595959]" data-testid="fatigue-cycles-local">Cycles logged on this device: {cycles[activeReel.reel_id] || 0}</span>}
           </div>
           <div className="flex flex-col justify-center gap-1">
-            <button data-testid="fatigue-sim-btn" onClick={() => setSimOn(!simOn)} className={`${simOn ? "bg-[#C00000]" : "bg-[#0056B3]"} text-white px-3 py-1.5 text-xs font-bold rounded flex items-center justify-center gap-1`}>
+            <button data-testid="fatigue-sim-btn" disabled={!sandbox} title={sandbox ? "" : "Simulation is blocked on real reels — use a sandbox reel"} onClick={() => setSimOn(!simOn)} className={`${simOn ? "bg-[#C00000]" : "bg-[#0056B3]"} disabled:opacity-40 text-white px-3 py-1.5 text-xs font-bold rounded flex items-center justify-center gap-1`}>
               {simOn ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
               {simOn ? "Pause sim" : "Simulate feed"}
             </button>
@@ -123,7 +165,7 @@ export default function FatiguePage() {
             </div>
             <div>
               <p className="text-[11px] font-bold uppercase text-[#595959]">Reel length</p>
-              <p className="text-xl font-bold tabular-nums">{totalFt} ft</p>
+              <p className="text-xl font-bold tabular-nums">{units.fmt(stringFt, "depth", { digits: 0 })}</p>
             </div>
             {warn && (
               <div className="flex items-center gap-2 text-[#721C24] font-bold text-sm">
