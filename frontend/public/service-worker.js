@@ -1,22 +1,22 @@
-// CT Field Workbook — service worker (iter 20, conservative rewrite).
-//
-// The previous version intercepted HTML navigation and API calls. On flaky
-// mobile networks it occasionally served stale shells or trapped auth
-// redirects, which looked like "nothing works" to the user.
-//
-// This version is intentionally minimal:
-//   • Static same-origin assets (hashed JS/CSS, PNG, SVG, fonts): cache-first.
-//   • HTML navigation + any /api/* request: NEVER intercepted — always goes
-//     straight to the network. If the user is offline we let the browser show
-//     its native offline UI; the app isn't offline-capable yet.
-//   • On activate, every prior cache (any version) is deleted so stuck users
-//     get a clean slate the next time they open the installed PWA.
-const SW_VERSION = "v2.0.0";
+// Aegis OS service worker (v3).
+//   • Static same-origin assets: cache-first with background revalidate.
+//   • HTML navigation: network-first; falls back to the cached app shell,
+//     then /offline.html, so the installed PWA opens with no signal.
+//   • /api/* and cross-origin requests: never intercepted (auth cookies and
+//     redirects flow unmodified). Offline writes are queued client-side.
+//   • On activate, caches from other versions are deleted.
+const SW_VERSION = "v3.0.0";
 const STATIC_CACHE = `ct-static-${SW_VERSION}`;
+
+const SHELL = ["/", "/offline.html", "/manifest.json"];
 
 self.addEventListener("install", (event) => {
   // Activate immediately — don't make the user close/reopen the PWA.
-  event.waitUntil(self.skipWaiting());
+  event.waitUntil((async () => {
+    const cache = await caches.open(STATIC_CACHE);
+    await Promise.all(SHELL.map((u) => cache.add(u).catch(() => {})));
+    await self.skipWaiting();
+  })());
 });
 
 self.addEventListener("activate", (event) => {
@@ -35,8 +35,20 @@ self.addEventListener("fetch", (event) => {
 
   const url = new URL(request.url);
 
-  // Navigation (HTML pages): untouched — browser handles it directly.
-  if (request.mode === "navigate") return;
+  if (request.mode === "navigate") {
+    if (url.origin !== self.location.origin || url.pathname.startsWith("/api/")) return;
+    event.respondWith((async () => {
+      const cache = await caches.open(STATIC_CACHE);
+      try {
+        const res = await fetch(request);
+        if (res && res.ok) cache.put("/", res.clone()).catch(() => {});
+        return res;
+      } catch {
+        return (await cache.match("/")) || (await cache.match("/offline.html")) || Response.error();
+      }
+    })());
+    return;
+  }
 
   // API: untouched. Auth cookies + redirects must flow unmodified.
   if (url.pathname.startsWith("/api/")) return;
