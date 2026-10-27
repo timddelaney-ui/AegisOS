@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Download, Sun, Moon, Contrast, WifiOff, Wifi, FileText, ShieldAlert, RefreshCw } from "lucide-react";
+import { Download, Sun, Moon, Contrast, WifiOff, Wifi, FileText, ShieldAlert, RefreshCw, Eye } from "lucide-react";
 import { exportJob, drainOutbox, subscribeOutbox, setState, getStateSync } from "../lib/fieldStore";
 import { getTheme, applyTheme, nextTheme } from "../lib/cabinTheme";
 import { printTallySheet } from "../lib/tallySheet";
+import { useShadow } from "../lib/shadow/useShadow";
 
 const THEME_ICON = { standard: Contrast, sunlight: Sun, night: Moon };
 const btn = "aegis-no-print flex items-center gap-1 px-3 py-2 rounded border-2 border-black bg-white text-black text-xs font-bold";
@@ -14,6 +15,7 @@ export default function FieldToolsBar() {
   const [online, setOnline] = useState(typeof navigator === "undefined" ? true : navigator.onLine);
   const [pending, setPending] = useState(0);
   const [theme, setTheme] = useState(getTheme());
+  const { enabled: shadowOn, setEnabled: setShadow } = useShadow();
   const [manual, setManual] = useState(() => getStateSync("manual_mode", false) === true);
 
   useEffect(() => {
@@ -55,6 +57,9 @@ export default function FieldToolsBar() {
             <button className={btn} onClick={cycleTheme} data-testid="theme-toggle"><ThemeIcon className="w-4 h-4" />{theme}</button>
             <button className={btn} onClick={() => drainOutbox()} data-testid="sync-now"><RefreshCw className="w-4 h-4" />Sync now</button>
             <button className={btn} onClick={tally}><FileText className="w-4 h-4" />Tally sheet</button>
+            <button className={`${btn} ${shadowOn ? "!bg-[#15803D] !text-white" : ""}`} onClick={() => setShadow(!shadowOn)} data-testid="shadow-quick-toggle" aria-pressed={shadowOn}>
+              <Eye className="w-4 h-4" />{shadowOn ? "Shadow ON" : "Shadow mode"}
+            </button>
             <button className={`${btn} ${manual ? "!bg-[#C00000] !text-white" : ""}`} onClick={() => toggleManual(!manual)} data-testid="manual-toggle">
               <ShieldAlert className="w-4 h-4" />{manual ? "Manual ON" : "Manual mode"}
             </button>

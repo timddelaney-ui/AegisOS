@@ -25,9 +25,10 @@ const SENT_KEEP = 5000;
 const SEND_TIMEOUT_MS = 8000;
 
 export const uuid = () => {
-  try { if (crypto?.randomUUID) return crypto.randomUUID(); } catch { /* fall through */ }
+  const c = globalThis.crypto; // may be undefined in older WebViews / test envs
+  try { if (c?.randomUUID) return c.randomUUID(); } catch { /* fall through */ }
   const b = new Uint8Array(16);
-  (crypto?.getRandomValues ? crypto.getRandomValues(b) : b.forEach((_, i) => { b[i] = Math.random() * 256; }));
+  if (c?.getRandomValues) c.getRandomValues(b); else b.forEach((_, i) => { b[i] = Math.random() * 256; });
   b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80;
   const h = [...b].map((x) => x.toString(16).padStart(2, "0")).join("");
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
@@ -389,4 +390,22 @@ export async function exportJob(format = "json") {
   if (format === "csv") downloadBlob(`aegis-job-${stamp}.csv`, jobDataToCSV(data), "text/csv;charset=utf-8");
   else downloadBlob(`aegis-job-${stamp}.json`, JSON.stringify(data, null, 2), "application/json");
   return data;
+}
+
+/**
+ * Round-trip a probe record through the durable store and report which backend
+ * served it. Used by the Shadow/Executive views to prove field logs persist.
+ */
+export async function verifyStorage() {
+  const probe = { key: "__integrity_probe__", value: { t: Date.now(), n: uuid() } };
+  try {
+    const db = await openDb();
+    await adapter.put("kv", { ...probe, saved_at: new Date().toISOString() });
+    const back = await adapter.get("kv", probe.key);
+    await adapter.del("kv", probe.key);
+    const ok = back?.value?.n === probe.value.n;
+    return { ok, backend: db ? "indexeddb" : "localstorage-fallback", persisted: !!(await navigator.storage?.persisted?.().catch(() => false)) };
+  } catch (e) {
+    return { ok: false, backend: "unavailable", persisted: false, error: String(e?.message || e) };
+  }
 }
