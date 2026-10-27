@@ -102,10 +102,24 @@ async function drainOutboxFromSW() {
   let db;
   try { db = await openDb(); } catch { return; }
   if (!db.objectStoreNames.contains("outbox")) return;
-  const all = await idbReq(db.transaction("outbox").objectStore("outbox").getAll());
-  const pending = all.filter((x) => x.status === "pending").sort((a, b) => (a.created_at < b.created_at ? -1 : 1));
   const PERMANENT = [400, 404, 409, 413, 422];
-  for (const item of pending) {
+  const BATCH = 100;
+  const readPending = async () => {
+    const store = db.transaction("outbox").objectStore("outbox");
+    if (store.indexNames.contains("by_status_created")) {
+      const range = IDBKeyRange.bound(["pending", ""], ["pending", "\uffff"]);
+      return idbReq(store.index("by_status_created").getAll(range, BATCH));
+    }
+    // Page hasn't upgraded the DB yet: fall back to a scan.
+    const all = await idbReq(store.getAll());
+    return all.filter((x) => x.status === "pending").sort((a, b) => (a.created_at < b.created_at ? -1 : 1)).slice(0, BATCH);
+  };
+  const seen = new Set();
+  for (;;) {
+   const pending = (await readPending()).filter((x) => !seen.has(x.client_id));
+   if (!pending.length) break;
+   pending.forEach((x) => seen.add(x.client_id));
+   for (const item of pending) {
     let res;
     try {
       res = await fetch(item.url, {
@@ -120,6 +134,8 @@ async function drainOutboxFromSW() {
     const t = db.transaction("outbox", "readwrite");
     t.objectStore("outbox").put({ ...item, ...patch, attempts: (item.attempts || 0) + 1 });
     await new Promise((r) => { t.oncomplete = r; t.onerror = r; });
+   }
+   if (pending.length < BATCH) break;
   }
   const clients = await self.clients.matchAll({ includeUncontrolled: true });
   clients.forEach((c) => c.postMessage({ type: "AEGIS_OUTBOX_CHANGED" }));
