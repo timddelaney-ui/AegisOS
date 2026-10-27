@@ -4,7 +4,7 @@ import {
   Activity, AlertOctagon, Box, Calendar, CheckSquare, ClipboardList,
   DollarSign, FileSpreadsheet, FileText, Flame, Gauge, GraduationCap,
   Layers, Mail, MessageSquare, Package, ShieldCheck, Sparkles, UserCog,
-  Users, Wrench, Ticket, MessageSquarePlus, Zap,
+  Users, Wrench, Ticket, MessageSquarePlus, Zap, LayoutDashboard, ScanEye,
 } from "lucide-react";
 
 export const HUB_TILES = {
@@ -23,6 +23,16 @@ export const HUB_TILES = {
     path: "/daq", badge: "PHASE 2",
     subtitle: "WITS 0 / Modbus TCP / WITSML profiles. Enable when the field unit is wired in.",
     roleGate: "crew",
+  },
+  executive: {
+    label: "Executive Dashboard", Icon: LayoutDashboard, accent: "bg-[#E0F2FE] text-[#0369A1]",
+    path: "/executive", badge: "NEW",
+    subtitle: "Well state, string health, data sync and shadow verification at a glance.",
+  },
+  shadow: {
+    label: "Shadow Mode Verification", Icon: ScanEye, accent: "bg-[#DCFCE7] text-[#15803D]",
+    path: "/shadow", badge: "NEW",
+    subtitle: "Compare Aegis against legacy DAQ and manual logs. Delta visualizer + PDF/CSV proof report.",
   },
   workbook: {
     label: "Workbook (17 Sheets)", Icon: FileSpreadsheet, accent: "bg-[#FFF1E6] text-[#FF6B1A]",
@@ -110,7 +120,7 @@ export const HUB_TILES = {
 };
 
 export const DEFAULT_TILE_ORDER = [
-  "live-ops", "workbook", "ctd-calculator", "reels", "stress", "fatigue",
+  "live-ops", "executive", "shadow", "workbook", "ctd-calculator", "reels", "stress", "fatigue",
   "wellbore", "daq", "certs", "tasks", "parts-orders", "timecards",
   "treatment", "team-hub", "documents", "erp-template", "crew-contacts",
   "equipment", "schedule", "crew-admin", "emergency", "training",

@@ -37,6 +37,9 @@ import OperatorPage from "./pages/OperatorPage";
 import DaqConfigPage from "./pages/DaqConfigPage";
 import SecurityCompliancePage from "./pages/SecurityCompliancePage";
 import ShareRedeemPage from "./pages/ShareRedeemPage";
+import ShadowVerificationPage from "./pages/ShadowVerificationPage";
+import ExecutiveDashboard from "./pages/ExecutiveDashboard";
+import ErrorBoundary from "./components/ErrorBoundary";
 import { ActiveReelProvider } from "./context/ActiveReelContext";
 import { UnitProvider, useUnits } from "./context/UnitContext";
 import { TierProvider, useTier } from "./context/TierContext";
@@ -217,6 +220,7 @@ const Workbook = () => {
 
 const ProtectedRoute = ({ children, feature }) => {
   const { user, loading } = useAuth();
+  const location = useLocation();
   if (loading) {
     return (
       <div className="min-h-screen bg-[#F3F3F3] flex items-center justify-center">
@@ -225,10 +229,13 @@ const ProtectedRoute = ({ children, feature }) => {
     );
   }
   if (!user) return <Navigate to="/login" replace />;
+  // Every feature route is isolated: a bad input/render error in one module
+  // recovers silently (or shows a local retry) instead of blanking the app.
+  const guarded = <ErrorBoundary name={feature || "route"} resetKey={location.pathname}>{children}</ErrorBoundary>;
   // When a feature id is supplied, delegate to the tier-aware guard so
   // lower-tier users land on /pricing (teaser features) or /hub (hidden).
-  if (feature) return <TierProtectedRoute feature={feature}>{children}</TierProtectedRoute>;
-  return children;
+  if (feature) return <TierProtectedRoute feature={feature}>{guarded}</TierProtectedRoute>;
+  return guarded;
 };
 
 const AppRouter = () => {
@@ -277,6 +284,8 @@ const AppRouter = () => {
         <Route path="/live-ops/classic" element={<ProtectedRoute feature="live_ops"><LiveOpsPage /></ProtectedRoute>} />
         <Route path="/daq" element={<ProtectedRoute feature="daq_ingest"><DaqConfigPage /></ProtectedRoute>} />
         <Route path="/security" element={<ProtectedRoute feature="security_compliance"><SecurityCompliancePage /></ProtectedRoute>} />
+        <Route path="/shadow" element={<ProtectedRoute feature="shadow_mode"><ShadowVerificationPage /></ProtectedRoute>} />
+        <Route path="/executive" element={<ProtectedRoute feature="exec_dashboard"><ExecutiveDashboard /></ProtectedRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <AdvisoryFooter />
@@ -339,13 +348,15 @@ const LandingRedirect = () => {
 function App() {
   useEffect(() => { registerServiceWorker(); }, []);
   return (
-    <UnitProvider>
-      <ActiveReelProvider>
-        <TierProvider>
-          <AppRouter />
-        </TierProvider>
-      </ActiveReelProvider>
-    </UnitProvider>
+    <ErrorBoundary name="app-root">
+      <UnitProvider>
+        <ActiveReelProvider>
+          <TierProvider>
+            <AppRouter />
+          </TierProvider>
+        </ActiveReelProvider>
+      </UnitProvider>
+    </ErrorBoundary>
   );
 }
 

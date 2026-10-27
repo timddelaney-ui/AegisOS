@@ -121,6 +121,8 @@ export const FEATURE_SPECS = {
   documents:          { minTier: TIER_ENTERPRISE, visibility: "hidden", label: "Document vault" },
   jobs_ledger:        { minTier: TIER_ENTERPRISE, visibility: "hidden", label: "Jobs ledger" },
   security_compliance:{ minTier: TIER_ENTERPRISE, visibility: "hidden", label: "Security & Compliance" },
+  shadow_mode:        { minTier: TIER_ENTERPRISE, visibility: "hidden", label: "Shadow Mode verification" },
+  exec_dashboard:     { minTier: TIER_ENTERPRISE, visibility: "hidden", label: "Executive dashboard" },
 };
 
 // Routes → feature. `/pricing`, `/login`, `/auth-callback` and `/share/*` are
@@ -150,6 +152,8 @@ export const ROUTE_FEATURES = {
   "/live-ops/classic":  "live_ops",
   "/daq":               "daq_ingest",
   "/security":          "security_compliance",
+  "/shadow":            "shadow_mode",
+  "/executive":         "exec_dashboard",
 };
 export const tierIndex = (tier) => {
   const i = TIER_ORDER.indexOf(tier);
