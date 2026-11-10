@@ -268,3 +268,46 @@ export function intervalAt(reel, md_ft) {
   }
   return reel.intervals[reel.intervals.length - 1];
 }
+
+/**
+ * Dawson-Paslay critical buckling loads in a deviated wellbore.
+ * Units must be consistent (E psi, I in^4, w lb/in, r in -> lb).
+ */
+export function calculateBucklingThresholds({ E, I, w, r, thetaDeg }) {
+  if (!E || !I || !w || !r || thetaDeg === undefined || thetaDeg === null) {
+    throw new Error("BUCKLING_ERROR: Invalid or missing geometric/material parameters.");
+  }
+  const sinTheta = Math.sin((thetaDeg * Math.PI) / 180);
+  // Near-vertical: no gravity-assisted lateral constraint, thresholds undefined
+  if (sinTheta <= 1e-4) {
+    return { fCritSin: Infinity, fCritHel: Infinity, status: "VERTICAL_UNCONSTRAINED" };
+  }
+  const base = Math.sqrt((E * I * w * sinTheta) / r);
+  return { fCritSin: 2 * base, fCritHel: 2 * Math.SQRT2 * base, status: "NOMINAL" };
+}
+
+/**
+ * Fatemi-Socie critical-plane multiaxial fatigue:
+ * (Δγ/2)(1 + k σn,max/σy) = (τf'/G)(2Nf)^b + γf'(2Nf)^c
+ */
+export function calculateFatemiSocieFatigue({
+  deltaGammaHalf, sigmaNMax, sigmaY, k = 0.3, tauFPrime, G, b, gammaFPrime, c,
+}) {
+  if (!Number.isFinite(deltaGammaHalf) || deltaGammaHalf <= 0 || !sigmaY || sigmaY <= 0) {
+    return { effectiveStrain: 0, cyclesToFailure: Infinity, damagePerCycle: 0, status: "NEGLIGIBLE_DAMAGE" };
+  }
+  const effectiveStrain = deltaGammaHalf * (1 + k * (sigmaNMax / sigmaY));
+
+  // Newton-Raphson on reversals to failure (2Nf)
+  let reversals = 1000.0;
+  for (let i = 0; i < 100; i++) {
+    const f = (tauFPrime / G) * Math.pow(reversals, b) + gammaFPrime * Math.pow(reversals, c) - effectiveStrain;
+    if (Math.abs(f) < 1e-7) break;
+    const fPrime = (tauFPrime / G) * b * Math.pow(reversals, b - 1) + gammaFPrime * c * Math.pow(reversals, c - 1);
+    if (Math.abs(fPrime) < 1e-12) break;
+    reversals -= f / fPrime;
+    if (reversals <= 1.0) { reversals = 1.0; break; }
+  }
+  const nf = reversals / 2.0;
+  return { effectiveStrain, cyclesToFailure: nf, damagePerCycle: 1.0 / nf, status: "NOMINAL" };
+}
