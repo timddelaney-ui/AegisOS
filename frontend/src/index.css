@@ -363,3 +363,17 @@ html[data-theme="sunlight"] button { border-width: 2px; font-weight: 800; }
 }
 .aegis-field-error { color: #c00000; font-size: 11px; font-weight: 700; margin-top: 2px; }
 @media print { .aegis-no-print { display: none !important; } }
+
+/* ───────── Industrial control-cabin surface (Shadow Mode + Executive views) ─────────
+   Natively dark, so it is re-inverted under the night theme's page-level inversion. */
+.aegis-cabin { background: #0B1220; color: #E2E8F0; min-height: 100vh; font-feature-settings: "tnum"; }
+.aegis-cabin .cab-card { background: #111B2E; border: 1px solid #22304A; border-radius: 12px; }
+.aegis-cabin .cab-input { background: #0B1220; border: 1px solid #2B3B5C; color: #F8FAFC; border-radius: 8px; padding: 8px 10px; min-height: 40px; width: 100%; font-variant-numeric: tabular-nums; }
+.aegis-cabin .cab-input:focus-visible { outline: 2px solid #FF6B1A; outline-offset: 1px; }
+.aegis-cabin .cab-label { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: #94A3B8; font-weight: 700; }
+.aegis-cabin .cab-btn { min-height: 40px; padding: 0 14px; border-radius: 8px; font-weight: 700; font-size: 13px; background: #FF6B1A; color: #0B1220; }
+.aegis-cabin .cab-btn-ghost { background: transparent; color: #E2E8F0; border: 1px solid #2B3B5C; }
+.aegis-cabin .cab-marker { transition: transform 450ms cubic-bezier(.2,.8,.2,1); }
+@media (prefers-reduced-motion: reduce) { .aegis-cabin .cab-marker { transition: none; } }
+html[data-theme="night"] .aegis-cabin { filter: invert(1) hue-rotate(180deg); }
+html[data-theme="sunlight"] .aegis-cabin { color: #FFFFFF; }

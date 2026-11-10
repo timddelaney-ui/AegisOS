@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, Cookie, Header, UploadFile, File, Form
+from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, Cookie, Header, UploadFile, File, Form, Query
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -2144,7 +2144,13 @@ class TeamItemUpdate(BaseModel):
 
 
 @api_router.get("/team/items/{kind}")
-async def list_team_items(kind: str, rig_id: Optional[str] = None, user: dict = Depends(require_user)):
+async def list_team_items(
+    kind: str,
+    rig_id: Optional[str] = None,
+    limit: int = Query(500, ge=1, le=500),
+    before: Optional[str] = None,
+    user: dict = Depends(require_user),
+):
     if kind not in ITEM_KINDS:
         raise HTTPException(400, f"Invalid kind. Must be one of {sorted(ITEM_KINDS)}")
     team_id = user.get("team_id")
@@ -2154,8 +2160,22 @@ async def list_team_items(kind: str, rig_id: Optional[str] = None, user: dict = 
     if rig_id:
         # Show items tagged for this rig OR untagged legacy items (rig_id missing / None).
         query["$or"] = [{"rig_id": rig_id}, {"rig_id": {"$in": [None]}}, {"rig_id": {"$exists": False}}]
-    docs = await db.team_items.find(query, {"_id": 0}).sort("created_at", -1).to_list(500)
-    return {"items": [_serialize(d) for d in docs], "team_id": team_id, "rig_id": rig_id}
+    if before:
+        try:
+            before_dt = datetime.fromisoformat(before.replace("Z", "+00:00"))
+        except ValueError:
+            raise HTTPException(400, "Invalid 'before' cursor; expected ISO-8601 timestamp.")
+        if before_dt.tzinfo is None:
+            before_dt = before_dt.replace(tzinfo=timezone.utc)
+        query["created_at"] = {"$lt": before_dt}
+    # Fetch one extra row to know whether another page exists.
+    docs = await db.team_items.find(query, {"_id": 0}).sort("created_at", -1).to_list(limit + 1)
+    has_more = len(docs) > limit
+    docs = docs[:limit]
+    next_before = None
+    if has_more and docs and isinstance(docs[-1].get("created_at"), datetime):
+        next_before = docs[-1]["created_at"].isoformat()
+    return {"items": [_serialize(d) for d in docs], "team_id": team_id, "rig_id": rig_id, "next_before": next_before}
 
 
 @api_router.post("/team/items")
@@ -4686,6 +4706,15 @@ logger = logging.getLogger(__name__)
 @app.on_event("shutdown")
 async def shutdown_db_client():
     client.close()
+
+
+@app.on_event("startup")
+async def _ensure_indexes():
+    try:
+        await db.team_items.create_index([("team_id", 1), ("kind", 1), ("created_at", -1)])
+        await db.team_items.create_index([("team_id", 1), ("kind", 1), ("rig_id", 1), ("created_at", -1)])
+    except Exception as e:
+        logger.warning("Index creation deferred: %s", e)
 
 
 @app.on_event("startup")
