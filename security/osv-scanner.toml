@@ -29,3 +29,8 @@ reason = "The fix requires SVGO 2 or later; the current SVGR chain requires SVGO
 id = "GHSA-w27v-7q3p-w38r"
 ignoreUntil = 2026-11-25
 reason = "The fix requires SVGO 2 or later; the current SVGR chain requires SVGO 1, so upgrade that chain and remove this exception."
+
+[[IgnoredVulns]]
+id = "GHSA-gcqx-w48m-w2h4"
+ignoreUntil = 2026-11-25
+reason = "No fixed deepmerge release is published; reassess and remove this exception when an upstream fix is available."
