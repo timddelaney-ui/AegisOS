@@ -5,6 +5,9 @@ import { useUnits } from "../context/UnitContext";
 import { triaxialVonMises, vmEnvelope, intervalAt } from "../lib/ctPhysics";
 import { AlertTriangle, Volume2, VolumeX, Zap } from "lucide-react";
 import ShareLinksButton from "../components/ShareLinksButton";
+import StressStateDiagram from "../components/StressStateDiagram";
+import CTSegmentStressWorkbench from "../components/CTSegmentStressWorkbench";
+import { EngineeringDisclaimer } from "../components/AdvisoryDisclaimer";
 
 const PAD = 44;
 const W = 680, H = 380;
@@ -168,6 +171,13 @@ export default function VonMisesPage() {
             <p className="mt-1 text-[11px] font-bold text-[#C00000] flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5" />Operating point crossed 95% of 80% SMYS working limit. [API RP 5C7 §4.2.1 / ISO 13628-7]</p>
           )}
         </div>
+
+        <EngineeringDisclaimer />
+        <CTSegmentStressWorkbench />
+        <StressStateDiagram
+          stress={stress}
+          formatStress={(value) => u.fmt(value, "stress", { digits: 1 })}
+        />
 
         <div className="bg-white border border-[#D4D4D4] rounded-lg p-1">
           <svg data-testid="vm-egg-svg" viewBox={`0 0 ${W} ${H}`} className="w-full h-auto">

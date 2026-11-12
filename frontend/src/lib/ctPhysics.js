@@ -25,21 +25,22 @@ export const defaultSmys = (grade) => GRADE_SMYS[(grade || "").toUpperCase()] ||
 // σ_a = F / A                                            (axial)
 // VM  = √(½·[(σ_h−σ_r)² + (σ_r−σ_a)² + (σ_a−σ_h)²])
 export function triaxialVonMises({ OD, WT, p_i, p_o = 0, F_axial = 0, smys }) {
-  const od = Number(OD) || 0;
-  const wt = Number(WT) || 0;
+  const od = Number.isFinite(Number(OD)) ? Number(OD) : 0;
+  const wt = Number.isFinite(Number(WT)) ? Number(WT) : 0;
   const id = Math.max(0.01, od - 2 * wt);
   const r_i = id / 2;
   const r_o = od / 2;
   if (r_o <= r_i) return null;
 
-  const pi = Number(p_i) || 0;
-  const po = Number(p_o) || 0;
+  const fin = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+  const pi = fin(p_i);
+  const po = fin(p_o);
   const dp = pi - po;
 
   const sigma_h = (pi * (r_i * r_i + r_o * r_o) - 2 * po * r_o * r_o) / (r_o * r_o - r_i * r_i);
   const sigma_r = -pi;
   const area = Math.PI * (r_o * r_o - r_i * r_i); // in²
-  const sigma_a = (Number(F_axial) || 0) / Math.max(area, 1e-6);
+  const sigma_a = fin(F_axial) / Math.max(area, 1e-6);
 
   const vm = Math.sqrt(
     0.5 * (
@@ -75,8 +76,8 @@ export function thinWallVonMises({ OD, WT, dp, F_axial = 0, p_o = 0, smys }) {
 // branch of the egg). Produces the closed curve directly, including the burst
 // and collapse "tips" where the two branches meet.
 export function vmEnvelope({ OD, WT, smys, p_o = 0, utilization_target = 1.0, steps = 180 }) {
-  const od = Number(OD) || 0;
-  const wt = Number(WT) || 0;
+  const od = Number.isFinite(Number(OD)) ? Number(OD) : 0;
+  const wt = Number.isFinite(Number(WT)) ? Number(WT) : 0;
   const id = Math.max(0.01, od - 2 * wt);
   const r_i = id / 2;
   const r_o = od / 2;
@@ -234,10 +235,13 @@ export function injectorSkateMechanics({
 // Plastic strain at reel-core wrap: eps_p = (OD/2) / R_bend
 export const REEL_CORE_RADIUS_IN = 72.0; // 72" reel core, open standard
 export function cyclesToFailure(OD_in, bend_radius_in = REEL_CORE_RADIUS_IN, smys = 90000) {
+  // Invalid geometry/grade returns the conservative floor instead of NaN/Infinity.
+  if (![OD_in, bend_radius_in, smys].every(Number.isFinite) || OD_in <= 0 || smys <= 0) return 50;
   const eps_p = (OD_in / 2) / Math.max(bend_radius_in, 0.1);
   const gradeFactor = Math.pow(smys / 90000, 1.2);
   const base = Math.pow(eps_p / 0.5, -2);
-  return Math.max(50, base * gradeFactor);
+  const nf = base * gradeFactor;
+  return Number.isFinite(nf) ? Math.min(Math.max(50, nf), 1e12) : 50;
 }
 
 // Augmented damage per cycle at a node, with pressure penalty + optional
@@ -274,7 +278,7 @@ export function intervalAt(reel, md_ft) {
  * Units must be consistent (E psi, I in^4, w lb/in, r in -> lb).
  */
 export function calculateBucklingThresholds({ E, I, w, r, thetaDeg }) {
-  if (!E || !I || !w || !r || thetaDeg === undefined || thetaDeg === null) {
+  if (![E, I, w, r, thetaDeg].every(Number.isFinite) || E <= 0 || I <= 0 || w <= 0 || r <= 0 || thetaDeg < 0 || thetaDeg > 90) {
     throw new Error("BUCKLING_ERROR: Invalid or missing geometric/material parameters.");
   }
   const sinTheta = Math.sin((thetaDeg * Math.PI) / 180);
@@ -293,21 +297,55 @@ export function calculateBucklingThresholds({ E, I, w, r, thetaDeg }) {
 export function calculateFatemiSocieFatigue({
   deltaGammaHalf, sigmaNMax, sigmaY, k = 0.3, tauFPrime, G, b, gammaFPrime, c,
 }) {
-  if (!Number.isFinite(deltaGammaHalf) || deltaGammaHalf <= 0 || !sigmaY || sigmaY <= 0) {
+  const parameters = [deltaGammaHalf, sigmaNMax, sigmaY, k, tauFPrime, G, b, gammaFPrime, c];
+  if (!parameters.every(Number.isFinite) || sigmaY <= 0 || G <= 0 ||
+      deltaGammaHalf < 0 || tauFPrime < 0 || gammaFPrime < 0 || (tauFPrime === 0 && gammaFPrime === 0) ||
+      b >= 0 || c >= 0) {
+    throw new Error("FATEMI_SOCIE_ERROR: Invalid material or loading parameters.");
+  }
+  if (deltaGammaHalf === 0) {
     return { effectiveStrain: 0, cyclesToFailure: Infinity, damagePerCycle: 0, status: "NEGLIGIBLE_DAMAGE" };
   }
   const effectiveStrain = deltaGammaHalf * (1 + k * (sigmaNMax / sigmaY));
-
-  // Newton-Raphson on reversals to failure (2Nf)
-  let reversals = 1000.0;
-  for (let i = 0; i < 100; i++) {
-    const f = (tauFPrime / G) * Math.pow(reversals, b) + gammaFPrime * Math.pow(reversals, c) - effectiveStrain;
-    if (Math.abs(f) < 1e-7) break;
-    const fPrime = (tauFPrime / G) * b * Math.pow(reversals, b - 1) + gammaFPrime * c * Math.pow(reversals, c - 1);
-    if (Math.abs(fPrime) < 1e-12) break;
-    reversals -= f / fPrime;
-    if (reversals <= 1.0) { reversals = 1.0; break; }
+  if (!Number.isFinite(effectiveStrain) || effectiveStrain <= 0) {
+    throw new Error("FATEMI_SOCIE_ERROR: Effective strain must be positive and finite.");
   }
-  const nf = reversals / 2.0;
+
+  const strainAtReversals = (reversals) =>
+    (tauFPrime / G) * Math.pow(reversals, b) + gammaFPrime * Math.pow(reversals, c);
+  if (strainAtReversals(1) <= effectiveStrain) {
+    return { effectiveStrain, cyclesToFailure: 0.5, damagePerCycle: 2, status: "LOW_CYCLE_LIMIT" };
+  }
+  let low = 1;
+  let high = 2;
+  while (strainAtReversals(high) > effectiveStrain && high < 1e15) high *= 2;
+  if (!Number.isFinite(strainAtReversals(high)) || strainAtReversals(high) > effectiveStrain) {
+    return { effectiveStrain, cyclesToFailure: Infinity, damagePerCycle: 0, status: "OUT_OF_RANGE" };
+  }
+  for (let i = 0; i < 100; i++) {
+    const mid = (low + high) / 2;
+    if (strainAtReversals(mid) > effectiveStrain) low = mid;
+    else high = mid;
+    if (high - low <= Math.max(1e-9, high * 1e-12)) break;
+  }
+  const nf = ((low + high) / 2) / 2;
   return { effectiveStrain, cyclesToFailure: nf, damagePerCycle: 1.0 / nf, status: "NOMINAL" };
+}
+
+/**
+ * Backward-Euler update for Chaboche's sum of nonlinear kinematic backstresses.
+ * The caller supplies calibrated C/gamma pairs and the signed plastic-strain increment.
+ */
+export function updateChabocheBackstress({ plasticStrainIncrement, backstresses, C, gamma }) {
+  if (!Number.isFinite(plasticStrainIncrement) ||
+      !Array.isArray(backstresses) || !Array.isArray(C) || !Array.isArray(gamma) ||
+      backstresses.length === 0 || backstresses.length !== C.length || C.length !== gamma.length ||
+      ![...backstresses, ...C, ...gamma].every(Number.isFinite) ||
+      C.some((value) => value < 0) || gamma.some((value) => value < 0)) {
+    throw new Error("CHABOCHE_ERROR: Invalid backstress state or material parameters.");
+  }
+  const components = backstresses.map((alpha, i) =>
+    (alpha + (2 / 3) * C[i] * plasticStrainIncrement) /
+    (1 + gamma[i] * Math.abs(plasticStrainIncrement)));
+  return { components, backstress: components.reduce((sum, value) => sum + value, 0) };
 }
