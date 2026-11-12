@@ -11,53 +11,77 @@
 const DEFAULT_FLUID_KEYS = ["acid", "frSlug", "mmfrSlugs", "gelPills", "waterFlush"];
 
 export function normalizeFluidChannels(input = {}) {
-  const values = {
-    acid: Number(input.acid ?? input.Acid ?? 0),
-    frSlug: Number(input.frSlug ?? input.FR_Slug ?? 0),
-    mmfrSlugs: Number(input.mmfrSlugs ?? input.MMFR_Slugs ?? 0),
-    gelPills: Number(input.gelPills ?? input.Gel_Pills ?? 0),
-    waterFlush: Number(input.waterFlush ?? input["Water / Flush"] ?? 0),
-  };
-
-  const rate = Object.values(values).reduce((sum, val) => sum + (Number.isFinite(val) ? val : 0), 0);
+  const { rates, volumes } = normalizeFluidValues(input);
   return {
-    channels: values,
-    rates: values,
-    qTotal: rate,
-    vTotal: rate,
+    channels: Object.fromEntries(DEFAULT_FLUID_KEYS.map((key) => [key, { rate: rates[key], volume: volumes[key] }])),
+    rates,
+    volumes,
+    qTotal: Object.values(rates).reduce((sum, val) => sum + val, 0),
+    vTotal: Object.values(volumes).reduce((sum, val) => sum + val, 0),
   };
 }
 
 export function computeFluidTotals(fluidChannels = {}) {
-  const source = fluidChannels && typeof fluidChannels === "object" ? fluidChannels : {};
-  const totals = {};
-
-  for (const key of DEFAULT_FLUID_KEYS) {
-    totals[key] = Number(source[key] ?? source[key.toLowerCase()] ?? 0);
-  }
-
-  const qTotal = DEFAULT_FLUID_KEYS.reduce((sum, key) => sum + (Number.isFinite(totals[key]) ? totals[key] : 0), 0);
-  const vTotal = qTotal;
-
+  const { rates, volumes } = normalizeFluidValues(fluidChannels);
   return {
-    fluidTotalizers: totals,
-    qTotal,
-    vTotal,
+    fluidTotalizers: volumes,
+    rates,
+    volumes,
+    qTotal: Object.values(rates).reduce((sum, val) => sum + val, 0),
+    vTotal: Object.values(volumes).reduce((sum, val) => sum + val, 0),
   };
 }
 
+function normalizeFluidValues(input) {
+  const source = input && typeof input === "object" ? input : {};
+  const aliases = {
+    acid: ["Acid"],
+    frSlug: ["FR_Slug", "FR Slug"],
+    mmfrSlugs: ["MMFR_Slugs", "MMFR Slugs"],
+    gelPills: ["Gel_Pills", "Gel Pills"],
+    waterFlush: ["Water / Flush", "Water_Flush"],
+  };
+  const rates = {};
+  const volumes = {};
+  for (const key of DEFAULT_FLUID_KEYS) {
+    const channel = source[key] ?? aliases[key].map((alias) => source[alias]).find((value) => value != null) ??
+      source[`${key}Rate`] ?? source[`${key}_rate`] ?? 0;
+    const rate = channel && typeof channel === "object" ? channel.rate ?? 0 : channel;
+    const volume = channel && typeof channel === "object"
+      ? channel.volume ?? 0
+      : source[`${key}Volume`] ?? source[`${key}_volume`] ?? 0;
+    rates[key] = finiteFluidValue(rate, `${key} rate`);
+    volumes[key] = finiteFluidValue(volume, `${key} volume`);
+  }
+  return { rates, volumes };
+}
+
+function finiteFluidValue(value, label) {
+  if (value === null || value === undefined || value === "") return 0;
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < 0) {
+    throw new TypeError(`${label} must be a finite, non-negative number`);
+  }
+  return number;
+}
+
 export function computeMultiEncoderConsensus(encoders = [], thresholdFt = 2.0) {
+  if (!Number.isFinite(thresholdFt) || thresholdFt < 0) {
+    throw new TypeError("thresholdFt must be a finite, non-negative number");
+  }
   const list = Array.isArray(encoders) ? encoders : [];
-  const normalized = list.map((entry) => ({
-    name: entry.name || entry.id || "encoder",
-    depthFt: Number(entry.depthFt ?? entry.depth_ft ?? entry.value ?? 0),
-  }));
+  const normalized = list.map((entry) => {
+    const raw = entry?.depthFt ?? entry?.depth_ft ?? entry?.value;
+    const depthFt = raw === null || raw === undefined || raw === "" ? NaN : Number(raw);
+    return { name: entry?.name || entry?.id || "encoder", depthFt };
+  });
+  const valid = normalized.filter((entry) => Number.isFinite(entry.depthFt));
 
   const deltas = [];
-  for (let i = 0; i < normalized.length; i++) {
-    for (let j = i + 1; j < normalized.length; j++) {
-      const a = normalized[i];
-      const b = normalized[j];
+  for (let i = 0; i < valid.length; i++) {
+    for (let j = i + 1; j < valid.length; j++) {
+      const a = valid[i];
+      const b = valid[j];
       const delta = Math.abs(a.depthFt - b.depthFt);
       deltas.push({
         names: [a.name, b.name],
@@ -68,15 +92,42 @@ export function computeMultiEncoderConsensus(encoders = [], thresholdFt = 2.0) {
   }
 
   const maxDeltaFt = deltas.reduce((max, item) => Math.max(max, item.deltaFt), 0);
-  const warning = maxDeltaFt > thresholdFt;
+  const insufficientData = valid.length < 2 || valid.length !== normalized.length;
+  const warning = insufficientData || maxDeltaFt > thresholdFt;
+  const depths = valid.map((entry) => entry.depthFt).sort((a, b) => a - b);
+  const depthFt = depths.length
+    ? depths.length % 2
+      ? depths[(depths.length - 1) / 2]
+      : (depths[depths.length / 2 - 1] + depths[depths.length / 2]) / 2
+    : null;
 
   return {
     encoders: normalized,
     deltas,
     maxDeltaFt,
+    depthFt,
+    validEncoderCount: valid.length,
     thresholdFt,
     warning,
-    status: warning ? "slippage-warning" : "consensus-ok",
+    status: insufficientData ? "insufficient-data" : warning ? "slippage-warning" : "consensus-ok",
+  };
+}
+
+export function calculateDepthMotion(previousDepthFt, currentDepthFt, elapsedSeconds) {
+  if ([previousDepthFt, currentDepthFt, elapsedSeconds].some((value) => value === null || value === undefined || value === "")) {
+    return { depthFt: null, speedFtPerMin: null, direction: "unknown" };
+  }
+  const previous = Number(previousDepthFt);
+  const current = Number(currentDepthFt);
+  const elapsed = Number(elapsedSeconds);
+  if (![previous, current, elapsed].every(Number.isFinite) || elapsed <= 0) {
+    return { depthFt: Number.isFinite(current) ? current : null, speedFtPerMin: null, direction: "unknown" };
+  }
+  const delta = current - previous;
+  return {
+    depthFt: current,
+    speedFtPerMin: (Math.abs(delta) / elapsed) * 60,
+    direction: delta > 0 ? "RIH" : delta < 0 ? "POOH" : "stationary",
   };
 }
 

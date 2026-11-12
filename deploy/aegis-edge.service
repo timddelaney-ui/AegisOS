@@ -1,0 +1,28 @@
+[Unit]
+Description=Aegis OS rig-PC telemetry edge gateway
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=aegis-edge
+Group=aegis-edge
+WorkingDirectory=/opt/aegis/backend
+EnvironmentFile=/etc/aegis-edge/edge.env
+ExecStart=/opt/aegis/venv/bin/python -m edge_gateway
+Restart=always
+RestartSec=3
+StateDirectory=aegis-edge
+StateDirectoryMode=0750
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/aegis-edge
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LockPersonality=true
+MemoryDenyWriteExecute=true
+
+[Install]
+WantedBy=multi-user.target
