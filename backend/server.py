@@ -1,4 +1,5 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, Cookie, Header, UploadFile, File, Form, Query
+from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, Cookie, Header, UploadFile, File, Form, Query, WebSocket
+from starlette.websockets import WebSocketDisconnect
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -23,6 +24,7 @@ from emergentintegrations.llm.chat import LlmChat, UserMessage
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
+from liveops_broadcast import liveops_broadcaster  # noqa: E402
 
 # MongoDB connection
 mongo_url = os.environ["MONGO_URL"]
@@ -112,6 +114,12 @@ async def get_current_user(
     if not token:
         return None
 
+    return await _user_from_session_token(token)
+
+
+async def _user_from_session_token(token: Optional[str]) -> Optional[dict]:
+    if not token:
+        return None
     session_doc = await db.user_sessions.find_one({"session_token": token}, {"_id": 0})
     if not session_doc:
         return None
@@ -132,6 +140,40 @@ async def require_user(user: Optional[dict] = Depends(get_current_user)) -> dict
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
     return user
+
+
+@app.websocket("/api/liveops/ws")
+async def liveops_websocket(websocket: WebSocket):
+    origin = websocket.headers.get("origin")
+    if not origin or origin not in _cors_origins:
+        await websocket.close(code=1008)
+        return
+    user = await _user_from_session_token(websocket.cookies.get("session_token"))
+    if not user or not user.get("team_id"):
+        await websocket.close(code=4401)
+        return
+
+    rig_id = websocket.query_params.get("rig_id") or None
+    queue = liveops_broadcaster.subscribe(user["team_id"], rig_id)
+    try:
+        await websocket.accept()
+        while True:
+            try:
+                message = await asyncio.wait_for(queue.get(), timeout=20)
+            except asyncio.TimeoutError:
+                await websocket.send_json({"type": "heartbeat"})
+                continue
+            await websocket.send_json(message)
+            if message.get("type") == "resync_required":
+                break
+    except WebSocketDisconnect:
+        pass
+    finally:
+        liveops_broadcaster.unsubscribe(user["team_id"], queue)
+        try:
+            await websocket.close()
+        except (RuntimeError, WebSocketDisconnect):
+            pass
 
 
 def _generate_invite_code(length=8) -> str:
@@ -734,7 +776,9 @@ async def get_job(job_id: str, user: dict = Depends(require_user)):
     doc = await db.jobs.find_one({"job_id": job_id}, {"_id": 0})
     if not doc:
         raise HTTPException(404, "Job not found")
-    if doc["user_id"] != user["user_id"] and doc.get("team_id") != user.get("team_id"):
+    # A private job has team_id None; never let team-less users match it via None == None.
+    is_teammate = bool(doc.get("team_id")) and doc.get("team_id") == user.get("team_id")
+    if doc["user_id"] != user["user_id"] and not is_teammate:
         raise HTTPException(403, "Access denied")
     return _serialize(doc)
 
@@ -1021,7 +1065,7 @@ async def download_company_doc(doc_id: str, auth: Optional[str] = None,
         {"doc_id": doc_id, "is_deleted": False}, {"_id": 0})
     if not rec:
         raise HTTPException(404, "Not found.")
-    if rec.get("team_id") != user.get("team_id") and not _is_admin(user):
+    if (not rec.get("team_id") or rec.get("team_id") != user.get("team_id")) and not _is_admin(user):
         raise HTTPException(403, "Document belongs to another team.")
     try:
         data, ctype = _get_object(rec["storage_path"])
@@ -4626,7 +4670,17 @@ async def delete_attachment(attachment_id: str, user: dict = Depends(require_use
 
 # ============ PHASE 1 MODULES (RBAC, Reels, Fatigue, Surveys, Certs, Tasks, Parts, Timecards) ============
 from phase1_modules import register_phase1  # noqa: E402
-register_phase1(api_router, db, require_user, get_current_user, _is_admin)
+
+
+async def _broadcast_liveops(team_id: str, rig_id: Optional[str], sample: dict):
+    public_sample = {key: value for key, value in sample.items() if key not in {"team_id", "user_email"}}
+    try:
+        await liveops_broadcaster.publish(team_id, rig_id, public_sample)
+    except Exception:
+        logger.exception("Liveops WebSocket broadcast failed for team %s rig %s", team_id, rig_id)
+
+
+register_phase1(api_router, db, require_user, get_current_user, _is_admin, _broadcast_liveops)
 
 
 # ============ SECURITY & COMPLIANCE (Enterprise bundle) ============
@@ -4746,8 +4800,9 @@ async def _store_daq_sample(team_id: str, rig_id: str | None, sample: dict):
             "user_email": "daq@rig.local",
         }
         await db.liveops_samples.insert_one(doc)
-    except Exception as e:
-        logger.debug("DAQ sample store failed: %s", e)
+        await _broadcast_liveops(team_id, rig_id, doc)
+    except Exception:
+        logger.exception("DAQ sample store or broadcast failed for team %s rig %s", team_id, rig_id)
 
 
 @app.on_event("startup")

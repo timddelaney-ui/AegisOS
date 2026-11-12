@@ -115,7 +115,7 @@ def parse_event_at(raw: Optional[str], now: Optional[datetime] = None) -> dateti
     return dt
 
 
-def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _is_admin):
+def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _is_admin, liveops_notifier=None):
     """Attach all Phase 1 endpoints to the main api_router."""
 
     # -----------------------------------------------------------------
@@ -267,6 +267,8 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
             await db.liveops_samples.insert_one(doc)
         except DuplicateKeyError:
             return {"duplicate": True, "client_id": body.client_id}
+        if liveops_notifier:
+            await liveops_notifier(team_id, body.rig_id, doc)
         # Keep only the last N samples per (team, rig) — pruned opportunistically
         rig_scope = {"team_id": team_id, "rig_id": body.rig_id}
         count = await db.liveops_samples.count_documents(rig_scope)
@@ -318,7 +320,7 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
         target = await db.users.find_one({"user_id": body.user_id}, {"_id": 0})
         if not target:
             raise HTTPException(404, "User not found.")
-        if target.get("team_id") != user.get("team_id") and not _is_admin(user):
+        if (not target.get("team_id") or target.get("team_id") != user.get("team_id")) and not _is_admin(user):
             raise HTTPException(403, "User belongs to a different workspace.")
         legacy = PLAN_TO_LEGACY[body.role]
         await db.users.update_one({"user_id": body.user_id}, {"$set": {"role": legacy, "role_updated_at": now_utc(), "role_updated_by": user["email"]}})
@@ -440,8 +442,8 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
                 smys = seg.smys_psi or _default_smys(seg.grade)
                 intervals.append({**seg.model_dump(), "smys_psi": smys})
             update["intervals"] = intervals
-        await db.reels.update_one({"reel_id": reel_id}, {"$set": update})
-        updated = await db.reels.find_one({"reel_id": reel_id}, {"_id": 0})
+        await db.reels.update_one({"reel_id": reel_id, "team_id": user.get("team_id")}, {"$set": update})
+        updated = await db.reels.find_one({"reel_id": reel_id, "team_id": user.get("team_id")}, {"_id": 0})
         return ser(updated)
 
     @api_router.post("/reels/{reel_id}/activate")
@@ -454,7 +456,7 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
         if reel.get("retired"):
             raise HTTPException(400, "Cannot activate a retired reel.")
         await db.reels.update_many({"team_id": team_id}, {"$set": {"is_active": False}})
-        await db.reels.update_one({"reel_id": reel_id}, {"$set": {"is_active": True, "activated_at": now_utc(), "activated_by": user["email"]}})
+        await db.reels.update_one({"reel_id": reel_id, "team_id": user.get("team_id")}, {"$set": {"is_active": True, "activated_at": now_utc(), "activated_by": user["email"]}})
         return {"success": True, "active_reel_id": reel_id}
 
     @api_router.delete("/reels/{reel_id}")
@@ -463,7 +465,7 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
         res = await db.reels.delete_one({"reel_id": reel_id, "team_id": user.get("team_id")})
         if res.deleted_count == 0:
             raise HTTPException(404, "Reel not found.")
-        await db.reel_fatigue.delete_many({"reel_id": reel_id})
+        await db.reel_fatigue.delete_many({"reel_id": reel_id, "team_id": user.get("team_id")})
         return {"success": True}
 
     @api_router.post("/reels/upload")
@@ -721,12 +723,59 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
         reel = await db.reels.find_one({"reel_id": reel_id, "team_id": team_id}, {"_id": 0})
         if not reel:
             raise HTTPException(404, "Reel not found.")
-        await db.reel_fatigue.delete_one({"reel_id": reel_id})
+        await db.reel_fatigue.delete_one({"reel_id": reel_id, "team_id": user.get("team_id")})
         await db.reel_fatigue_events.insert_one({
             "reel_id": reel_id, "team_id": team_id, "source": "reset",
             "user_email": user["email"], "created_at": now_utc(),
         })
         return {"success": True}
+
+    class FatigueImport(BaseModel):
+        reel_id: str = Field(..., max_length=64)
+        spacing_ft: int = Field(NODE_SPACING_FT_DEFAULT, ge=10, le=1000)
+        damage: List[float] = Field(..., min_length=1, max_length=5000)  # per-station fraction 0..1
+        source: Literal["cerberus", "reel-trak", "csv", "las"] = "csv"
+        filename: Optional[str] = Field(None, max_length=200)
+        overwrite: bool = False
+
+    @api_router.post("/fatigue/import")
+    async def import_fatigue(body: FatigueImport, user: dict = Depends(require_user)):
+        """Seed a reel's station fatigue ledger from a legacy-system export (supervisor+)."""
+        require_supervisor(user)
+        team_id = user.get("team_id")
+        if not team_id:
+            raise HTTPException(400, "No team.")
+        reel = await db.reels.find_one({"reel_id": body.reel_id, "team_id": team_id}, {"_id": 0})
+        if not reel:
+            raise HTTPException(404, "Reel not found.")
+        if reel.get("retired"):
+            raise HTTPException(400, "Reel retired.")
+        if any((not math.isfinite(d)) or d < 0 or d > 1 for d in body.damage):
+            raise HTTPException(422, "Damage values must be finite fractions between 0 and 1.")
+        total = reel.get("total_length_ft") or (reel["intervals"][-1]["end_md_ft"] if reel.get("intervals") else 10000)
+        n_nodes = _node_count(total, body.spacing_ft)
+        if len(body.damage) != n_nodes:
+            raise HTTPException(422, f"Expected {n_nodes} stations for {total:.0f} ft at {body.spacing_ft} ft spacing; got {len(body.damage)}.")
+        existing = await db.reel_fatigue.find_one({"reel_id": body.reel_id, "team_id": team_id}, {"_id": 0})
+        if existing and any(d > 0 for d in (existing.get("damage") or [])) and not body.overwrite:
+            raise HTTPException(409, "Reel already has fatigue history. Re-submit with overwrite=true to replace it.")
+        now = now_utc()
+        await db.reel_fatigue.update_one(
+            {"reel_id": body.reel_id, "team_id": team_id},
+            {"$set": {"reel_id": body.reel_id, "team_id": team_id, "spacing_ft": body.spacing_ft,
+                      "node_count": n_nodes, "damage": body.damage, "updated_at": now,
+                      "last_source": f"import:{body.source}"},
+             "$setOnInsert": {"created_at": now}},
+            upsert=True,
+        )
+        await db.reel_fatigue_events.insert_one({
+            "reel_id": body.reel_id, "team_id": team_id, "source": f"import:{body.source}",
+            "filename": body.filename, "overwrite": body.overwrite, "node_count": n_nodes,
+            "user_email": user["email"], "status": "applied", "created_at": now,
+        })
+        worst = max(body.damage)
+        return {"reel_id": body.reel_id, "spacing_ft": body.spacing_ft, "node_count": n_nodes,
+                "damage": body.damage, "worst_damage": worst, "derate_warning": worst >= 0.8}
 
     # -----------------------------------------------------------------
     # MODULE 6 — Directional Survey (3D wellbore)
@@ -864,7 +913,7 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
         if not s:
             raise HTTPException(404, "Survey not found.")
         await db.surveys.update_many({"team_id": team_id}, {"$set": {"is_active": False}})
-        await db.surveys.update_one({"survey_id": survey_id}, {"$set": {"is_active": True}})
+        await db.surveys.update_one({"survey_id": survey_id, "team_id": user.get("team_id")}, {"$set": {"is_active": True}})
         return {"success": True, "active_survey_id": survey_id}
 
     @api_router.delete("/surveys/{survey_id}")
@@ -994,8 +1043,8 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
                 update[k] = v.strip() if isinstance(v, str) else v
         if body.issue_date is not None:   update["issue_date"] = _parse_date(body.issue_date)
         if body.expiry_date is not None:  update["expiry_date"] = _parse_date(body.expiry_date)
-        await db.certifications.update_one({"cert_id": cert_id}, {"$set": update})
-        return ser(await db.certifications.find_one({"cert_id": cert_id}, {"_id": 0}))
+        await db.certifications.update_one({"cert_id": cert_id, "team_id": user.get("team_id")}, {"$set": update})
+        return ser(await db.certifications.find_one({"cert_id": cert_id, "team_id": user.get("team_id")}, {"_id": 0}))
 
     @api_router.delete("/certifications/{cert_id}")
     async def delete_cert(cert_id: str, user: dict = Depends(require_user)):
@@ -1084,8 +1133,8 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
             else:
                 update["completed_by"] = None
                 update["completed_at"] = None
-        await db.daily_tasks.update_one({"task_id": task_id}, {"$set": update})
-        return ser(await db.daily_tasks.find_one({"task_id": task_id}, {"_id": 0}))
+        await db.daily_tasks.update_one({"task_id": task_id, "team_id": user.get("team_id")}, {"$set": update})
+        return ser(await db.daily_tasks.find_one({"task_id": task_id, "team_id": user.get("team_id")}, {"_id": 0}))
 
     @api_router.delete("/tasks/{task_id}")
     async def delete_task(task_id: str, user: dict = Depends(require_user)):
@@ -1155,13 +1204,13 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
         if pkg.get("survey_id"):
             await db.surveys.update_many({"team_id": team_id}, {"$set": {"is_active": False}})
             await db.surveys.update_one({"survey_id": pkg["survey_id"], "team_id": team_id}, {"$set": {"is_active": True}})
-        await db.job_packages.update_one({"pkg_id": pkg_id}, {"$set": {
+        await db.job_packages.update_one({"pkg_id": pkg_id, "team_id": user.get("team_id")}, {"$set": {
             "status": "active",
             "acknowledged_at": now_utc(),
             "acknowledged_by": user["email"],
             "updated_at": now_utc(),
         }})
-        return ser(await db.job_packages.find_one({"pkg_id": pkg_id}, {"_id": 0}))
+        return ser(await db.job_packages.find_one({"pkg_id": pkg_id, "team_id": user.get("team_id")}, {"_id": 0}))
 
     # -----------------------------------------------------------------
     # MODULE C — Parts Orders with Approval Chain
@@ -1231,12 +1280,12 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
             raise HTTPException(404, "Order not found.")
         now = now_utc()
         hist = (po.get("history") or []) + [{"action": "approved", "by": user["email"], "at": now.isoformat(), "comment": body.comment or ""}]
-        await db.parts_orders.update_one({"po_id": po_id}, {"$set": {
+        await db.parts_orders.update_one({"po_id": po_id, "team_id": user.get("team_id")}, {"$set": {
             "status": "approved",
             "approved_by": user["email"], "approved_at": now,
             "updated_at": now, "history": hist,
         }})
-        return ser(await db.parts_orders.find_one({"po_id": po_id}, {"_id": 0}))
+        return ser(await db.parts_orders.find_one({"po_id": po_id, "team_id": user.get("team_id")}, {"_id": 0}))
 
     @api_router.post("/parts-orders/{po_id}/reject")
     async def reject_parts(po_id: str, body: PartsOrderAction, user: dict = Depends(require_user)):
@@ -1246,10 +1295,10 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
             raise HTTPException(404, "Order not found.")
         now = now_utc()
         hist = (po.get("history") or []) + [{"action": "rejected", "by": user["email"], "at": now.isoformat(), "comment": body.comment or ""}]
-        await db.parts_orders.update_one({"po_id": po_id}, {"$set": {
+        await db.parts_orders.update_one({"po_id": po_id, "team_id": user.get("team_id")}, {"$set": {
             "status": "rejected", "updated_at": now, "history": hist,
         }})
-        return ser(await db.parts_orders.find_one({"po_id": po_id}, {"_id": 0}))
+        return ser(await db.parts_orders.find_one({"po_id": po_id, "team_id": user.get("team_id")}, {"_id": 0}))
 
     @api_router.post("/parts-orders/{po_id}/status")
     async def set_parts_status(po_id: str, body: PartsOrderAction, user: dict = Depends(require_user)):
@@ -1261,10 +1310,10 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
             raise HTTPException(404, "Order not found.")
         now = now_utc()
         hist = (po.get("history") or []) + [{"action": body.new_status, "by": user["email"], "at": now.isoformat(), "comment": body.comment or ""}]
-        await db.parts_orders.update_one({"po_id": po_id}, {"$set": {
+        await db.parts_orders.update_one({"po_id": po_id, "team_id": user.get("team_id")}, {"$set": {
             "status": body.new_status, "updated_at": now, "history": hist,
         }})
-        return ser(await db.parts_orders.find_one({"po_id": po_id}, {"_id": 0}))
+        return ser(await db.parts_orders.find_one({"po_id": po_id, "team_id": user.get("team_id")}, {"_id": 0}))
 
     # -----------------------------------------------------------------
     # Position Designations — the promotion ladder.
@@ -1661,8 +1710,8 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
             update["hours"] = new_hours
         hist = line.get("history", []) + [{"action": "edited", "by": user["email"], "at": now_utc().isoformat()}]
         update["history"] = hist
-        await db.timecard_lines.update_one({"line_id": line_id}, {"$set": update})
-        return ser(await db.timecard_lines.find_one({"line_id": line_id}, {"_id": 0}))
+        await db.timecard_lines.update_one({"line_id": line_id, "team_id": user.get("team_id")}, {"$set": update})
+        return ser(await db.timecard_lines.find_one({"line_id": line_id, "team_id": user.get("team_id")}, {"_id": 0}))
 
     @api_router.delete("/timecards/lines/{line_id}")
     async def delete_tc_line(line_id: str, user: dict = Depends(require_user)):
@@ -1675,7 +1724,7 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
             raise HTTPException(403, "Not allowed.")
         if line["status"] in ("approved_supervisor", "approved_payroll"):
             raise HTTPException(400, "Line locked by approval chain.")
-        await db.timecard_lines.delete_one({"line_id": line_id})
+        await db.timecard_lines.delete_one({"line_id": line_id, "team_id": user.get("team_id")})
         return {"success": True}
 
     class TCBatchAction(BaseModel):
@@ -1852,8 +1901,8 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
             update["status"] = "connecting"
         if body.enabled is False:
             update["status"] = "idle"
-        await db.daq_configs.update_one({"config_id": config_id}, {"$set": update})
-        return ser(await db.daq_configs.find_one({"config_id": config_id}, {"_id": 0}))
+        await db.daq_configs.update_one({"config_id": config_id, "team_id": user.get("team_id")}, {"$set": update})
+        return ser(await db.daq_configs.find_one({"config_id": config_id, "team_id": user.get("team_id")}, {"_id": 0}))
 
     @api_router.delete("/daq/configs/{config_id}")
     async def delete_daq_config(config_id: str, user: dict = Depends(require_user)):
@@ -1911,7 +1960,7 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
                 update["last_sample_at"] = datetime.fromisoformat(body.last_sample_at.replace("Z", "+00:00"))
             except Exception:
                 pass
-        await db.daq_configs.update_one({"config_id": config_id}, {"$set": update})
+        await db.daq_configs.update_one({"config_id": config_id, "team_id": user.get("team_id")}, {"$set": update})
         return {"success": True}
 
     # -----------------------------------------------------------------
@@ -1932,7 +1981,7 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
             raise HTTPException(404, "Reel not found.")
         if not (0.5 <= body.k_t <= 3.0):
             raise HTTPException(400, "k_t must be between 0.5 and 3.0")
-        await db.reels.update_one({"reel_id": body.reel_id}, {"$set": {"k_t": body.k_t, "kt_updated_at": now_utc()}})
+        await db.reels.update_one({"reel_id": body.reel_id, "team_id": user.get("team_id")}, {"$set": {"k_t": body.k_t, "kt_updated_at": now_utc()}})
         return {"success": True, "reel_id": body.reel_id, "k_t": body.k_t}
 
     # -----------------------------------------------------------------
