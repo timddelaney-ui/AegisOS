@@ -35,7 +35,7 @@ export default function CertificationsPage() {
       setMembers(m); setCerts(c);
     } catch {}
   };
-  useEffect(() => { refresh(); /* eslint-disable-next-line */ }, [viewUserId]);
+  useEffect(() => { refresh(); }, [viewUserId]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { setViewUserId(user?.user_id); }, [user?.user_id]);
 
   const addCert = async () => {

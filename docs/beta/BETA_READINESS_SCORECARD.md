@@ -141,6 +141,24 @@ Current decision: **No-Go** until the rollback drill blocker is closed and valid
 2. ___________________________________________
 3. ___________________________________________
 
+## Commercial adoption gates (not a beta go-live checklist)
+
+Commercial launch additionally requires evidence for the gates in
+[`COMMERCIAL_ADOPTION_GATES.md`](COMMERCIAL_ADOPTION_GATES.md):
+
+- [ ] Legacy reel-history import is reconciled and pre/post-job PDF/LAS packages
+  are validated against representative inputs and receiving tools.
+- [ ] Fatemi-Socie/Chaboche models have independent benchmark and physical-data
+  validation; shadow evidence from 3–5 agreed jobs is reviewed.
+- [ ] Rig integration is verified read-only, installation and rollback are
+  field-tested, and any OPC UA support has passed its own security review.
+- [ ] Tenant isolation, enterprise security review, legal-reviewed commercial
+  terms, and appropriate E&O coverage are evidenced.
+
+These are not satisfied by code presence, a simulator demo, or a passing unit
+test. Do not claim SOC 2/ISO certification or third-party model validation
+without the corresponding independent evidence.
+
 ## Sign-off
 - Product: __________________ Date: __________
 - Engineering: ______________ Date: __________

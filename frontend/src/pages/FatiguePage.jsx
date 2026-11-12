@@ -1,3 +1,4 @@
+import { EngineeringDisclaimer } from "../components/AdvisoryDisclaimer";
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import axios from "axios";
 import { toast } from "sonner";
@@ -46,7 +47,7 @@ export default function FatiguePage() {
     if (!activeReel) return;
     try { const r = await axios.get(`${API}/fatigue/state`, { params: { reel_id: activeReel.reel_id }, withCredentials: true }); setState(r.data); } catch (e) { console.debug("[Fatigue] refresh failed", e?.response?.status || e?.message); }
   };
-  useEffect(() => { refresh(); /* eslint-disable-next-line */ }, [activeReel?.reel_id]);
+  useEffect(() => { refresh(); }, [activeReel?.reel_id]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { setCurrentDepth(depth); }, [depth, setCurrentDepth]);
 
   const feed = async (overrides = {}) => {
@@ -95,7 +96,7 @@ export default function FatiguePage() {
 
   const worst = state?.worst_damage || 0;
   const warn = worst >= 0.8;
-  const nodes = state?.damage || [];
+  const nodes = useMemo(() => state?.damage || [], [state]);
   const spacing = state?.spacing_ft || 100;
 
   const stringFt = useMemo(() => (nodes.length - 1) * spacing, [nodes, spacing]);
@@ -104,12 +105,13 @@ export default function FatiguePage() {
   const seg = useMemo(() => intervalAt(activeReel, depth) || { od_in: 2.0, wt_in: 0.175 }, [activeReel, depth]);
   const skate = useMemo(() => injectorSkateMechanics({
     skate_pressure_psi: pressureErr ? 0 : pressureParsed.value, OD: seg.od_in, WT: seg.wt_in,
-  }), [pressure, pressureErr, seg.od_in, seg.wt_in]);
+  }), [pressureErr, pressureParsed.value, seg.od_in, seg.wt_in]);
 
   return (
     <div className="min-h-screen bg-[#F3F3F3]">
       <Phase1PageHeader title="Reel Fatigue · Palmgren-Miner" subtitle={`Driven by live traction pressure · ${spacing} ft stations · [API RP 5C7 §6 / Palmgren-Miner · Manson-Coffin low-cycle]`} right={<ShareLinksButton scope="fatigue" compact />} />
       <div className="max-w-6xl mx-auto p-3 space-y-3">
+        <EngineeringDisclaimer />
         {!activeReel && (
           <div className="bg-[#FFF3CD] text-[#856404] text-sm rounded p-3 border border-[#FFE69C]">
             Set an active reel in <b>Reels</b> first.

@@ -31,7 +31,7 @@ const ManagerGreeting = () => {
   const quip = useMemo(() => {
     const pool = role === "ops_manager" ? OPS_MANAGER_QUIPS : FIELD_MANAGER_QUIPS;
     return pool[Math.floor(Math.random() * pool.length)];
-  }, [role, user?.user_id]);
+  }, [role]);
 
   useEffect(() => {
     if (!user || !isManager) return;

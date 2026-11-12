@@ -2,6 +2,16 @@
 
 Audit date: 2026-10-26. Method: static code review of the repo plus `python -m compileall backend` (passes). The audit environment had no MongoDB and no `frontend/node_modules`, so **the backend pytest suite and the frontend jest tests were not executed**. Treat test status as unverified.
 
+> **Current follow-up (2026-11-10):** This historical audit contains findings that
+> have since changed. A rig-PC SQLite/MQTT publisher, editable fluid field map,
+> encoder/depth helpers, physics guardrails, and targeted test/CI jobs have been
+> added. An authenticated dashboard WebSocket fan-out with REST polling fallback
+> is also wired for stored liveops samples. It is an in-process broadcaster and
+> requires one backend worker unless replaced with shared pub/sub. None of these
+> additions has been validated against a live broker, cloud consumer, rig DAQ,
+> deployed certificate, or staging rollback. The original findings below are
+> historical unless independently rechecked.
+
 ## 1. How it is built
 
 | Layer | Tech | Location |
@@ -12,7 +22,7 @@ Audit date: 2026-10-26. Method: static code review of the repo plus `python -m c
 | Auth | Emergent OAuth session exchange → own `session_token` (httpOnly cookie or `Bearer`), 7-day expiry, stored in `user_sessions` | `server.py` `get_current_user` / `require_user` |
 | Payments | Stripe checkout + signed webhook | `server.py` `/stripe/webhook` |
 | Integrations | Emergent LLM key (AI panel), Resend (email), object storage proxy (attachments) | `server.py` |
-| Edge buffer | SQLite schema documented in README (`telemetry_events`, `telemetry_snapshots`, `encoder_consensus`) — **documented only; no implementation in repo** | `README.md` |
+| Edge buffer | Rig-PC SQLite outbox and MQTT publisher; cloud MQTT consumer and end-to-end acknowledgement path still require deployment | `backend/edge_gateway.py`, `docs/EDGE_GATEWAY.md` |
 
 ### Database (MongoDB collections, grouped)
 - Identity/tenancy: `users`, `user_sessions`, `teams`, `crews`, `invite_codes`, `team_security_keys/settings`, `audit_log`, `tier_change_log`, `designation_log`
@@ -37,8 +47,8 @@ Rig sensors ─WITS0 TCP / Modbus TCP / WITSML REST─► daq_listeners.DaqOrche
 Browser simulator / manual ─POST /api/liveops/feed────────┤
                                                           ▼
                                                liveops_samples (Mongo)
-                                                          │ GET /api/liveops/stream (≤3600/rig)
-                                                          ▼
+                                                   │ REST snapshot / WebSocket fan-out
+                                                   ▼
  Frontend LiveOpsPage ── lib/ctPhysics (Von Mises, fatigue colour) ──► panels, playback scrubber,
                                                                       annotations, share links
  POST /api/fatigue/feed ─► per-node Miner damage ─► reel_fatigue (+ reel_fatigue_events audit)
@@ -64,14 +74,14 @@ Simulator (`wits_fallback_sim`) drives the UI whenever no real listener is conne
 
 | # | Sev | Finding | Recommendation |
 |---|---|---|---|
-| 1 | High | No MongoDB indexes anywhere (`create_index` absent). `liveops_samples` is queried/sorted by `(team_id, rig_id, created_at)` at 1 Hz; `user_sessions.session_token` is looked up every request. | Add indexes at startup; TTL on `liveops_samples`/`user_sessions`. |
+| 1 | High | Historical finding: core live-ops query and retention indexes were missing. Current code has limited `team_items` indexes and lazy idempotency indexes, but production query/TTL coverage remains incomplete. | Re-audit query plans and add required query/retention indexes. |
 | 2 | High | DAQ-ingested samples (`_store_daq_sample`) are never pruned (only `/liveops/feed` prunes), and the prune does a `count_documents` per insert. Unbounded growth with a real rig. | TTL index or shared prune routine. |
 | 3 | High | Staging rollback drill **not run** (`docs/beta/evidence/staging-rollback-game-day.md`); a scorecard Critical blocker. | Run drill, record time-to-restore. |
-| 4 | High | Test status unverified: CI only byte-compiles backend (`ci.yml`); no pytest, no frontend test/build in CI. Backend tests are live-HTTP integration tests needing a running server and a seeded demo session token (hard-coded default `demo_session_…` in tests). | Add CI with Mongo service, run pytest + `yarn test`/`build`. Ensure the demo session is never seeded in beta/prod. |
+| 4 | High | Historical finding: CI only byte-compiled Python. Current CI adds focused edge tests and frontend test/build jobs, but full backend integration tests still need a configured test database and the frontend dependency install has not been verified in this environment. | Run CI successfully and add isolated backend integration coverage. Ensure demo sessions are never seeded in beta/prod. |
 | 5 | Medium | `/fatigue/feed` accepts unvalidated `cycle_count`/`depth_ft`/pressure (negative cycles would reduce damage; read-modify-write without atomicity → race on concurrent feeds). | Constrain with `Field(ge=0)`; use atomic `$inc`/versioning. |
 | 6 | Medium | `/auth/session` calls the external OAuth endpoint without timeout; `session_token` returned by provider is used as-is; sessions are never deleted on expiry. | Add timeouts; TTL index. |
 | 7 | Medium | Defaults are permissive outside production: `sk_test_emergent` Stripe key fallback, hard-coded `FEEDBACK_INBOX`, CORS requirements only enforced when `APP_ENV=production`. | Beta env **must** set `APP_ENV=production`, real Stripe/CORS values, and `BETA_UNLOCK`/`CT_FREE_FOR_ALL` deliberately. |
-| 8 | Medium | README edge SQLite buffer is not implemented; "historical sync" behaviour is client-side evaluation only. | Mark as roadmap in beta communications. |
+| 8 | Medium | SQLite/MQTT publisher and authenticated dashboard WebSocket fan-out are now implemented, but cloud application acknowledgement/consumer and blackout end-to-end evidence are still absent. The WebSocket broadcaster is in-process; multi-worker deployments require shared pub/sub. | Complete and verify cloud integration and fault-injection tests before field operation. |
 | 9 | Low | Duplicated math (see §3). `server.py` is 4.2k lines / `phase1_modules.py` 2.4k, hard to review. | Share constants; add golden-value tests. |
 | 10 | Low | Support contacts/response owners in `KNOWN_LIMITATIONS_AND_SUPPORT_POLICY.md` and all scorecard/checklist boxes are blank. | Fill in before invites. |
 

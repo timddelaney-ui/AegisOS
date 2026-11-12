@@ -26,6 +26,18 @@ export const AdvisoryFooter = () => {
   );
 };
 
+// Engineering decision-support notice for calculation / engineering views.
+export const EngineeringDisclaimer = () => (
+  <div
+    data-testid="engineering-disclaimer"
+    role="note"
+    className="bg-[#FFF3CD] border border-[#FFE69C] text-[#856404] text-[11px] leading-snug rounded px-3 py-2"
+  >
+    <strong>Engineering decision-support only.</strong> Aegis OS is an advisory intelligence layer. It does not replace
+    certified engineering sign-off, company procedures, or unit PLC / safety systems, and it never controls equipment.
+  </div>
+);
+
 // Slim inline advisory strip for the Workbook page (Excel-style)
 export const AdvisoryStrip = () => (
   <div

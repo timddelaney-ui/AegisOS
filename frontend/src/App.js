@@ -52,6 +52,7 @@ import RedeemDialog from "./components/RedeemDialog";
 import NotificationCenter from "./components/NotificationCenter";
 import TrainingModeBanner from "./components/TrainingModeBanner";
 import BetaFeedbackDrawer from "./components/BetaFeedbackDrawer";
+import TermsPage from "./pages/TermsPage";
 import { AdvisoryFooter, AdvisoryModal, AdvisoryStrip } from "./components/AdvisoryDisclaimer";
 import { Toaster } from "./components/ui/sonner";
 import InstallAppPrompt, { registerServiceWorker } from "./components/InstallAppPrompt";
@@ -253,6 +254,7 @@ const AppRouter = () => {
         <Route path="/share/:token" element={<ShareRedeemPage />} />
         <Route path="/" element={<LandingRedirect />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/terms" element={<TermsPage />} />
         <Route path="/pricing" element={<Pricing />} />
         <Route path="/payment/success" element={<PaymentSuccess />} />
         <Route path="/payment/cancel" element={<PaymentCancel />} />

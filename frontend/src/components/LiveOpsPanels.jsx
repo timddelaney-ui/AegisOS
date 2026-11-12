@@ -465,7 +465,7 @@ const _dragColor = (sev) => {
 };
 const _WB_SCALE = 1 / 60;
 
-function _WellboreLines({ survey, depth, colorMode }) {
+function WellboreLines({ survey, depth, colorMode }) {
   const pts = React.useMemo(() => {
     if (!survey?.stations?.length) return [];
     return survey.stations.map((s) => new THREE.Vector3(
@@ -549,7 +549,7 @@ export function MiniWellbore({ survey, depth = 0, colorMode = "dls", onCycleMode
               <ambientLight intensity={0.65} />
               <directionalLight position={[20, 30, 20]} intensity={0.75} />
               <Grid args={[30, 30]} position={[0, 0, 0]} cellColor="#1E293B" sectionColor="#334155" />
-              <_WellboreLines survey={survey} depth={depth} colorMode={colorMode} />
+              <WellboreLines survey={survey} depth={depth} colorMode={colorMode} />
               <OrbitControls enablePan={false} enableZoom={large} enableRotate autoRotate autoRotateSpeed={0.6} />
             </Canvas>
             <div className="absolute bottom-1.5 left-2 right-2 flex items-center justify-between text-[9px] font-mono text-slate-500 pointer-events-none">
