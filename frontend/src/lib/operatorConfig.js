@@ -114,10 +114,13 @@ export function fromDaqSample(prev, s) {
   const internalPress = s.p_internal_psi ?? prev.internalPress;
   const annulusPress = s.p_external_psi ?? s.annulus_pressure_psi ?? prev.annulusPress;
   const encoders = [
-    { name: "traction wheel", value: s.encoder_1_depth_ft ?? s.traction_wheel_depth_ft },
-    { name: "gooseneck", value: s.encoder_2_depth_ft ?? s.gooseneck_depth_ft },
-    { name: "levelwind", value: s.encoder_3_depth_ft ?? s.levelwind_depth_ft },
-  ].filter((encoder) => encoder.value !== undefined && encoder.value !== null);
+    ["traction wheel", "encoder_1_depth_ft", "traction_wheel_depth_ft"],
+    ["gooseneck", "encoder_2_depth_ft", "gooseneck_depth_ft"],
+    ["levelwind", "encoder_3_depth_ft", "levelwind_depth_ft"],
+  ].flatMap(([name, primary, alias]) => {
+    if (!Object.prototype.hasOwnProperty.call(s, primary) && !Object.prototype.hasOwnProperty.call(s, alias)) return [];
+    return [{ name, value: Object.prototype.hasOwnProperty.call(s, primary) ? s[primary] : s[alias] }];
+  });
   const encoderConsensus = encoders.length
     ? computeMultiEncoderConsensus(encoders.map(({ name, value }) => ({ name, depthFt: value })))
     : null;
@@ -148,4 +151,3 @@ export function fromDaqSample(prev, s) {
     vonMises: s.vm_utilization != null ? s.vm_utilization * 100 : prev.vonMises,
   };
 }
-

@@ -163,9 +163,13 @@ export default function MainOperatorScreen() {
     let reconnectTimer = null;
     let staleTimer = null;
     let lastReceivedAt = 0;
+    let lastAcceptedTimestampMs = -Infinity;
     const acceptSample = (sample) => {
       if (cancelled) return;
       if (sample && isFresh(sample)) {
+        const timestampMs = Date.parse(sample.event_at ?? sample.ts ?? sample.created_at ?? "");
+        if (Number.isFinite(timestampMs) && timestampMs < lastAcceptedTimestampMs) return;
+        if (Number.isFinite(timestampMs)) lastAcceptedTimestampMs = timestampMs;
         lastReceivedAt = Date.now();
         setLiveStale(false);
         setTelemetry((prev) => push(fromDaqSample(prev, sample)));

@@ -25,6 +25,18 @@ describe("parseStringHistory", () => {
     expect(r.warnings.join(" ")).toMatch(/out of depth order/);
   });
 
+  test("invalid stations do not change inferred damage scale", () => {
+    const r = parseStringHistory("depth,damage\n0,0\n100,0.8\ninvalid,99\n", {});
+    expect(r.stations.map((station) => station.damage)).toEqual([0, 0.8]);
+  });
+
+  test("explicit percentages above 100 are clamped instead of rejected", () => {
+    const r = parseStringHistory("depth,fatigue_pct\n0,120\n", {});
+    expect(r.stations).toEqual([{ md_ft: 0, damage: 1 }]);
+    expect(r.rejected).toEqual([]);
+    expect(r.warnings.join(" ")).toMatch(/clamped to 100%/);
+  });
+
   test("missing columns return a user-facing error, not a throw", () => {
     const r = parseStringHistory("foo,bar\n1,2\n", {});
     expect(r.ok).toBe(false);

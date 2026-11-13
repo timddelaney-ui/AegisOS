@@ -44,8 +44,8 @@ export default function CTSegmentStressWorkbench({ smysMpa }) {
     [inputs, smysMpa],
   );
   const arrows = useMemo(
-    () => (s ? getStressArrowData({ sigma_h: s.hoop, sigma_r: -inputs.pressure_mpa, sigma_a: s.max_axial }) : []),
-    [s, inputs.pressure_mpa],
+    () => (s ? getStressArrowData({ sigma_h: s.hoop, sigma_r: 0, sigma_a: s.governing_axial }) : []),
+    [s],
   );
 
   return (

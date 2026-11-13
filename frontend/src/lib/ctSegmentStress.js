@@ -44,8 +44,14 @@ export function segmentStress({
   const hoop = (p * r_i) / wt;
   const pressure_axial = (p * area_bore) / area_steel;
   const tension_axial = (tension * 1000) / area_steel;
-  const max_axial = pressure_axial + tension_axial + Math.abs(bending);
-  const vm = Math.sqrt(0.5 * ((hoop - max_axial) ** 2 + max_axial ** 2 + hoop ** 2));
+  const axialCenter = pressure_axial + tension_axial;
+  const max_axial = axialCenter + Math.abs(bending);
+  const axialFibers = [axialCenter + bending, axialCenter - bending];
+  const vmAtAxial = (axial) => Math.sqrt(0.5 * ((hoop - axial) ** 2 + axial ** 2 + hoop ** 2));
+  const governing_axial = axialFibers.reduce((governing, axial) => (
+    vmAtAxial(axial) > vmAtAxial(governing) ? axial : governing
+  ));
+  const vm = vmAtAxial(governing_axial);
 
   return {
     hoop,
@@ -53,6 +59,7 @@ export function segmentStress({
     pressure_axial,
     tension_axial,
     max_axial,
+    governing_axial,
     von_mises: vm,
     yield_pct: (vm / smys) * 100,
     smys_mpa: smys,

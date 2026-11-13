@@ -29,7 +29,12 @@ export default function StringHistoryImport({ reel, onDone }) {
     try {
       const state = await axios.get(`${API}/fatigue/state`, { params: { reel_id: reel.reel_id }, withCredentials: true });
       const spacing = state.data.spacing_ft;
-      const damage = stationsToNodeDamage(result.stations, spacing, reel.total_length_ft);
+      const totalLength = reel.total_length_ft || (reel.intervals?.[reel.intervals.length - 1]?.end_md_ft ?? 10000);
+      if (result.stations.some((station) => station.md_ft > totalLength)) {
+        toast.error(`Imported station depth exceeds this reel's ${totalLength} ft length.`);
+        return;
+      }
+      const damage = stationsToNodeDamage(result.stations, spacing, totalLength);
       const body = { reel_id: reel.reel_id, spacing_ft: spacing, damage, source: result.format === "reel-trak" ? "reel-trak" : result.format, filename };
       try {
         await axios.post(`${API}/fatigue/import`, body, { withCredentials: true });
@@ -61,7 +66,7 @@ export default function StringHistoryImport({ reel, onDone }) {
           {result.warnings?.slice(0, 5).map((m) => <p key={m} className="text-[#856404]">{m}</p>)}
           {result.ok && (
             <>
-              <p className="text-[#065F46]">{result.stations.length} stations parsed ({result.format}). Worst: {(Math.max(...result.stations.map((s) => s.damage)) * 100).toFixed(1)}%.</p>
+              <p className="text-[#065F46]">{result.stations.length} stations parsed ({result.format}). Worst: {(result.stations.reduce((max, station) => Math.max(max, station.damage), 0) * 100).toFixed(1)}%.</p>
               <button disabled={busy} onClick={submit} className="bg-[#FF6B1A] text-white px-2 py-1 rounded font-bold disabled:opacity-50">
                 {busy ? "Importing…" : "Apply to this reel"}
               </button>

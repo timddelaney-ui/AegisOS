@@ -145,6 +145,16 @@ def test_fatigue_import_seeds_ledger_and_guards_overwrite(client):
     assert _import(client, rid, dmg, overwrite=True).status_code == 200
 
 
+def test_fatigue_import_cannot_erase_damage_from_a_concurrent_feed(client):
+    rid = _reel(client, length=1000)
+    _feed(client, rid, depth_ft=500, traction_pressure_psi=30000)
+    before = client.get("/api/fatigue/state", params={"reel_id": rid}).json()["damage"]
+    response = _import(client, rid, [0.0] * 11)
+    after = client.get("/api/fatigue/state", params={"reel_id": rid}).json()["damage"]
+    assert response.status_code == 409
+    assert after == before
+
+
 @pytest.mark.parametrize("bad", [[0.1] * 3, [1.5] + [0.0] * 10, [-0.1] + [0.0] * 10])
 def test_fatigue_import_rejects_bad_payloads(client, bad):
     rid = _reel(client, length=1000)
@@ -160,4 +170,3 @@ def test_fatigue_import_is_tenant_scoped(client):
         assert _import(client, rid, [0.1] * 11).status_code == 404
     finally:
         USER.update(saved)
-

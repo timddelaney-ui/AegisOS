@@ -96,6 +96,18 @@ describe("Aegis OS telemetry and engineering model", () => {
     expect(mapped.encoderWarning).toBe(true);
   });
 
+  test("retains explicitly missing configured encoders for consensus warnings", () => {
+    const mapped = fromDaqSample(SEED_TELEMETRY, {
+      depth_ft: 100,
+      encoder_1_depth_ft: 100,
+      encoder_2_depth_ft: null,
+      encoder_3_depth_ft: 100.2,
+    });
+    expect(mapped.encoderStatus).toBe("insufficient-data");
+    expect(mapped.encoderWarning).toBe(true);
+    expect(mapped.depth).toBeCloseTo(100.1);
+  });
+
   test("calculates Von Mises stress ratio against the API RP 5C7 80% SMYS envelope", () => {
     const result = computeVonMisesStress({
       sigmaA: 55000,

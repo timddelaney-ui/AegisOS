@@ -153,14 +153,26 @@ async def liveops_websocket(websocket: WebSocket):
         await websocket.close(code=4401)
         return
 
+    session_token = websocket.cookies.get("session_token")
+    team_id = user["team_id"]
     rig_id = websocket.query_params.get("rig_id") or None
-    queue = liveops_broadcaster.subscribe(user["team_id"], rig_id)
+    queue = liveops_broadcaster.subscribe(team_id, rig_id)
     try:
         await websocket.accept()
+        next_auth_check = asyncio.get_running_loop().time() + 30
         while True:
+            timeout = min(20, max(0, next_auth_check - asyncio.get_running_loop().time()))
             try:
-                message = await asyncio.wait_for(queue.get(), timeout=20)
+                message = await asyncio.wait_for(queue.get(), timeout=timeout)
             except asyncio.TimeoutError:
+                message = None
+            if asyncio.get_running_loop().time() >= next_auth_check:
+                current_user = await _user_from_session_token(session_token)
+                if not current_user or current_user.get("team_id") != team_id:
+                    await websocket.close(code=4401)
+                    break
+                next_auth_check = asyncio.get_running_loop().time() + 30
+            if message is None:
                 await websocket.send_json({"type": "heartbeat"})
                 continue
             await websocket.send_json(message)
@@ -169,7 +181,7 @@ async def liveops_websocket(websocket: WebSocket):
     except WebSocketDisconnect:
         pass
     finally:
-        liveops_broadcaster.unsubscribe(user["team_id"], queue)
+        liveops_broadcaster.unsubscribe(team_id, queue)
         try:
             await websocket.close()
         except (RuntimeError, WebSocketDisconnect):
@@ -4764,6 +4776,7 @@ async def shutdown_db_client():
 
 @app.on_event("startup")
 async def _ensure_indexes():
+    await db.reel_fatigue.create_index([("team_id", 1), ("reel_id", 1)], unique=True)
     try:
         await db.team_items.create_index([("team_id", 1), ("kind", 1), ("created_at", -1)])
         await db.team_items.create_index([("team_id", 1), ("kind", 1), ("rig_id", 1), ("created_at", -1)])

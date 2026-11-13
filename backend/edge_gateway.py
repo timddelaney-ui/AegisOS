@@ -312,6 +312,16 @@ async def run_daq(outbox: SQLiteOutbox, protocol: str, config: Dict[str, Any]) -
         delay = min(60.0, delay * 2)
 
 
+async def _supervise_daq(daq_task: asyncio.Task, publisher, publisher_thread) -> None:
+    while not publisher.stop_event.is_set():
+        if not publisher_thread.is_alive():
+            raise RuntimeError("MQTT publisher thread exited; stopping DAQ to preserve failure visibility")
+        if daq_task.done():
+            daq_task.result()
+            raise RuntimeError("DAQ task exited unexpectedly; stopping service")
+        await asyncio.sleep(0.25)
+
+
 def main() -> None:
     logging.basicConfig(
         level=os.getenv("AEGIS_LOG_LEVEL", "INFO").upper(),
@@ -350,12 +360,10 @@ def main() -> None:
     async def serve():
         daq_task = asyncio.create_task(run_daq(outbox, protocol, config))
         try:
-            while not publisher.stop_event.is_set():
-                if not publisher_thread.is_alive():
-                    raise RuntimeError("MQTT publisher thread exited; stopping DAQ to preserve failure visibility")
-                await asyncio.sleep(0.25)
+            await _supervise_daq(daq_task, publisher, publisher_thread)
         finally:
-            daq_task.cancel()
+            if not daq_task.done():
+                daq_task.cancel()
             try:
                 await daq_task
             except asyncio.CancelledError:

@@ -1,11 +1,13 @@
 import sys
+import asyncio
+import threading
 from pathlib import Path
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from edge_gateway import MQTTOutboxPublisher, QueueFullError, SQLiteOutbox
+from edge_gateway import MQTTOutboxPublisher, QueueFullError, SQLiteOutbox, _supervise_daq
 
 
 def test_outbox_survives_restart_and_retries_in_event_order(tmp_path):
@@ -76,3 +78,24 @@ def test_mqtt_requires_tls_credentials_and_supported_qos(tmp_path):
         MQTTOutboxPublisher(outbox, port=8883, **{**valid, "topic_prefix": "aegis/#"})
     assert MQTTOutboxPublisher(outbox, port=8883, **valid).qos == 2
     outbox.close()
+
+
+def test_daq_supervisor_propagates_configuration_errors():
+    class Publisher:
+        stop_event = threading.Event()
+
+    class PublisherThread:
+        def is_alive(self):
+            return True
+
+    async def scenario():
+        async def fail_configuration():
+            raise ValueError("unsupported protocol")
+
+        task = asyncio.create_task(fail_configuration())
+        await asyncio.sleep(0)
+        with pytest.raises(ValueError, match="unsupported protocol"):
+            await _supervise_daq(task, Publisher(), PublisherThread())
+        await asyncio.gather(task, return_exceptions=True)
+
+    asyncio.run(scenario())

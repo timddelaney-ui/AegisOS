@@ -64,21 +64,27 @@ const toNumber = (raw) => {
 function finalize(inputRows, meta) {
   let rows = inputRows;
   const { depthUnit, damageScale, nullValue } = meta;
-  // Values above 100 are implausible in either scale; drop them before inferring the scale.
-  rows = rows.filter((r) => {
-    if (Number.isFinite(r.damage) && r.damage > 100) {
-      (meta.rejected = meta.rejected || []).push({ line: r.line, reason: "implausible damage value (>100)" });
-      return false;
-    }
-    return true;
-  });
+  if (damageScale !== "percent") {
+    rows = rows.filter((r) => {
+      if (Number.isFinite(r.damage) && r.damage > 100) {
+        (meta.rejected = meta.rejected || []).push({ line: r.line, reason: "implausible damage value (>100)" });
+        return false;
+      }
+      return true;
+    });
+  }
   const warnings = [...(meta.warnings || [])];
   const rejected = [...(meta.rejected || [])];
   const errors = [...(meta.errors || [])];
 
+  const scaleCandidates = rows.filter((r) => (
+    Number.isFinite(r.md) && r.md >= 0
+    && Number.isFinite(r.damage) && r.damage >= 0
+    && !(nullValue != null && (r.md === nullValue || r.damage === nullValue))
+  ));
   const pctMode = damageScale === "percent"
     ? true
-    : rows.some((r) => r.damage > 1.5) ? "inferred" : false;
+    : scaleCandidates.some((r) => r.damage > 1.5) ? "inferred" : false;
   if (pctMode === "inferred") warnings.push("Damage values exceed 1.5, so they were read as percentages (0–100).");
 
   const byDepth = new Map();

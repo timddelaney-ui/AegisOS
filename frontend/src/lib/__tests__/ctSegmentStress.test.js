@@ -12,6 +12,14 @@ describe("segmentStress", () => {
     expect(s.yield_pct).toBeCloseTo(67.9, 1);
   });
 
+  test("governing yield readout evaluates both bending fibers", () => {
+    const s = segmentStress({ pressure_mpa: 80, tension_kn: 4, bend_radius_m: 10 });
+    expect(s.max_axial).toBeGreaterThan(s.governing_axial);
+    expect(s.governing_axial).toBeLessThan(0);
+    expect(s.von_mises).toBeCloseTo(638.2, 1);
+    expect(s.yield_pct).toBeGreaterThan(100);
+  });
+
   test("boundary inputs never yield NaN/Infinity", () => {
     const cases = [
       { pressure_mpa: 0, tension_kn: 0, bend_radius_m: 24 },

@@ -592,6 +592,7 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
         event_at: Optional[str] = Field(None, max_length=40)
 
     _fatigue_index_ready = {"ok": False}
+    _fatigue_ledger_index_ready = {"ok": False}
 
     @api_router.post("/fatigue/feed")
     async def feed_fatigue(body: PressureFeed, user: dict = Depends(require_user)):
@@ -637,12 +638,19 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
                         "damage": dmg, "worst_damage": max(dmg) if dmg else 0.0, "derate_warning": (max(dmg) if dmg else 0.0) >= 0.8}
 
         # Make sure the ledger exists and is long enough, then apply damage with atomic $inc.
-        await db.reel_fatigue.update_one(
-            {"reel_id": body.reel_id, "team_id": team_id},
-            {"$setOnInsert": {"reel_id": body.reel_id, "team_id": team_id, "spacing_ft": spacing,
-                              "node_count": n_nodes, "damage": [0.0] * n_nodes, "created_at": now}},
-            upsert=True,
-        )
+        try:
+            await db.reel_fatigue.update_one(
+                {"reel_id": body.reel_id, "team_id": team_id},
+                {"$setOnInsert": {"reel_id": body.reel_id, "team_id": team_id, "spacing_ft": spacing,
+                                  "node_count": n_nodes, "damage": [0.0] * n_nodes, "created_at": now}},
+                upsert=True,
+            )
+        except DuplicateKeyError:
+            await db.reel_fatigue.update_one(
+                {"reel_id": body.reel_id, "team_id": team_id},
+                {"$setOnInsert": {"reel_id": body.reel_id, "team_id": team_id, "spacing_ft": spacing,
+                                  "node_count": n_nodes, "damage": [0.0] * n_nodes, "created_at": now}},
+            )
         cur_len = len((state or {}).get("damage") or [])
         if state and cur_len < n_nodes:
             await db.reel_fatigue.update_one(
@@ -745,6 +753,9 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
         team_id = user.get("team_id")
         if not team_id:
             raise HTTPException(400, "No team.")
+        if not _fatigue_ledger_index_ready["ok"]:
+            await db.reel_fatigue.create_index([("team_id", 1), ("reel_id", 1)], unique=True)
+            _fatigue_ledger_index_ready["ok"] = True
         reel = await db.reels.find_one({"reel_id": body.reel_id, "team_id": team_id}, {"_id": 0})
         if not reel:
             raise HTTPException(404, "Reel not found.")
@@ -756,18 +767,26 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
         n_nodes = _node_count(total, body.spacing_ft)
         if len(body.damage) != n_nodes:
             raise HTTPException(422, f"Expected {n_nodes} stations for {total:.0f} ft at {body.spacing_ft} ft spacing; got {len(body.damage)}.")
-        existing = await db.reel_fatigue.find_one({"reel_id": body.reel_id, "team_id": team_id}, {"_id": 0})
-        if existing and any(d > 0 for d in (existing.get("damage") or [])) and not body.overwrite:
-            raise HTTPException(409, "Reel already has fatigue history. Re-submit with overwrite=true to replace it.")
         now = now_utc()
-        await db.reel_fatigue.update_one(
-            {"reel_id": body.reel_id, "team_id": team_id},
-            {"$set": {"reel_id": body.reel_id, "team_id": team_id, "spacing_ft": body.spacing_ft,
-                      "node_count": n_nodes, "damage": body.damage, "updated_at": now,
-                      "last_source": f"import:{body.source}"},
-             "$setOnInsert": {"created_at": now}},
-            upsert=True,
-        )
+        ledger_filter = {"reel_id": body.reel_id, "team_id": team_id}
+        if not body.overwrite:
+            ledger_filter["$or"] = [
+                {"damage": {"$exists": False}},
+                {"damage": {"$not": {"$elemMatch": {"$gt": 0}}}},
+            ]
+        try:
+            result = await db.reel_fatigue.update_one(
+                ledger_filter,
+                {"$set": {"reel_id": body.reel_id, "team_id": team_id, "spacing_ft": body.spacing_ft,
+                          "node_count": n_nodes, "damage": body.damage, "updated_at": now,
+                          "last_source": f"import:{body.source}"},
+                 "$setOnInsert": {"created_at": now}},
+                upsert=True,
+            )
+        except DuplicateKeyError:
+            raise HTTPException(409, "Reel already has fatigue history. Re-submit with overwrite=true to replace it.")
+        if not body.overwrite and result.matched_count == 0 and result.upserted_id is None:
+            raise HTTPException(409, "Reel already has fatigue history. Re-submit with overwrite=true to replace it.")
         await db.reel_fatigue_events.insert_one({
             "reel_id": body.reel_id, "team_id": team_id, "source": f"import:{body.source}",
             "filename": body.filename, "overwrite": body.overwrite, "node_count": n_nodes,
