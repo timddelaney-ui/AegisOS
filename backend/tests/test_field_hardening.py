@@ -129,3 +129,44 @@ def test_liveops_simulated_on_real_reel_blocked(client):
     rid = _reel(client)
     r = client.post("/api/liveops/feed", json={"reel_id": rid, "source": "simulated", "depth_ft": 1})
     assert r.status_code == 400
+
+
+def _import(client, rid, damage, **kw):
+    return client.post("/api/fatigue/import", json={"reel_id": rid, "damage": damage, **kw})
+
+
+def test_fatigue_import_seeds_ledger_and_guards_overwrite(client):
+    rid = _reel(client, length=1000)  # 11 nodes at 100 ft
+    dmg = [0.0, 0.1, 0.2, 0.85] + [0.0] * 7
+    r = _import(client, rid, dmg, source="cerberus")
+    assert r.status_code == 200 and r.json()["derate_warning"] is True
+    assert client.get("/api/fatigue/state", params={"reel_id": rid}).json()["damage"] == dmg
+    assert _import(client, rid, dmg).status_code == 409
+    assert _import(client, rid, dmg, overwrite=True).status_code == 200
+
+
+def test_fatigue_import_cannot_erase_damage_from_a_concurrent_feed(client):
+    rid = _reel(client, length=1000)
+    _feed(client, rid, depth_ft=500, traction_pressure_psi=30000)
+    before = client.get("/api/fatigue/state", params={"reel_id": rid}).json()["damage"]
+    response = _import(client, rid, [0.0] * 11)
+    after = client.get("/api/fatigue/state", params={"reel_id": rid}).json()["damage"]
+    assert response.status_code == 409
+    assert after == before
+
+
+@pytest.mark.parametrize("bad", [[0.1] * 3, [1.5] + [0.0] * 10, [-0.1] + [0.0] * 10])
+def test_fatigue_import_rejects_bad_payloads(client, bad):
+    rid = _reel(client, length=1000)
+    assert _import(client, rid, bad).status_code in (422, 400)
+
+
+def test_fatigue_import_is_tenant_scoped(client):
+    rid = _reel(client, length=1000)
+    other = dict(USER, team_id="team2")
+    saved = dict(USER)
+    USER.update(other)
+    try:
+        assert _import(client, rid, [0.1] * 11).status_code == 404
+    finally:
+        USER.update(saved)

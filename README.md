@@ -69,9 +69,7 @@ The live operations layer tracks the following channels:
   - MMFR Slugs
   - Gel Pills
   - Water / Flush
-- Combined totals
-  - q_total = sum(q_1..q_5)
-  - v_total = sum(v_1..v_5)
+- Each channel maps a rate field and a cumulative-volume field independently; combined rate and volume are summed separately and require consistent units.
 - Injector and depth channels
   - injector_speed_ft_per_min
   - injector_direction
@@ -80,7 +78,13 @@ The live operations layer tracks the following channels:
   - encoder_3_depth_ft
   - warning if |D_i - D_j| > 2.0 ft
 
-## Edge buffer schema
+## Edge buffer schema and rig-PC gateway
+
+The schema below is the original event-ledger proposal. The current rig-PC
+SQLite outbox and MQTT publisher are documented in
+[`docs/EDGE_GATEWAY.md`](docs/EDGE_GATEWAY.md); the production broker and
+cloud-side MQTT consumer still need to be provisioned and acceptance-tested.
+
 ```sql
 CREATE TABLE IF NOT EXISTS telemetry_events (
   id TEXT PRIMARY KEY,

@@ -8,13 +8,14 @@ import { useActiveReel } from "../context/ActiveReelContext";
 import { defaultSmys } from "../lib/ctPhysics";
 import { Plus, Upload, Trash2, CheckCircle2, Lock } from "lucide-react";
 import ShareLinksButton from "../components/ShareLinksButton";
+import StringHistoryImport from "../components/StringHistoryImport";
 
 // Client-side row identity so React doesn't bleed state between controlled
 // inputs when a middle interval is removed (index keys would shift state up).
 const newRowId = () => `iv_${Math.random().toString(36).slice(2, 10)}_${Date.now().toString(36)}`;
 const emptyInterval = () => ({ _rowId: newRowId(), start_md_ft: 0, end_md_ft: 1000, od_in: 2.0, wt_in: 0.175, grade: "QT-900", smys_psi: 90000 });
 
-const ReelCard = ({ reel, isActive, canWrite, onActivate, onDelete }) => (
+const ReelCard = ({ reel, isActive, canWrite, onActivate, onDelete, onImported }) => (
   <div data-testid={`reel-card-${reel.reel_id}`} className={`bg-white border rounded-lg p-3 ${isActive ? "border-[#FF6B1A] shadow-md" : "border-[#D4D4D4]"}`}>
     <div className="flex items-start justify-between gap-2">
       <div>
@@ -45,6 +46,7 @@ const ReelCard = ({ reel, isActive, canWrite, onActivate, onDelete }) => (
         <span>{s.start_md_ft}</span><span>{s.end_md_ft}</span><span>{s.od_in}</span><span>{s.wt_in}</span><span>{s.grade}</span>
       </div>
     ))}
+    {canWrite && !reel.retired && <StringHistoryImport reel={reel} onDone={onImported} />}
   </div>
 );
 
@@ -167,7 +169,7 @@ export default function ReelsPage() {
 
         <div className="space-y-2">
           {reels.length === 0 && <p className="text-sm text-[#595959] text-center py-8">No reels yet. {canWrite ? "Add one above." : "Ask Supervisor to add a reel."}</p>}
-          {reels.map((r) => <ReelCard key={r.reel_id} reel={r} isActive={r.reel_id === activeReel?.reel_id} canWrite={canWrite} onActivate={activateReel} onDelete={deleteReel} />)}
+          {reels.map((r) => <ReelCard key={r.reel_id} reel={r} isActive={r.reel_id === activeReel?.reel_id} canWrite={canWrite} onActivate={activateReel} onDelete={deleteReel} onImported={refresh} />)}
         </div>
       </div>
     </div>

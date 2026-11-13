@@ -23,10 +23,12 @@ import { MetricCard } from "./operator/OperatorCards";
 import { drawTrajectory, drawPens, prepCanvas, PENS } from "./operator/operatorCanvas";
 import { CrewRatesModal } from "./operator/CrewRatesModal";
 import { AddChannelModal } from "./operator/AddChannelModal";
+import { FluidTotalizersPanel } from "./operator/FluidTotalizersPanel";
 
 const CREW_KEY = "coilaegis_crew_rates_v1";
 const SIM_TICK_MS = 500;
 const LIVE_POLL_MS = 2000;
+const LIVE_RECONNECT_MS = 5000;
 const CANVAS_DRAW_MS = 500;
 const MAX_HISTORY_SAMPLES = 180;
 
@@ -156,21 +158,91 @@ export default function MainOperatorScreen() {
   useEffect(() => {
     if (feedMode !== "LIVE") { setLiveStale(false); return; }
     let cancelled = false;
+    let socket = null;
+    let pollTimer = null;
+    let reconnectTimer = null;
+    let staleTimer = null;
+    let lastReceivedAt = 0;
+    let lastAcceptedTimestampMs = -Infinity;
+    const acceptSample = (sample) => {
+      if (cancelled) return;
+      if (sample && isFresh(sample)) {
+        const timestampMs = Date.parse(sample.event_at ?? sample.ts ?? sample.created_at ?? "");
+        if (Number.isFinite(timestampMs) && timestampMs < lastAcceptedTimestampMs) return;
+        if (Number.isFinite(timestampMs)) lastAcceptedTimestampMs = timestampMs;
+        lastReceivedAt = Date.now();
+        setLiveStale(false);
+        setTelemetry((prev) => push(fromDaqSample(prev, sample)));
+      } else {
+        setLiveStale(true);
+      }
+    };
     const poll = async () => {
       try {
         const r = await axios.get(`${API}/liveops/stream`, { params: { limit: 1, rig_id: rigId }, withCredentials: true });
-        const s = r.data?.samples?.[0];
-        if (cancelled) return;
-        if (s && isFresh(s)) { setLiveStale(false); setTelemetry((prev) => push(fromDaqSample(prev, s))); }
-        else setLiveStale(true);
+        acceptSample(r.data?.samples?.[0]);
       } catch (e) {
         if (!cancelled) setLiveStale(true);
         console.debug("[Operator] live poll failed", e?.response?.status || e?.message);
       }
     };
-    poll();
-    const id = setInterval(poll, LIVE_POLL_MS);
-    return () => { cancelled = true; clearInterval(id); };
+    const startPolling = () => {
+      if (pollTimer !== null || cancelled) return;
+      poll();
+      pollTimer = setInterval(poll, LIVE_POLL_MS);
+    };
+    const connect = () => {
+      if (cancelled) return;
+      const wsUrl = new URL(`${API}/liveops/ws`);
+      wsUrl.protocol = wsUrl.protocol === "https:" ? "wss:" : "ws:";
+      if (rigId) wsUrl.searchParams.set("rig_id", rigId);
+      try {
+        socket = new WebSocket(wsUrl.toString());
+      } catch (e) {
+        console.debug("[Operator] live WebSocket unavailable", e?.message);
+        startPolling();
+        reconnectTimer = setTimeout(connect, LIVE_RECONNECT_MS);
+        return;
+      }
+      socket.onopen = () => {
+        if (pollTimer !== null) {
+          clearInterval(pollTimer);
+          pollTimer = null;
+        }
+      };
+      socket.onmessage = (event) => {
+        let message;
+        try {
+          message = JSON.parse(event.data);
+        } catch (e) {
+          console.debug("[Operator] invalid live WebSocket message", e?.message);
+          return;
+        }
+        if (message.type === "telemetry") acceptSample(message.sample);
+        if (message.type === "resync_required") {
+          setLiveStale(true);
+          socket?.close();
+        }
+      };
+      socket.onerror = () => socket?.close();
+      socket.onclose = () => {
+        if (cancelled) return;
+        startPolling();
+        reconnectTimer = setTimeout(connect, LIVE_RECONNECT_MS);
+      };
+    };
+    startPolling();
+    connect();
+    staleTimer = setInterval(() => {
+      if (lastReceivedAt && Date.now() - lastReceivedAt > 5000) setLiveStale(true);
+    }, LIVE_POLL_MS);
+    return () => {
+      cancelled = true;
+      if (pollTimer !== null) clearInterval(pollTimer);
+      if (reconnectTimer !== null) clearTimeout(reconnectTimer);
+      if (staleTimer !== null) clearInterval(staleTimer);
+      socket?.close();
+    };
   }, [feedMode, rigId]);
 
   const bitLabel = `BIT ${u.show(bitFt, "depth", 1)} ${u.label("depth")}`;
@@ -281,7 +353,8 @@ export default function MainOperatorScreen() {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
-        <MetricCard testId="metric-bit-depth" title="CT Bit Depth" value={u.show(counterFt + corr.offsetFt, "depth", 1)} unit={u.label("depth")} sub={`ctr ${u.show(counterFt, "depth", 1)} • off ${u.show(corr.offsetFt, "depth", 1)}`} />
+        <MetricCard testId="metric-bit-depth" title="CT Bit Depth" value={u.show(counterFt + corr.offsetFt, "depth", 1)} unit={u.label("depth")}
+          sub={`ctr ${u.show(counterFt, "depth", 1)} • off ${u.show(corr.offsetFt, "depth", 1)} • ${telemetry.direction} ${u.show(telemetry.speedFtPerMin, "speed_ftmin", 1)} ${u.label("speed_ftmin")}${telemetry.encoderWarning ? " • ENCODER MISMATCH" : ""}`} />
         <MetricCard testId="metric-von-mises" title="Von Mises" value={telemetry.vonMises.toFixed(1)} unit="%SMYS" sub={`${sourceLabel} • 80% alert line`} barVal={telemetry.vonMises} />
         <MetricCard testId="metric-surface-weight" title="Surface Weight" value={u.show(telemetry.weight, "weight", 0)} unit={u.label("weight")} sub={sourceLabel} />
         <MetricCard testId="metric-internal-pressure" title="Internal Pressure" value={P(telemetry.internalPress)} unit={u.label("pressure")} sub={sourceLabel} />
@@ -364,6 +437,8 @@ export default function MainOperatorScreen() {
 
       <DepthCorrelationPanel counterFt={counterFt} offsetFt={corr.offsetFt} moveTarget={corr.moveTarget} plugs={rawPlugs} log={corr.log}
         u={u} onOffset={corr.setOffset} onTarget={corr.setTarget} shared={!!survey} />
+
+      <FluidTotalizersPanel telemetry={telemetry} />
 
       <ChannelsPanel channels={allChannels} groups={groups} activeSets={layout.active_sets} hidden={layout.hidden} telemetry={telemetry}
         history={historyRef.current} u={u} sourceLabel={sourceLabel} onToggleSet={layout.toggleSet} onHide={layout.hide} onOpenAdd={() => setShowManageChannels(true)} teamCfg={teamCfg} />

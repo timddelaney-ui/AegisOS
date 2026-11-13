@@ -25,7 +25,7 @@ export default function TasksPage() {
       setTasks(t); setMembers(m);
     } catch (e) { console.debug("[Tasks] refresh failed", e?.response?.status || e?.message); }
   };
-  useEffect(() => { refresh(); /* eslint-disable-next-line */ }, [filter]);
+  useEffect(() => { refresh(); }, [filter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const addTask = async () => {
     if (!canEdit) return;

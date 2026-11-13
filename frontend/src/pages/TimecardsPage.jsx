@@ -64,7 +64,7 @@ export default function TimecardsPage() {
       setLines(l); setPayCodes(p); setMembers(m);
     } catch (e) { console.debug("[Timecards] refresh failed", e?.response?.status || e?.message); }
   };
-  useEffect(() => { refresh(); /* eslint-disable-next-line */ }, [statusFilter, viewUserId, startDate, endDate]);
+  useEffect(() => { refresh(); }, [statusFilter, viewUserId, startDate, endDate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Preview total $ for the shift composer
   const payCodeMap = useMemo(() => Object.fromEntries(payCodes.map((p) => [p.code, p])), [payCodes]);

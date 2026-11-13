@@ -1,3 +1,4 @@
+import { EngineeringDisclaimer } from "../components/AdvisoryDisclaimer";
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -80,6 +81,7 @@ export default function ShadowVerificationPage() {
       </header>
 
       <main className="mx-auto max-w-6xl space-y-4 p-4 pb-24">
+        <EngineeringDisclaimer />
         <section className="cab-card p-4">
           <h2 className="mb-2 text-sm font-bold text-white">Job details</h2>
           <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
