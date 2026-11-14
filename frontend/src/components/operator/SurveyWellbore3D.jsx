@@ -3,26 +3,35 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls, Line, Grid } from "@react-three/drei";
 import * as THREE from "three";
 import { stationAt, dlsColor } from "../../lib/surveyInterp";
+import { buildWellboreGeometry, fitWellboreCamera, wellboreTicks } from "../../lib/wellboreGeometry";
+import ErrorBoundary from "../ErrorBoundary";
 
 const FOV = 40;
 
-// Fit survey into a ~30-unit box; surface at y=+10
 function useGeometry(stations) {
   return useMemo(() => {
-    const xs = stations.map((s) => s.east_ft || 0), zs = stations.map((s) => s.north_ft || 0), ys = stations.map((s) => s.tvd_ft || 0);
-    const span = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...zs) - Math.min(...zs), Math.max(...ys), 1);
-    const k = 30 / span, cx = (Math.max(...xs) + Math.min(...xs)) / 2, cz = (Math.max(...zs) + Math.min(...zs)) / 2;
-    const project = (s) => new THREE.Vector3(((s.east_ft || 0) - cx) * k, 10 - (s.tvd_ft || 0) * k, ((s.north_ft || 0) - cz) * k);
-    const pts = stations.map(project);
-    const box = new THREE.Box3().setFromPoints(pts);
-    const center = box.getCenter(new THREE.Vector3());
-    const radius = Math.max(box.getSize(new THREE.Vector3()).length() / 2, 4);
-    const head = pts[0], toe = pts[pts.length - 1];
-    const lateral = new THREE.Vector3(toe.x - head.x, 0, toe.z - head.z);
-    if (lateral.lengthSq() < 1e-6) lateral.set(1, 0, 0);
-    lateral.normalize();
-    return { project, pts, center, radius, floorY: box.min.y - 1.2, side: new THREE.Vector3(-lateral.z, 0.04, lateral.x).normalize() };
+    const model = buildWellboreGeometry(stations);
+    return {
+      ...model,
+      project: (station) => new THREE.Vector3(...model.project(station)),
+      pts: model.points.map((point) => new THREE.Vector3(...point)),
+      center: new THREE.Vector3(),
+      side: new THREE.Vector3(...model.side),
+    };
   }, [stations]);
+}
+
+class SurveyCurve extends THREE.Curve {
+  constructor(stations, geo) {
+    super();
+    this.stations = stations;
+    this.geo = geo;
+  }
+
+  getPoint(t, target = new THREE.Vector3()) {
+    const md = this.geo.firstMD + t * (this.geo.lastMD - this.geo.firstMD);
+    return target.copy(this.geo.project(stationAt(this.stations, md)));
+  }
 }
 
 function Label({ text, color, position, size = 0.042, dim = false, anchor = [0.5, 0.5] }) {
@@ -51,22 +60,32 @@ function Label({ text, color, position, size = 0.042, dim = false, anchor = [0.5
 }
 
 // Tubing with per-vertex DLS colour + faint additive halo
-function WellTube({ pts, stations, td, colorMode }) {
+function WellTube({ geo, stations, colorMode }) {
   const { core, halo } = useMemo(() => {
-    const curve = new THREE.CatmullRomCurve3(pts, false, "centripetal");
-    const segs = Math.min(800, pts.length * 24), radial = 14;
+    const curve = new SurveyCurve(stations, geo);
+    const segs = Math.min(1200, Math.max(320, stations.length * 8)), radial = 12;
     const core = new THREE.TubeGeometry(curve, segs, 0.16, radial, false);
     const colors = [];
     const col = new THREE.Color();
+    const contactRaw = (station) => {
+      const kappa = ((station?.dls_deg_per_100ft || 0) * Math.PI / 180) / 100;
+      return kappa * kappa + Math.sin((station?.inc_deg || 0) * Math.PI / 180) ** 2;
+    };
+    const maxContact = Math.max(1e-9, ...stations.map(contactRaw));
     for (let i = 0; i <= segs; i++) {
-      const st = stationAt(stations, (i / segs) * td);
-      col.set(colorMode === "Plain" ? "#22D3EE" : dlsColor(st?.dls_deg_per_100ft ?? 0));
+      const st = stationAt(stations, geo.firstMD + (i / segs) * (geo.lastMD - geo.firstMD));
+      const contact = contactRaw(st) / maxContact;
+      const severity = colorMode === "combined" ? Math.max(contact, (st?.dls_deg_per_100ft || 0) / 12) : contact;
+      col.set(colorMode === "Plain" ? "#22D3EE"
+        : colorMode === "drag" || colorMode === "combined"
+          ? severity < 0.25 ? "#10B981" : severity < 0.5 ? "#F59E0B" : severity < 0.75 ? "#FB7185" : "#EF4444"
+          : dlsColor(st?.dls_deg_per_100ft ?? 0));
       for (let j = 0; j <= radial; j++) colors.push(col.r, col.g, col.b);
     }
     core.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
-    const halo = new THREE.TubeGeometry(curve, segs, 0.42, 10, false);
+    const halo = new THREE.TubeGeometry(curve, segs, 0.26, 8, false);
     return { core, halo };
-  }, [pts, stations, td, colorMode]);
+  }, [geo, stations, colorMode]);
   useEffect(() => () => { core.dispose(); halo.dispose(); }, [core, halo]);
   return (
     <group>
@@ -76,15 +95,15 @@ function WellTube({ pts, stations, td, colorMode }) {
   );
 }
 
-function PlugRing({ position, tangent, name, level }) {
+function PlugRing({ position, tangent, name, level, selected, onSelect }) {
   const quat = useMemo(() => new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), tangent), [tangent]);
   return (
-    <group position={position}>
+    <group position={position} onClick={(event) => { event.stopPropagation(); onSelect?.(); }}>
       <mesh quaternion={quat}>
-        <torusGeometry args={[0.34, 0.07, 12, 32]} />
-        <meshStandardMaterial color="#A855F7" emissive="#A855F7" emissiveIntensity={0.9} metalness={0.3} roughness={0.4} />
+        <torusGeometry args={[selected ? 0.46 : 0.34, 0.09, 12, 24]} />
+        <meshStandardMaterial color={selected ? "#E9D5FF" : "#A855F7"} emissive="#A855F7" emissiveIntensity={0.9} metalness={0.3} roughness={0.4} />
       </mesh>
-      <Label text={name} color="#A855F7" position={[0, 0, 0]} anchor={[1.15, 1.5 + level * 1.3]} size={0.036} />
+      <Label text={name} color="#A855F7" position={[0, 0, 0]} anchor={[0.5, -0.6 - level * 1.15]} size={0.04} />
     </group>
   );
 }
@@ -109,68 +128,87 @@ function Bit({ position, label }) {
 
 // Applies view commands (3D/Side/Plan/Fit/Zoom bit/±) with eased transitions
 function CameraRig({ geo, tip, command, orbit }) {
-  const { camera } = useThree();
+  const { camera, size } = useThree();
   const controls = useThree((s) => s.controls);
   const goal = useRef(null);
   const view = useRef("3d");
+  const lastCommand = useRef(null);
 
   useEffect(() => {
-    if (!controls || !command) return;
-    const dist = (r) => (r / Math.sin(THREE.MathUtils.degToRad(FOV / 2))) * 0.85;
-    const dirFor = (v) => (v === "plan" ? new THREE.Vector3(0.0001, 1, 0.0001) : v === "side" ? geo.side.clone() : new THREE.Vector3(1, 0.55, 1).normalize());
+    if (!controls) return;
+    const type = command && command !== lastCommand.current ? command.type : "fit";
+    lastCommand.current = command;
+    if (["3d", "side", "plan"].includes(type)) view.current = type;
+    const direction = view.current === "plan" ? [0, 1, 0] : view.current === "side" ? geo.side.toArray() : [1, 0.55, 1];
+    const fitted = fitWellboreCamera(geo.points, direction, size.width / Math.max(size.height, 1), FOV);
+    camera.up.set(...fitted.up);
+    camera.far = Math.max(400, fitted.distance * 4);
+    camera.updateProjectionMatrix();
+    controls.enableRotate = view.current === "3d";
+    controls.autoRotate = orbit && view.current === "3d";
     const cur = camera.position.clone().sub(controls.target);
     let target = geo.center.clone(), pos;
-    if (["3d", "side", "plan"].includes(command.type)) view.current = command.type;
-    if (["3d", "side", "plan", "fit"].includes(command.type)) pos = target.clone().add(dirFor(view.current).multiplyScalar(dist(geo.radius)));
-    else if (command.type === "bit") { target = tip.clone(); pos = target.clone().add(cur.normalize().multiplyScalar(dist(geo.radius) * 0.38)); }
-    else if (command.type === "in" || command.type === "out") {
+    if (["3d", "side", "plan", "fit"].includes(type)) pos = new THREE.Vector3(...fitted.position);
+    else if (type === "bit") { target = tip.clone(); pos = target.clone().add(cur.normalize().multiplyScalar(Math.max(5, geo.radius * 0.7))); }
+    else if (type === "in" || type === "out") {
       target = controls.target.clone();
-      pos = target.clone().add(cur.multiplyScalar(command.type === "in" ? 0.75 : 1.33));
+      pos = target.clone().add(cur.normalize().multiplyScalar(THREE.MathUtils.clamp(
+        camera.position.distanceTo(target) * (type === "in" ? 0.75 : 1.33), 1.5, fitted.distance * 3)));
     }
+    controls.maxDistance = fitted.distance * 3;
     if (pos) goal.current = { pos, target };
-  }, [command]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [command, geo, controls, camera, size.width, size.height]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { if (controls) { controls.autoRotate = orbit; controls.autoRotateSpeed = 0.8; } }, [controls, orbit]);
+  useEffect(() => {
+    if (!controls) return;
+    controls.autoRotate = orbit && view.current === "3d";
+    controls.autoRotateSpeed = 0.8;
+    const cancel = () => { goal.current = null; };
+    controls.addEventListener("start", cancel);
+    return () => controls.removeEventListener("start", cancel);
+  }, [controls, orbit]);
 
-  useFrame(() => {
-    if (!goal.current || !controls) return;
-    camera.position.lerp(goal.current.pos, 0.14);
-    controls.target.lerp(goal.current.target, 0.14);
+  useFrame((_, delta) => {
+    if (!controls) return;
+    controls.autoRotate = orbit && view.current === "3d" && !goal.current;
+    if (!goal.current) return;
+    const easing = 1 - Math.exp(-10 * delta);
+    camera.position.lerp(goal.current.pos, easing);
+    controls.target.lerp(goal.current.target, easing);
     controls.update();
     if (camera.position.distanceTo(goal.current.pos) < 0.02) goal.current = null;
   });
   return null;
 }
 
-export default function SurveyWellbore3D({ survey, depthFt, colorMode, plugs, bitLabel, fmtDepth, tickStepFt, command, orbit }) {
+function SurveyScene({ survey, depthFt, colorMode, plugs, bitLabel, fmtDepth, tickStepFt, command, orbit, selectedPlugId, onSelectPlug }) {
   const stations = survey.stations;
   const td = stations[stations.length - 1].md_ft;
   const geo = useGeometry(stations);
   const tip = geo.project(stationAt(stations, depthFt));
 
   const ticks = useMemo(() => {
-    const out = [];
-    for (let md = tickStepFt; md < td - tickStepFt * 0.3; md += tickStepFt) out.push({ md, pos: geo.project(stationAt(stations, md)) });
-    return out;
+    return wellboreTicks(geo.firstMD, td, tickStepFt).map((md) => ({ md, pos: geo.project(stationAt(stations, md)) }));
   }, [stations, td, tickStepFt, geo]);
 
-  const rings = useMemo(() => plugs.reduce((acc, p) => {
+  const rings = useMemo(() => [...plugs].filter((p) => Number.isFinite(p.start) && p.start >= geo.firstMD && p.start <= td)
+    .sort((a, b) => a.start - b.start).reduce((acc, p) => {
     const pos = geo.project(stationAt(stations, p.start));
     const ahead = geo.project(stationAt(stations, Math.min(p.start + 30, td)));
     const back = geo.project(stationAt(stations, Math.max(p.start - 30, 0)));
     const tangent = ahead.sub(back).normalize();
     const prev = acc[acc.length - 1];
-    const level = prev && prev.pos.distanceTo(pos) < 2.2 ? prev.level + 1 : 0;
-    return [...acc, { p, pos, tangent, level }];
+    const level = prev && prev.pos.distanceTo(pos) < 2.2 ? (prev.level + 1) % 3 : 0;
+    acc.push({ p, pos, tangent, level });
+    return acc;
   }, []), [plugs, stations, td, geo]);
 
   const shadow = useMemo(() => geo.pts.map((v) => new THREE.Vector3(v.x, geo.floorY + 0.01, v.z)), [geo]);
   const startPos = useMemo(() => geo.center.clone().add(new THREE.Vector3(1, 0.55, 1).normalize().multiplyScalar((geo.radius / Math.sin(THREE.MathUtils.degToRad(FOV / 2))) * 0.85)), [geo]);
 
   return (
-    <Canvas camera={{ position: startPos.toArray(), fov: FOV, near: 0.1, far: 400 }} dpr={[1, 2]} gl={{ antialias: true }} data-testid="survey-3d-canvas">
+    <Canvas camera={{ position: startPos.toArray(), fov: FOV, near: 0.1, far: 1000 }} dpr={[1, 1.5]} gl={{ antialias: true }} style={{ touchAction: "none" }} data-testid="survey-3d-canvas">
       <color attach="background" args={["#070C14"]} />
-      <fog attach="fog" args={["#070C14", geo.radius * 2.2, geo.radius * 6]} />
       <hemisphereLight args={["#94A3B8", "#0B1120", 0.55]} />
       <directionalLight position={[20, 40, 25]} intensity={1.1} />
       <directionalLight position={[-25, 10, -20]} intensity={0.35} color="#38BDF8" />
@@ -183,7 +221,7 @@ export default function SurveyWellbore3D({ survey, depthFt, colorMode, plugs, bi
         <meshStandardMaterial color="#64748B" metalness={0.8} roughness={0.3} />
       </mesh>
 
-      <WellTube pts={geo.pts} stations={stations} td={td} colorMode={colorMode} />
+      <WellTube geo={geo} stations={stations} colorMode={colorMode} />
 
       {ticks.map((t) => (
         <group key={t.md} position={t.pos}>
@@ -192,11 +230,25 @@ export default function SurveyWellbore3D({ survey, depthFt, colorMode, plugs, bi
         </group>
       ))}
 
-      {rings.map(({ p, pos, tangent, level }) => <PlugRing key={p.id} position={pos} tangent={tangent} name={p.name} level={level} />)}
+      {rings.map(({ p, pos, tangent, level }) => <PlugRing key={p.id} position={pos} tangent={tangent} name={p.name} level={level}
+        selected={p.id === selectedPlugId} onSelect={() => onSelectPlug?.(p)} />)}
       <Bit position={tip} label={bitLabel} />
 
       <OrbitControls makeDefault enableDamping dampingFactor={0.08} target={geo.center.toArray()} minDistance={1.5} maxDistance={geo.radius * 8} />
       <CameraRig geo={geo} tip={tip} command={command} orbit={orbit} />
     </Canvas>
+  );
+}
+
+export default function SurveyWellbore3D(props) {
+  return (
+    <ErrorBoundary name="wellbore-3d" resetKey={props.survey.survey_id} fallback={(_, retry) => (
+      <div role="alert" className="p-6 text-sm text-slate-300">
+        <p>The 3D viewer could not initialize. Try reloading or enable WebGL in your browser.</p>
+        <button onClick={retry} className="mt-3 rounded-lg bg-orange-600 px-4 py-2 text-white">Retry viewer</button>
+      </div>
+    )}>
+      <SurveyScene {...props} />
+    </ErrorBoundary>
   );
 }

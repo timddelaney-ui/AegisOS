@@ -127,3 +127,29 @@ The repository includes operational coverage for:
 - multi-encoder drift detection and slippage warnings
 - Von Mises stress envelope checks
 - historical sync / latency payload assessments
+
+## Wellbore viewer and optional teammates
+
+Wellbore & Plugs and the Operator screen share a mobile-friendly 3D viewer with
+3D, Side, Plan, Fit, Zoom-to-bit, orbit and zoom controls. Depth ticks, selectable
+plug rings and the bit follow measured-depth survey interpolation. The example
+horizontal well is explicitly labeled **demo**, not live geometry. Contact-index
+coloring is a relative visual index, not a drag-force calculation.
+
+Upload a survey CSV with `md_ft,inc_deg,azi_deg` columns (feet, degrees; maximum
+4 MB). At least two distinct depths and finite angles are required. PDFs and
+job programs are not survey files.
+
+Solo accounts can save surveys, manage plugs, correlate depth, record plug runs
+and customize channel names without creating a team. These records belong to
+the account's private workspace, not a shared null-team bucket. Joining a team
+retains access to existing private wells without sharing them automatically.
+New surveys created while on a team use that team's workspace; shared survey
+and plug edits retain supervisor/management permissions. Teammates are optional
+for this workflow; unrelated crew-management features still use teams.
+
+Focused checks:
+```sh
+python -m pytest backend/tests/test_personal_wellbore.py -q
+node --experimental-vm-modules --test tests/frontend/wellboreGeometry.test.mjs
+```

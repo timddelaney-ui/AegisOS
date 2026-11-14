@@ -1,293 +1,215 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { Canvas, useFrame } from "@react-three/fiber";
-import { OrbitControls, Line, Text, Grid } from "@react-three/drei";
-import * as THREE from "three";
+import { Upload, Users, Plus } from "lucide-react";
 import { Phase1PageHeader } from "../components/Phase1Header";
 import { useAuth, API } from "../context/AuthContext";
 import { useActiveReel } from "../context/ActiveReelContext";
-import { useUnits } from "../context/UnitContext";
-import { isSupervisorOrHigher } from "../lib/roles";
-import { Upload, Play, Palette } from "lucide-react";
+import { isSupervisorOrHigher, isGuest } from "../lib/roles";
 import ShareLinksButton from "../components/ShareLinksButton";
+import SurveyWellbore3D from "../components/operator/SurveyWellbore3D";
+import { ViewerToolbar, ZoomButtons } from "../components/operator/ViewerToolbar";
+import { PlugManagerModal, PLUG_TYPES } from "../components/operator/PlugManagerModal";
+import { useOperatorUnits } from "../components/operator/useOperatorUnits";
+import { DEMO_WELLBORE } from "../lib/wellboreGeometry";
+import { PLUGS } from "../lib/operatorConfig";
+import { stationAt, surveyTD, DLS_WARN, DLS_CRIT } from "../lib/surveyInterp";
 
-/*────────────────────────────────────────────────────────────────────
-  Wellbore color scales — all derived from open-domain references:
-    DLS buckets  : API RP 7G §4 "severity ratings for drilling"
-    Soft-string  : Johancsik 1984 / Sheppard 1987 — N = sqrt((T·κ)² + (W·sinα)²)
-  Palette uses the CoilAegis enterprise semantic tokens (green→amber→crimson).
-────────────────────────────────────────────────────────────────────*/
-
-// DLS severity → green (safe) → amber (watch) → crimson (severe)
-// Thresholds per API RP 7G §4 open-domain classification.
-const dlsColor = (dls) => {
-  if (dls == null) return "#64748B";          // slate (unknown)
-  if (dls < 3)  return "#10B981";              // emerald — gentle (OK)
-  if (dls < 6)  return "#F59E0B";              // amber — moderate
-  if (dls < 10) return "#FB7185";              // rose — severe
-  return "#EF4444";                            // crimson — critical
-};
-
-// Contact drag severity (0..1 normalized across the string).
-// Formula per Johancsik 1984 open-domain soft-string torque-drag:
-//   normal_force_per_ft = sqrt( (T · κ)² + (W · sinα)² )
-// where κ = DLS in rad/ft, T is axial tension estimate, W is pipe weight/ft.
-// We use station-level DLS + inclination directly (tension & weight scale
-// linearly and cancel in normalization, so we can simplify to:
-//   raw = κ² + sin(α)²  (unitless, monotonic with normal force)
-const dragRaw = (station) => {
-  const dls = Number(station?.dls_deg_per_100ft) || 0;
-  const kappa = (dls * Math.PI / 180) / 100;         // rad/ft
-  const inc_rad = (Number(station?.inc_deg) || 0) * Math.PI / 180;
-  return kappa * kappa + Math.sin(inc_rad) * Math.sin(inc_rad);
-};
-
-const dragColor = (severity /* 0..1 */) => {
-  if (severity == null) return "#64748B";
-  if (severity < 0.25) return "#10B981";
-  if (severity < 0.50) return "#F59E0B";
-  if (severity < 0.75) return "#FB7185";
-  return "#EF4444";
-};
-
-const SCALE = 1 / 50; // 50 ft per world unit
-
-function Wellbore({ survey, depth, colorMode = "dls" }) {
-  const points = useMemo(() => {
-    if (!survey?.stations) return [];
-    return survey.stations.map((s) => new THREE.Vector3(s.east_ft * SCALE, -s.tvd_ft * SCALE, s.north_ft * SCALE));
-  }, [survey]);
-
-  // Interpolated BHA tip position
-  const tip = useMemo(() => {
-    if (!survey?.stations || !survey.stations.length) return null;
-    const sts = survey.stations;
-    let i = 0;
-    while (i < sts.length - 1 && sts[i + 1].md_ft < depth) i++;
-    if (i >= sts.length - 1) return points[points.length - 1];
-    const a = sts[i], b = sts[i + 1];
-    const t = Math.max(0, Math.min(1, (depth - a.md_ft) / Math.max(1, b.md_ft - a.md_ft)));
-    const pa = points[i], pb = points[i + 1];
-    return new THREE.Vector3().lerpVectors(pa, pb, t);
-  }, [survey, depth, points]);
-
-  // Pre-compute drag severity, normalized across the string so colors
-  // span the full green→crimson range for every well geometry.
-  const dragNorm = useMemo(() => {
-    if (!survey?.stations?.length) return [];
-    const raws = survey.stations.map(dragRaw);
-    const hi = Math.max(1e-9, ...raws);
-    return raws.map((r) => r / hi);
-  }, [survey]);
-
-  // Build colored line segments. Memoised so each `<Line points>` keeps a
-  // stable reference between renders when the underlying survey /
-  // colorMode hasn't changed. Each entry pre-computes its own `pts` tuple
-  // so we don't allocate `[a, b]` inline inside the map.
-  const segs = useMemo(() => {
-    if (!points.length) return [];
-    const out = [];
-    for (let i = 0; i < points.length - 1; i++) {
-      const st = survey?.stations?.[i + 1];
-      const dls = st?.dls_deg_per_100ft ?? 0;
-      const drag = dragNorm[i + 1] ?? 0;
-      let color;
-      if (colorMode === "drag") color = dragColor(drag);
-      else if (colorMode === "combined") {
-        const dls_norm = Math.min(1, dls / 12);
-        color = dragColor(Math.max(dls_norm, drag));
-      } else color = dlsColor(dls);
-      out.push({ pts: [points[i], points[i + 1]], color, md_ft: survey?.stations?.[i]?.md_ft ?? i });
-    }
-    return out;
-  }, [points, dragNorm, colorMode, survey]);
-
-  if (!points.length) return null;
-
-  return (
-    <group>
-      {segs.map((s) => (
-        <Line key={`seg-${s.md_ft}`} points={s.pts} color={s.color} lineWidth={3} />
-      ))}
-      {tip && (
-        <mesh position={tip}>
-          <sphereGeometry args={[0.5, 16, 16]} />
-          <meshStandardMaterial color="#F59E0B" emissive="#F59E0B" emissiveIntensity={0.5} />
-        </mesh>
-      )}
-      {survey.stations.slice(0, 1).map((s) => (
-        <Text key={`surface-${s.md_ft ?? 0}`} position={[0, 0.5, 0]} fontSize={0.8} color="#06B6D4">surface</Text>
-      ))}
-    </group>
-  );
-}
-
-function AutoRotate() {
-  useFrame((state) => { state.camera.lookAt(0, -10, 0); });
-  return null;
-}
+const errorMessage = (error, fallback) => typeof error?.response?.data?.detail === "string"
+  ? error.response.data.detail : fallback;
 
 export default function WellborePage() {
   const { user } = useAuth();
-  const u = useUnits();
-  const canUpload = isSupervisorOrHigher(user);
+  const u = useOperatorUnits();
+  const { currentDepth, setCurrentDepth } = useActiveReel();
+  const canUpload = !isGuest(user) && (!user?.team_id || isSupervisorOrHigher(user));
   const [surveys, setSurveys] = useState([]);
   const [activeId, setActiveId] = useState(null);
-  const [survey, setSurvey] = useState(null);
+  const [loadError, setLoadError] = useState(null);
   const [file, setFile] = useState(null);
   const [wellName, setWellName] = useState("");
-  const { currentDepth, setCurrentDepth } = useActiveReel();
-  const [depth, setDepth] = useState(currentDepth || 0);
-  // Color mode: "dls" | "drag" | "combined"
+  const [uploading, setUploading] = useState(false);
+  const [depth, setDepth] = useState(currentDepth || 14233);
+  const [view, setView] = useState("3d");
+  const [command, setCommand] = useState(null);
+  const [orbit, setOrbit] = useState(false);
+  const [plugRecords, setPlugRecords] = useState([]);
+  const [canEditPlugs, setCanEditPlugs] = useState(false);
+  const [managePlugs, setManagePlugs] = useState(false);
+  const [selectedPlug, setSelectedPlug] = useState(null);
+  const fileInput = useRef(null);
+  const activeSurvey = useRef(activeId);
+  activeSurvey.current = activeId;
   const [colorMode, setColorMode] = useState(() => {
-    try { return localStorage.getItem("coilaegis_wellbore_colormode") || "dls"; } catch { return "dls"; }
+    try { return localStorage.getItem("coilaegis_wellbore_colormode") || "dls"; }
+    catch { return "dls"; }
   });
-  const setColorModePersist = (m) => {
-    setColorMode(m);
-    try { localStorage.setItem("coilaegis_wellbore_colormode", m); } catch (e) { console.debug("[Wellbore] colormode persist failed", e?.message); }
-  };
+  const survey = surveys.find((item) => item.survey_id === activeId) || DEMO_WELLBORE;
+  const isDemo = survey === DEMO_WELLBORE;
+  const firstMD = survey.stations[0].md_ft;
+  const maxMD = surveyTD(survey);
+  const atBit = stationAt(survey.stations, depth);
+  const plugs = useMemo(() => isDemo ? PLUGS.map((plug) => ({ ...plug, name: plug.id }))
+    : plugRecords.map((plug) => ({
+      id: plug.plug_id, name: plug.name, start: plug.top_md_ft, end: plug.bottom_md_ft, type: PLUG_TYPES[plug.plug_type],
+    })), [isDemo, plugRecords]);
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     try {
-      const r = await axios.get(`${API}/surveys`, { withCredentials: true });
-      setSurveys(r.data?.surveys || []);
-      setActiveId(r.data?.active_survey_id || r.data?.surveys?.[0]?.survey_id || null);
-    } catch (e) { console.debug("[Wellbore] survey refresh failed", e?.response?.status || e?.message); }
-  };
-  useEffect(() => { refresh(); }, []);
-  useEffect(() => {
-    const s = surveys.find((x) => x.survey_id === activeId);
-    setSurvey(s || null);
-  }, [surveys, activeId]);
-  useEffect(() => { setCurrentDepth(depth); }, [depth, setCurrentDepth]);
+      const { data } = await axios.get(`${API}/surveys`, { withCredentials: true });
+      const list = (data.surveys || []).filter((item) => item.stations?.length > 1);
+      setSurveys(list);
+      setActiveId(data.active_survey_id || list[0]?.survey_id || null);
+      setLoadError(null);
+    } catch (error) {
+      console.error("[Wellbore] survey load failed", error);
+      setLoadError(errorMessage(error, "Could not load your saved surveys. The view below is a demo."));
+    }
+  }, []);
+  useEffect(() => { refresh(); }, [refresh]);
 
-  const maxMD = survey?.stations?.length ? survey.stations[survey.stations.length - 1].md_ft : 10000;
+  const loadPlugs = useCallback(async () => {
+    if (isDemo) { setPlugRecords([]); setCanEditPlugs(false); return; }
+    try {
+      const { data } = await axios.get(`${API}/surveys/${activeId}/plugs`, { withCredentials: true });
+      if (activeSurvey.current !== activeId) return;
+      setPlugRecords(data.plugs || []);
+      setCanEditPlugs(Boolean(data.can_edit));
+    } catch (error) {
+      if (activeSurvey.current === activeId) toast.error(errorMessage(error, "Could not load the well's plug records."));
+    }
+  }, [activeId, isDemo]);
+  useEffect(() => { setPlugRecords([]); setSelectedPlug(null); setCanEditPlugs(false); setManagePlugs(false); loadPlugs(); }, [loadPlugs]);
+  useEffect(() => { setDepth((value) => Math.max(firstMD, Math.min(value, maxMD))); }, [activeId, firstMD, maxMD]);
+  useEffect(() => { if (!isDemo) setCurrentDepth(depth); }, [depth, isDemo, setCurrentDepth]);
+
+  const sendCommand = (type) => {
+    if (["3d", "side", "plan"].includes(type)) {
+      setView(type);
+      if (type !== "3d") setOrbit(false);
+    }
+    setCommand((previous) => ({ type, n: (previous?.n || 0) + 1 }));
+  };
+  const selectSurvey = async (id) => {
+    if (id === DEMO_WELLBORE.survey_id) { setActiveId(id); return; }
+    const selected = surveys.find((item) => item.survey_id === id);
+    const canActivate = isSupervisorOrHigher(user) || selected?.team_id === `personal:${user.user_id}`;
+    if (canActivate) {
+      try { await axios.post(`${API}/surveys/${id}/activate`, {}, { withCredentials: true }); }
+      catch (error) { toast.error(errorMessage(error, "Could not activate this survey.")); return; }
+    }
+    setActiveId(id);
+  };
 
   const upload = async () => {
-    if (!file || !wellName.trim()) return toast.error("Pick a file and name");
-    const fd = new FormData();
-    fd.append("file", file); fd.append("well_name", wellName);
+    if (!file || !wellName.trim()) { toast.error("Choose a CSV and enter the well name."); return; }
+    if (!/\.(csv|txt)$/i.test(file.name)) { toast.error("This upload needs a survey CSV, not a PDF job program."); return; }
+    if (file.size > 4 * 1024 * 1024) { toast.error("Survey files must be 4 MB or smaller."); return; }
+    const data = new FormData();
+    data.append("file", file);
+    data.append("well_name", wellName.trim());
+    setUploading(true);
     try {
-      await axios.post(`${API}/surveys/upload`, fd, { withCredentials: true, headers: { "Content-Type": "multipart/form-data" } });
-      toast.success("Survey uploaded"); setFile(null); setWellName(""); refresh();
-    } catch (e) {
-      toast.error(e.response?.data?.detail || "Upload failed");
-    }
+      const response = await axios.post(`${API}/surveys/upload`, data, { withCredentials: true });
+      await axios.post(`${API}/surveys/${response.data.survey_id}/activate`, {}, { withCredentials: true });
+      toast.success(user?.team_id ? "Survey saved to your team." : "Survey saved privately to your account.");
+      setFile(null); setWellName("");
+      if (fileInput.current) fileInput.current.value = "";
+      await refresh();
+    } catch (error) { toast.error(errorMessage(error, "Could not save the survey.")); }
+    finally { setUploading(false); }
   };
 
-  const activate = async (id) => {
-    try { await axios.post(`${API}/surveys/${id}/activate`, {}, { withCredentials: true }); toast.success("Survey active"); setActiveId(id); refresh(); }
-    catch (e) { toast.error(e.response?.data?.detail || "Failed"); }
+  const savePlug = async (id, body) => {
+    try {
+      if (id) await axios.put(`${API}/plugs/${id}`, body, { withCredentials: true });
+      else await axios.post(`${API}/surveys/${activeId}/plugs`, body, { withCredentials: true });
+      toast.success("Plug saved."); await loadPlugs(); setSelectedPlug(null); return true;
+    } catch (error) { toast.error(errorMessage(error, "Could not save the plug.")); return false; }
   };
+  const deletePlug = async (id) => {
+    try {
+      await axios.delete(`${API}/plugs/${id}`, { withCredentials: true });
+      toast.success("Plug deleted."); await loadPlugs(); setSelectedPlug(null);
+    } catch (error) { toast.error(errorMessage(error, "Could not delete the plug.")); }
+  };
+  const tickStepFt = (u.isMetric ? 500 / 0.3048 : 2000);
 
   return (
-    <div className="min-h-screen ca-console-shell relative">
-      <div className="relative z-10">
-      <Phase1PageHeader title="3D Wellbore Viewer" subtitle={survey ? `${survey.well_name} · ${survey.stations?.length} stations · MD ${u.fmt(maxMD, "depth", { digits: 0 })} · DLS/Drag colored [API RP 7G §4 · Johancsik 1984]` : "Upload a directional survey to render the well path."} right={<ShareLinksButton scope="wellbore" compact />} />
-      <div className="max-w-6xl mx-auto p-3 space-y-3">
-
-        {canUpload && (
-          <div className="ca-glass p-3">
-            <h3 className="text-sm font-bold mb-2 flex items-center gap-1 text-slate-200"><Upload className="w-4 h-4 text-[#FF6B1A]" />Upload Survey (CSV)</h3>
-            <p className="text-[10px] text-slate-400 mb-2">Columns: <code className="text-[#06B6D4]">md_ft, inc_deg, azi_deg</code> (TVD/N/E computed by minimum-curvature method).</p>
-            <div className="flex gap-2 flex-wrap">
-              <input data-testid="survey-name" placeholder="Well name" value={wellName} onChange={(e) => setWellName(e.target.value)} className="bg-white/5 border border-white/15 text-white rounded px-2 py-1 text-xs flex-1 min-w-[150px] placeholder:text-slate-500" />
-              <input data-testid="survey-file" type="file" accept=".csv,.txt" onChange={(e) => setFile(e.target.files?.[0] || null)} className="text-xs text-slate-300" />
-              <button data-testid="survey-upload" onClick={upload} className="bg-[#06B6D4] text-white px-3 py-1 text-xs font-bold rounded shadow-[0_0_0_1px_rgba(6,182,212,0.5)]">Upload</button>
-            </div>
+    <div className="min-h-screen ca-console-shell text-slate-100">
+      <Phase1PageHeader title="Wellbore & Plugs" subtitle="Explore the well path, locate plugs and inspect the bit."
+        right={!isDemo && user?.team_id === survey.team_id && user?.team_id ? <ShareLinksButton scope="wellbore" compact /> : null} />
+      <div className="max-w-6xl mx-auto p-3 space-y-4 pb-24">
+        <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+          <span className={isDemo ? "text-amber-300" : "text-emerald-300"}>
+            {isDemo ? "DEMO — illustrative geometry, not a live well" : `${survey.well_name} · ${survey.stations.length} survey stations`}
+          </span>
+          <Link to="/team" className="inline-flex items-center gap-2 text-cyan-300"><Users className="w-4 h-4" />{user?.team_id ? "Manage teammates" : "Add a teammate (optional)"}</Link>
+        </div>
+        {loadError && <div role="alert" className="text-sm text-red-300">{loadError} <button className="underline" onClick={refresh}>Retry</button></div>}
+        <section className="rounded-2xl border border-slate-700 bg-[#0D1520] p-3 sm:p-4 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-sm font-bold uppercase tracking-wider">Wellbore and plugs</h2>
+            <select aria-label="Well survey" value={survey.survey_id} onChange={(event) => selectSurvey(event.target.value)} className="max-w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs">
+              <option value={DEMO_WELLBORE.survey_id}>Demo horizontal well</option>
+              {surveys.map((item) => <option key={item.survey_id} value={item.survey_id}>{item.well_name}</option>)}
+            </select>
           </div>
-        )}
-
-        {surveys.length > 0 && (
-          <div className="flex gap-2 flex-wrap">
-            {surveys.map((s) => (
-              <button key={s.survey_id} data-testid={`select-survey-${s.survey_id}`}
-                onClick={() => activate(s.survey_id)}
-                className={`text-xs px-2.5 py-1 rounded font-bold transition-all ${s.survey_id === activeId ? "bg-[#FF6B1A] text-white shadow-[0_0_0_1px_rgba(255,107,26,0.5)]" : "bg-white/5 border border-white/15 text-slate-300 hover:bg-white/10"}`}>
-                {s.well_name} {s.survey_id === activeId && "·"} {s.stations?.length} stn
-              </button>
+          <ViewerToolbar view={view} orbit={orbit} onCmd={sendCommand} onOrbit={() => setOrbit((value) => !value)} />
+          <div className="flex flex-wrap items-center gap-2">
+            {[["dls", "DLS"], ["Plain", "Plain"], ["drag", "Contact index"], ["combined", "Combined"]].map(([id, label]) => (
+              <button key={id} data-testid={`wellbore-colormode-${id}`} onClick={() => {
+                setColorMode(id);
+                try { localStorage.setItem("coilaegis_wellbore_colormode", id); }
+                catch (error) { console.debug("[Wellbore] color preference could not be saved", error); }
+              }} className={`rounded-lg border px-3 py-2 text-xs ${colorMode === id ? "bg-cyan-500 text-slate-950 border-cyan-500" : "border-slate-700 text-slate-300"}`}>{label}</button>
             ))}
           </div>
-        )}
-
-        {survey && (
-          <>
-            <div className="ca-glass p-2 flex items-center gap-3 flex-wrap">
-              <span className="ca-eyebrow ca-eyebrow-cyan">Depth · {u.label("depth")}</span>
-              <input data-testid="wellbore-depth" type="range" min={0} max={maxMD} value={depth} onChange={(e) => setDepth(Number(e.target.value))} className="flex-1 accent-[#06B6D4]" />
-              <span className="text-sm tabular-nums font-bold text-[#06B6D4] ca-telemetry" data-testid="wellbore-depth-display">{u.fmt(depth, "depth", { digits: 0 })}</span>
-              <span className="w-px h-5 bg-white/15 mx-1" />
-              <Palette className="w-3.5 h-3.5 text-[#F59E0B]" />
-              <span className="ca-eyebrow ca-eyebrow-amber">Color by</span>
-              <div className="inline-flex items-center bg-white/5 border border-white/15 rounded-full p-0.5">
-                {[
-                  { id: "dls",      label: "DLS" },
-                  { id: "drag",     label: "Contact Drag" },
-                  { id: "combined", label: "Combined" },
-                ].map((o) => (
-                  <button
-                    key={o.id}
-                    data-testid={`wellbore-colormode-${o.id}`}
-                    onClick={() => setColorModePersist(o.id)}
-                    className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full tracking-wider uppercase transition-all ${colorMode === o.id ? "bg-[#F59E0B] text-black shadow-[0_0_0_1px_rgba(245,158,11,0.5)]" : "text-slate-400 hover:text-white"}`}>
-                    {o.label}
-                  </button>
-                ))}
-              </div>
+          <div data-testid="wellbore-canvas" className="relative h-[32rem] md:h-[38rem] rounded-xl border border-slate-700 overflow-hidden bg-[#070C14]">
+            <SurveyWellbore3D survey={survey} depthFt={depth} plugs={plugs} bitLabel={`BIT ${u.show(depth, "depth", 1)} ${u.label("depth")}`}
+              colorMode={colorMode} fmtDepth={(md) => u.show(md, "depth", 0)} tickStepFt={tickStepFt} command={command} orbit={orbit}
+              selectedPlugId={selectedPlug?.id} onSelectPlug={setSelectedPlug} />
+            <div className="pointer-events-none absolute top-3 left-3 rounded-xl border border-slate-700 bg-slate-950/85 backdrop-blur p-3 text-xs space-y-1">
+              <p className="text-orange-400 font-bold uppercase">At bit{isDemo ? " · demo" : ""}</p>
+              <p>MD <b className="font-mono">{u.show(depth, "depth", 1)} {u.label("depth")}</b></p>
+              <p>TVD <b className="font-mono">{u.show(atBit.tvd_ft, "depth", 1)} {u.label("depth")}</b></p>
+              <p>Incl <b className="font-mono">{atBit.inc_deg.toFixed(1)}°</b></p>
+              <p>DLS <b className="font-mono">{u.show(atBit.dls_deg_per_100ft, "dls", 2)} {u.label("dls")}</b></p>
             </div>
-
-            <div data-testid="wellbore-canvas" className="ca-glass w-full h-[520px] overflow-hidden relative">
-              <div className="ca-scanline" />
-              <Canvas camera={{ position: [40, 20, 40], fov: 50 }}>
-                <ambientLight intensity={0.6} />
-                <directionalLight position={[20, 30, 20]} intensity={0.8} />
-                <Grid args={[40, 40]} position={[0, 0, 0]} cellColor="#334155" sectionColor="#64748b" />
-                <Wellbore survey={survey} depth={depth} colorMode={colorMode} />
-                <AutoRotate />
-                <OrbitControls enablePan enableZoom enableRotate />
-              </Canvas>
-              <div className="absolute top-2 left-2 ca-chip ca-chip-cyan">
-                {colorMode === "dls" ? "DLS · API RP 7G §4"
-                  : colorMode === "drag" ? "Contact Drag · Johancsik 1984"
-                  : "Combined severity (max of DLS + Drag)"}
-              </div>
-            </div>
-
-            {/* Dynamic legend — swaps with color mode */}
-            <div className="ca-glass p-2 flex items-center gap-3 text-[11px] text-slate-300 flex-wrap">
-              <span className="ca-eyebrow">
-                {colorMode === "dls" ? "DLS legend" : colorMode === "drag" ? "Drag severity" : "Combined severity"}
-              </span>
-              {colorMode === "dls" ? (
-                <>
-                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm" style={{ background: dlsColor(1) }} /> &lt; 3°/100 ft · gentle</span>
-                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm" style={{ background: dlsColor(5) }} /> 3–6° · moderate</span>
-                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm" style={{ background: dlsColor(8) }} /> 6–10° · severe</span>
-                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm" style={{ background: dlsColor(12) }} /> ≥ 10° · critical</span>
-                </>
-              ) : (
-                <>
-                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm" style={{ background: dragColor(0.1) }} /> &lt; 25% · low</span>
-                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm" style={{ background: dragColor(0.4) }} /> 25–50% · watch</span>
-                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm" style={{ background: dragColor(0.6) }} /> 50–75% · sticky zone</span>
-                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm" style={{ background: dragColor(0.9) }} /> ≥ 75% · hang-off risk</span>
-                </>
-              )}
-              <span className="ml-auto text-[10px] text-slate-500 italic">
-                {colorMode === "drag" || colorMode === "combined"
-                  ? "N = √((T·κ)² + (W·sinα)²) · soft-string open-domain [Johancsik 1984 / Sheppard 1987]"
-                  : "DLS buckets per API RP 7G §4 open-domain severity ratings"}
-              </span>
-            </div>
-          </>
-        )}
-
-        {!survey && !canUpload && (
-          <p className="text-sm text-slate-400 text-center py-8">No surveys yet. Ask a Supervisor to upload one.</p>
-        )}
+            <ZoomButtons onCmd={sendCommand} />
+          </div>
+          <label className="flex flex-wrap items-center gap-3 text-xs">
+            Inspect depth
+            <input aria-label="Inspect measured depth" data-testid="wellbore-depth" type="range" min={firstMD} max={maxMD} value={depth} step={1} onChange={(event) => setDepth(Number(event.target.value))} className="flex-1 min-w-[140px] accent-orange-500" />
+            <b data-testid="wellbore-depth-display">{u.show(depth, "depth", 1)} {u.label("depth")}</b>
+          </label>
+          <div className="flex flex-wrap gap-3 text-xs text-slate-300">
+            {colorMode === "dls" ? <>
+              <span>DLS {u.label("dls")}</span>
+              <span className="text-emerald-400">&lt; {u.show(DLS_WARN, "dls", 1)}</span>
+              <span className="text-amber-400">{u.show(DLS_WARN, "dls", 1)}–{u.show(DLS_CRIT, "dls", 1)}</span>
+              <span className="text-red-400">≥ {u.show(DLS_CRIT, "dls", 1)}</span>
+            </> : colorMode === "Plain" ? <span>Plain trajectory coloring.</span>
+              : <span>Relative contact index only, not a drag-force calculation. Green &lt;25%, amber 25–50%, pink 50–75%, red ≥75%.</span>}
+          </div>
+          <p className="text-[11px] text-slate-500">Drag to rotate in 3D; pinch to zoom. Tap a purple plug to inspect it. Color bands are visual guides, not operating limits.</p>
+          {selectedPlug && <p role="status" className="rounded-lg bg-purple-500/10 p-3 text-sm text-purple-200"><b>{selectedPlug.name}</b> · {u.show(selectedPlug.start, "depth", 1)}–{u.show(selectedPlug.end, "depth", 1)} {u.label("depth")}</p>}
+          {!isDemo && <button onClick={() => setManagePlugs(true)} className="flex items-center gap-2 rounded-lg border border-purple-500/40 px-3 py-2 text-xs text-purple-200"><Plus className="w-4 h-4" />{canEditPlugs ? "Manage plugs" : "View plug records"} · {plugs.length}</button>}
+        </section>
+        {canUpload && <details className="ca-glass p-4" open={isDemo && !surveys.length}>
+          <summary className="cursor-pointer text-sm font-bold"><Upload className="inline w-4 h-4 mr-2 text-orange-400" />Upload your survey</summary>
+          <p className="my-3 text-xs text-slate-400">CSV columns: <code>md_ft, inc_deg, azi_deg</code>. Depths must be feet. PDFs and job programs are not survey CSVs. {user?.team_id ? "Saved to your team workspace." : "Saved privately to your account; no team required."}</p>
+          <div className="flex flex-wrap gap-3">
+            <input aria-label="Well name" data-testid="survey-name" value={wellName} onChange={(event) => setWellName(event.target.value)} placeholder="Well name" className="min-w-0 w-full sm:flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
+            <input aria-label="Survey CSV file" ref={fileInput} data-testid="survey-file" type="file" accept=".csv,.txt" onChange={(event) => setFile(event.target.files?.[0] || null)} className="max-w-full text-xs" />
+            <button data-testid="survey-upload" onClick={upload} disabled={uploading} className="rounded-lg bg-orange-600 px-4 py-2 text-sm font-bold disabled:opacity-50">{uploading ? "Saving..." : "Save survey"}</button>
+          </div>
+        </details>}
       </div>
-      </div>
+      {managePlugs && !isDemo && <PlugManagerModal plugs={plugRecords} canEdit={canEditPlugs} wellName={survey.well_name}
+        depthLabel={u.label("depth")} toFt={(value) => u.isMetric ? u.to(value, "depth") : value} fromFt={(value) => u.val(value, "depth")}
+        onSave={savePlug} onDelete={deletePlug} onClose={() => setManagePlugs(false)} />}
     </div>
   );
 }

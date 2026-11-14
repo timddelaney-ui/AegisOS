@@ -77,6 +77,25 @@ def require_management(user: dict) -> dict:
     return user
 
 
+def personal_wellbore_workspace(user: dict) -> str:
+    return f"personal:{user['user_id']}"
+
+
+def wellbore_workspace(user: dict) -> str:
+    """Personal keys are never null and cannot collide with generated team IDs."""
+    return user.get("team_id") or personal_wellbore_workspace(user)
+
+
+def wellbore_scope(user: dict) -> dict:
+    return {"team_id": {"$in": list({wellbore_workspace(user), personal_wellbore_workspace(user)})}}
+
+
+def require_wellbore_write(user: dict, workspace: Optional[str] = None) -> dict:
+    if (workspace or wellbore_workspace(user)) == personal_wellbore_workspace(user):
+        return require_crew(user)
+    return require_supervisor(user)
+
+
 # ---------- helper ----------
 def now_utc() -> datetime:
     return datetime.now(timezone.utc)
@@ -813,6 +832,11 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
 
     def _mcm_tvd(stations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Minimum curvature method: fill TVD, N, E and DLS."""
+        for index, station in enumerate(stations):
+            if not all(math.isfinite(float(station[key])) for key in ("md_ft", "inc_deg", "azi_deg")):
+                raise HTTPException(400, "Survey depths and angles must be finite numbers.")
+            if index and station["md_ft"] <= stations[index - 1]["md_ft"]:
+                raise HTTPException(400, "Survey measured depths must be distinct and increasing.")
         out: List[Dict[str, Any]] = []
         prev = None
         tvd = 0.0; north = 0.0; east = 0.0
@@ -842,10 +866,8 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
 
     @api_router.post("/surveys")
     async def create_survey(body: SurveyCreate, user: dict = Depends(require_user)):
-        require_supervisor(user)
-        team_id = user.get("team_id")
-        if not team_id:
-            raise HTTPException(400, "No team.")
+        require_wellbore_write(user)
+        team_id = wellbore_workspace(user)
         if not body.stations or len(body.stations) < 2:
             raise HTTPException(400, "Need at least 2 survey stations.")
         stations = [s.model_dump() for s in sorted(body.stations, key=lambda x: x.md_ft)]
@@ -868,10 +890,10 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
         well_name: str = Form(...),
         user: dict = Depends(require_user),
     ):
-        require_supervisor(user)
-        team_id = user.get("team_id")
-        if not team_id:
-            raise HTTPException(400, "No team.")
+        require_wellbore_write(user)
+        team_id = wellbore_workspace(user)
+        if not (file.filename or "").lower().endswith((".csv", ".txt")):
+            raise HTTPException(400, "Upload a survey CSV with md_ft, inc_deg, azi_deg columns. PDFs are not supported.")
         raw = await file.read()
         if len(raw) > 4 * 1024 * 1024:
             raise HTTPException(413, "File too large (max 4 MB).")
@@ -909,42 +931,42 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
 
     @api_router.get("/surveys")
     async def list_surveys(user: dict = Depends(require_user)):
-        team_id = user.get("team_id")
-        if not team_id:
-            return {"surveys": [], "active_survey_id": None}
-        docs = await db.surveys.find({"team_id": team_id}, {"_id": 0}).sort("created_at", -1).to_list(100)
+        docs = await db.surveys.find(wellbore_scope(user), {"_id": 0}).sort("created_at", -1).to_list(100)
         active = next((d["survey_id"] for d in docs if d.get("is_active")), None)
         return {"surveys": [ser(d) for d in docs], "active_survey_id": active}
 
     @api_router.get("/surveys/{survey_id}")
     async def get_survey(survey_id: str, user: dict = Depends(require_user)):
-        team_id = user.get("team_id")
-        s = await db.surveys.find_one({"survey_id": survey_id, "team_id": team_id}, {"_id": 0})
+        s = await db.surveys.find_one({"survey_id": survey_id, **wellbore_scope(user)}, {"_id": 0})
         if not s:
             raise HTTPException(404, "Survey not found.")
         return ser(s)
 
     @api_router.post("/surveys/{survey_id}/activate")
     async def activate_survey(survey_id: str, user: dict = Depends(require_user)):
-        require_supervisor(user)
-        team_id = user.get("team_id")
-        s = await db.surveys.find_one({"survey_id": survey_id, "team_id": team_id}, {"_id": 0})
+        s = await db.surveys.find_one({"survey_id": survey_id, **wellbore_scope(user)}, {"_id": 0})
         if not s:
             raise HTTPException(404, "Survey not found.")
+        team_id = s["team_id"]
+        require_wellbore_write(user, team_id)
         await db.surveys.update_many({"team_id": team_id}, {"$set": {"is_active": False}})
-        await db.surveys.update_one({"survey_id": survey_id, "team_id": user.get("team_id")}, {"$set": {"is_active": True}})
+        await db.surveys.update_one({"survey_id": survey_id, "team_id": team_id}, {"$set": {"is_active": True}})
         return {"success": True, "active_survey_id": survey_id}
 
     @api_router.delete("/surveys/{survey_id}")
     async def delete_survey(survey_id: str, user: dict = Depends(require_user)):
-        require_supervisor(user)
-        res = await db.surveys.delete_one({"survey_id": survey_id, "team_id": user.get("team_id")})
+        survey = await db.surveys.find_one({"survey_id": survey_id, **wellbore_scope(user)})
+        if not survey:
+            raise HTTPException(404, "Not found.")
+        team_id = survey["team_id"]
+        require_wellbore_write(user, team_id)
+        res = await db.surveys.delete_one({"survey_id": survey_id, "team_id": team_id})
         if res.deleted_count == 0:
             raise HTTPException(404, "Not found.")
-        await db.survey_plugs.delete_many({"survey_id": survey_id, "team_id": user.get("team_id")})
-        await db.plug_runs.delete_many({"survey_id": survey_id, "team_id": user.get("team_id")})
-        await db.depth_correlations.delete_many({"survey_id": survey_id, "team_id": user.get("team_id")})
-        await db.depth_correlation_log.delete_many({"survey_id": survey_id, "team_id": user.get("team_id")})
+        await db.survey_plugs.delete_many({"survey_id": survey_id, "team_id": team_id})
+        await db.plug_runs.delete_many({"survey_id": survey_id, "team_id": team_id})
+        await db.depth_correlations.delete_many({"survey_id": survey_id, "team_id": team_id})
+        await db.depth_correlation_log.delete_many({"survey_id": survey_id, "team_id": team_id})
         return {"success": True}
 
     # -----------------------------------------------------------------
