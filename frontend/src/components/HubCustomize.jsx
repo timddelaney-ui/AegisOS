@@ -82,6 +82,9 @@ export const HubCustomizeButton = ({ onApply }) => {
 
             <div className="flex-1 overflow-y-auto p-3 space-y-1">
               <p className="text-[11px] font-bold uppercase text-[#595959] mb-1">Tiles — toggle & reorder</p>
+              <p className="text-xs text-[#595959] mb-2">
+                Grouped view keeps related tools together. All tools on the Hub shows your full saved order.
+              </p>
               {tiles.map((t, i) => {
                 const meta = HUB_TILES[t.id];
                 const Icon = meta?.Icon;

@@ -62,18 +62,113 @@ const TILE_FEATURE_MAP = {
   "security": "security_compliance",
 };
 
+const MODULE_GROUPS = [
+  { id: "operations", title: "Rig operations", tiles: ["live-ops", "daq", "equipment", "treatment"] },
+  { id: "engineering", title: "Engineering & calculations", tiles: ["ctd-calculator", "reels", "stress", "fatigue", "wellbore"] },
+  { id: "crew", title: "Crew & planning", tiles: ["certs", "tasks", "parts-orders", "timecards", "crew-admin", "schedule", "crew-contacts"] },
+  { id: "resources", title: "Documents, safety & support", tiles: ["security", "documents", "erp-template", "emergency", "training", "redeem", "feedback"] },
+];
+
+const tileIsVisible = ({ tileId, tilePrefs, guestBlocked, feature }, tier) => {
+  if (tilePrefs?.hidden?.has(tileId) || guestBlocked) return false;
+  const resolvedFeature = feature || TILE_FEATURE_MAP[tileId];
+  return !resolvedFeature || tier.canAccess(resolvedFeature) || !tier.hidesCompletely(resolvedFeature);
+};
+
+export const HubModules = ({ children }) => {
+  const tier = useTier();
+  const [query, setQuery] = useState("");
+  const [showAll, setShowAll] = useState(false);
+  const [expanded, setExpanded] = useState(new Set(["operations"]));
+  const tiles = React.Children.toArray(children).filter((tile) => tileIsVisible(tile.props, tier));
+  const search = query.trim().toLowerCase();
+  const matches = tiles.filter(({ props }) =>
+    `${props.title} ${props.subtitle} ${props.tileId}`.toLowerCase().includes(search));
+  const groupedIds = new Set(MODULE_GROUPS.flatMap((group) => group.tiles));
+  const groups = [...MODULE_GROUPS, {
+    id: "other", title: "More tools", tiles: tiles.map((tile) => tile.props.tileId).filter((id) => !groupedIds.has(id)),
+  }];
+
+  const toggleGroup = (id) => setExpanded((current) => {
+    const next = new Set(current);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    return next;
+  });
+
+  return (
+    <div className="space-y-3" data-testid="hub-tiles-grid">
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="flex-1 min-w-[180px] text-xs font-semibold text-[#595959]">
+          Find a tool
+          <input
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search tools, jobs, safety..."
+            className="mt-1 w-full rounded-lg border border-[#D4D4D4] bg-white px-3 py-2.5 text-sm text-[#262626] focus:outline-none focus:ring-2 focus:ring-[#FF6B1A]"
+          />
+        </label>
+        <button
+          type="button"
+          aria-pressed={showAll}
+          onClick={() => setShowAll((current) => !current)}
+          className="rounded-lg border border-[#D4D4D4] bg-white px-3 py-2.5 text-sm font-semibold text-[#262626]"
+        >
+          {showAll ? "Grouped view" : "All tools"}
+        </button>
+      </div>
+      {search || showAll ? (
+        matches.length ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2" data-testid="hub-tool-results">
+            {matches}
+          </div>
+        ) : (
+          <p role="status" className="rounded-lg bg-white p-4 text-sm text-[#595959]">
+            No tools match your search. Try another name or clear the search.
+          </p>
+        )
+      ) : groups.map((group) => {
+        const members = tiles.filter((tile) => group.tiles.includes(tile.props.tileId));
+        if (!members.length) return null;
+        const isExpanded = expanded.has(group.id);
+        return (
+          <section key={group.id} className="rounded-xl border border-[#D4D4D4] bg-white overflow-hidden">
+            <h3>
+              <button
+                type="button"
+                aria-expanded={isExpanded}
+                aria-controls={`hub-group-${group.id}`}
+                onClick={() => toggleGroup(group.id)}
+                className="flex w-full items-center gap-2 p-4 text-left text-sm font-bold text-[#262626] hover:bg-[#FFF7EF]"
+              >
+                <span className="flex-1">{group.title}</span>
+                <span className="text-xs font-normal text-[#595959]">{members.length} tools</span>
+                <ChevronRight className={`w-4 h-4 transition-transform ${isExpanded ? "rotate-90" : ""}`} />
+              </button>
+            </h3>
+            <div id={`hub-group-${group.id}`} hidden={!isExpanded}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 px-3 pb-3">
+                {members}
+              </div>
+            </div>
+          </section>
+        );
+      })}
+    </div>
+  );
+};
+
 const HubCard = ({ Icon, title, subtitle, onClick, accent, badge, gradient, tileId, tilePrefs, guestBlocked, feature, "data-testid": testId }) => {
   // Hooks MUST be called before any early returns to satisfy React rules.
   const tier = useTier();
-  if (tilePrefs && tileId && tilePrefs.hidden?.has(tileId)) return null;
-  if (guestBlocked) return null;
+  if (!tileIsVisible({ tileId, tilePrefs, guestBlocked, feature }, tier)) return null;
   const resolvedFeature = feature || TILE_FEATURE_MAP[tileId];
   // Tier gating. If the tileId maps to a known feature, apply the hybrid
   // hide rule from TIER_SPECS:
   //   • `hidden`  → remove the tile entirely for lower tiers
   //   • `teaser`  → render a locked tile that prompts upgrade on click
   const tierLocked = resolvedFeature && !tier.canAccess(resolvedFeature);
-  if (tierLocked && tier.hidesCompletely(resolvedFeature)) return null;
   const order = tilePrefs?.order?.indexOf(tileId);
   const style = order >= 0 ? { order } : undefined;
   const effectiveClick = tierLocked ? (() => tier.promptUpgrade(resolvedFeature)) : onClick;
@@ -207,7 +302,7 @@ const Hub = () => {
             <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight mt-1">{greeting}, {firstName}.</h1>
             <p className="text-sm text-white/65 mt-1 max-w-xl">
               {isPro
-                ? "Pro is unlocked. Every tool, every SOP, and the AI are yours."
+                ? "Your rig tools, crew and job records, all in one place."
                 : trial.active
                 ? `You've got ${trial.daysLeft} day${trial.daysLeft !== 1 ? "s" : ""} of trial left — kick the tires.`
                 : "Trial's ended — grab Pro and get back to work."}
@@ -227,12 +322,26 @@ const Hub = () => {
               <span className="text-[10px] opacity-80">17 sheets · live calcs</span>
             </button>
             <button
-              onClick={() => openAI("assistant")}
+              onClick={() => navigate("/live-ops")}
               className="bg-white border-2 border-[#FF6B1A] text-[#FF6B1A] hover:bg-[#FFF7EF] py-4 rounded-xl shadow-md flex flex-col items-center justify-center gap-1 transition-all hover:-translate-y-0.5"
             >
-              <Sparkles className="w-6 h-6" strokeWidth={2} />
-              <span className="text-sm font-bold">Ask the AI</span>
-              <span className="text-[10px] opacity-70">Gemini 2.5 Flash</span>
+              <Activity className="w-6 h-6" strokeWidth={2} />
+              <span className="text-sm font-bold">Open Live Ops</span>
+              <span className="text-[10px] opacity-70">Telemetry & rig status</span>
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              onClick={() => openAI("assistant")}
+              className="flex items-center justify-center gap-2 rounded-lg border border-[#D4D4D4] bg-white p-3 text-sm font-semibold text-[#262626]"
+            >
+              <Sparkles className="w-4 h-4 text-[#FF6B1A]" /> Ask the AI
+            </button>
+            <button
+              onClick={() => navigate("/app", { state: { openEmergency: true } })}
+              className="flex items-center justify-center gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-800"
+            >
+              <AlertOctagon className="w-4 h-4" /> Emergency SOPs
             </button>
           </div>
 
@@ -268,7 +377,13 @@ const Hub = () => {
           </details>
 
           {/* Recent activity + Crew */}
-          <div className="grid gap-3 sm:grid-cols-2">
+          <details className="group rounded-xl border border-[#D4D4D4] bg-white">
+            <summary className="flex cursor-pointer list-none items-center gap-2 p-4 text-sm font-bold text-[#262626]">
+              <FolderOpen className="w-4 h-4 text-[#FF6B1A]" />
+              <span className="flex-1">Recent jobs & crew</span>
+              <ChevronRight className="w-4 h-4 transition-transform group-open:rotate-90" />
+            </summary>
+            <div className="grid gap-3 sm:grid-cols-2 px-3 pb-3">
             <div className="bg-white border border-[#D4D4D4] rounded-xl p-4 shadow-sm">
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-sm font-bold text-[#262626] flex items-center gap-1.5">
@@ -330,24 +445,25 @@ const Hub = () => {
                 </>
               )}
             </div>
-          </div>
+            </div>
+          </details>
 
           {/* Manager Dashboard shortcut — only visible to Field/Ops Managers */}
           {(user?.role === "field_manager" || user?.role === "ops_manager") && (
             <button
               data-testid="hub-manager-link"
               onClick={() => navigate("/manager")}
-              className="w-full bg-gradient-to-r from-[#C44A08] to-[#0A4F28] text-white rounded-xl p-4 shadow-md flex items-center gap-3 hover:shadow-lg transition-all"
+              className="w-full bg-white border border-[#D4D4D4] text-[#262626] rounded-xl p-3 flex items-center gap-3 hover:border-[#FF6B1A] transition-colors"
             >
               <ShieldCheck className="w-8 h-8 flex-shrink-0" strokeWidth={2} />
               <div className="flex-1 text-left">
                 <p className="text-sm font-bold">
                   Manager Dashboard
-                  <span className="ml-2 text-[10px] bg-white/20 px-1.5 py-[2px] rounded font-bold uppercase">
+                  <span className="ml-2 text-[10px] bg-[#FFF1E6] px-1.5 py-[2px] rounded font-bold uppercase">
                     {user.role === "ops_manager" ? "All teams" : "Your team"}
                   </span>
                 </p>
-                <p className="text-[11px] opacity-90">Rig activity, safety cert check-offs, PM logs, alerts, low-stock flags — all in one view.</p>
+                <p className="text-[11px] text-[#595959]">Rig activity, safety, maintenance & alerts.</p>
               </div>
               <ChevronRight className="w-5 h-5" />
             </button>
@@ -355,10 +471,10 @@ const Hub = () => {
 
           {/* Cards row */}
           <div className="flex items-center justify-between -mb-1">
-            <p className="text-[11px] font-bold text-[#595959] uppercase tracking-wide">Modules</p>
+            <h2 className="text-sm font-bold text-[#262626]">Your tools</h2>
             <HubCustomizeButton onApply={loadPrefs} />
           </div>
-          <div className="flex flex-wrap gap-2 [&>*]:flex-1 [&>*]:min-w-[280px] [&>*]:basis-[calc(50%-0.25rem)]" data-testid="hub-tiles-grid">
+          <HubModules>
             <HubCard
               data-testid="hub-live-ops-tile"
               tileId="live-ops"
@@ -635,7 +751,7 @@ const Hub = () => {
               accent="bg-[#FFF1E6] text-[#FF6B1A]"
               onClick={() => document.dispatchEvent(new CustomEvent("open-feedback"))}
             />
-          </div>
+          </HubModules>
 
           {/* Pro tip */}
           <div className="bg-white border border-[#D4D4D4] rounded-xl p-3 shadow-sm flex items-start gap-2.5">
