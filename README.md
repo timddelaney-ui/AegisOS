@@ -34,6 +34,8 @@ yarn start
 
 The frontend uses `REACT_APP_BACKEND_URL` to reach the backend; the example points to `http://localhost:8000`. The API is served under `/api`.
 
+Google sign-in uses the same backend URL and requires `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` on the backend. Connection or configuration failures stay on the login page with an error; they do not redirect to the legacy Emergent provider. On Vercel, set `REACT_APP_BACKEND_URL` as a browser-visible Config variable and redeploy after changing it.
+
 ### Optional messaging configuration
 
 - **Handover email** uses Resend:
