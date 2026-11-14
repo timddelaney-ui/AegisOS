@@ -139,7 +139,24 @@ async def _user_from_session_token(token: Optional[str]) -> Optional[dict]:
         return None
 
     user_doc = await db.users.find_one({"user_id": session_doc["user_id"]}, {"_id": 0})
-    return user_doc
+    return _apply_admin_unlock(user_doc)
+
+
+def _apply_admin_unlock(user: Optional[dict]) -> Optional[dict]:
+    """Owners listed in ADMIN_EMAILS get every plan, role and trial check lifted.
+
+    Applied in-memory only; nothing is written back to the user document.
+    """
+    if user and _is_admin(user):
+        user.update(
+            subscription_status="active",
+            subscription_tier="enterprise",
+            subscription_expires_at=datetime.now(timezone.utc) + timedelta(days=3650),
+            role="ops_manager",
+            is_admin=True,
+            admin_unlocked=True,
+        )
+    return user
 
 
 async def require_user(user: Optional[dict] = Depends(get_current_user)) -> dict:
@@ -635,7 +652,7 @@ async def my_tier(user: dict = Depends(require_user)):
     tier = _resolve_user_tier(user)
     return {
         "tier": tier,
-        "beta_unlock": BETA_UNLOCK,
+        "beta_unlock": BETA_UNLOCK or bool(user.get("admin_unlocked")),
         "subscription_status": user.get("subscription_status", "free"),
         "subscription_plan": user.get("subscription_plan"),
     }

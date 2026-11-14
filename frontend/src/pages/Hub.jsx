@@ -3,8 +3,8 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth, API, isProUser } from "../context/AuthContext";
 import {
-  FileSpreadsheet, FolderOpen, Users, Sparkles, ChevronRight, Crown, AlertTriangle,
-  MessageSquare, Wrench, GraduationCap, AlertOctagon, FileText, Calendar, Gauge,
+  FileSpreadsheet, FolderOpen, Users, Sparkles, ChevronRight, AlertTriangle,
+  MessageSquare, Wrench, GraduationCap, AlertOctagon, FileText, Gauge,
   Ticket, MessageSquarePlus, Zap, Menu, ShieldCheck, HardHat, ClipboardList, Flame, Mail,
   Layers, Activity, Thermometer, Box, Package, Clock, CheckSquare, DollarSign, UserCog,
 } from "lucide-react";
@@ -100,7 +100,7 @@ const HubCard = ({ Icon, title, subtitle, onClick, accent, badge, gradient, tile
             </span>
           )}
         </div>
-        <p className="text-[11px] text-[#595959] mt-0.5 leading-snug">
+        <p className="text-[11px] text-[#595959] mt-0.5 leading-snug line-clamp-2">
           {tierLocked ? "Tap to see what's included on a higher plan." : subtitle}
         </p>
       </div>
@@ -109,16 +109,6 @@ const HubCard = ({ Icon, title, subtitle, onClick, accent, badge, gradient, tile
   </button>
   );
 };
-
-const StatChip = ({ Icon, value, label, color }) => (
-  <div className="flex flex-col items-center bg-white border border-[#D4D4D4] rounded-lg py-2.5 px-2 shadow-sm">
-    <div className={`w-6 h-6 rounded flex items-center justify-center mb-1 ${color || "bg-[#FFF1E6] text-[#FF6B1A]"}`}>
-      <Icon className="w-3.5 h-3.5" strokeWidth={2.5} />
-    </div>
-    <p className="text-lg font-bold text-[#262626] tabular-nums">{value}</p>
-    <p className="text-[10px] text-[#595959] uppercase font-semibold">{label}</p>
-  </div>
-);
 
 const Hub = () => {
   const navigate = useNavigate();
@@ -225,20 +215,7 @@ const Hub = () => {
           </div>
         </div>
 
-        <div className="max-w-3xl mx-auto p-4 space-y-4 -mt-3">
-          {/* Status stat row — floats over the hero/light boundary */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <StatChip
-              Icon={isPro ? Crown : Calendar}
-              value={isPro ? "Pro" : trial.active ? trial.daysLeft : 0}
-              label={isPro ? "Active" : trial.active ? "Days left" : "Trial ended"}
-              color={isPro ? "bg-[#FFF3CD] text-[#856404]" : trial.active ? "bg-[#FFF3CD] text-[#856404]" : "bg-[#F8D7DA] text-[#721C24]"}
-            />
-            <StatChip Icon={FolderOpen} value={jobs.length} label="Saved" />
-            <StatChip Icon={Users} value={team ? team.members?.length || 1 : 0} label="Crew" />
-            <StatChip Icon={FileSpreadsheet} value="17" label="Sheets" />
-          </div>
-
+        <div className="max-w-3xl mx-auto p-4 space-y-5 -mt-3">
           {/* Primary CTA row */}
           <div className="grid grid-cols-2 gap-3">
             <button
@@ -260,10 +237,11 @@ const Hub = () => {
           </div>
 
           {/* AI mode shortcuts */}
-          <div>
-            <p className="text-[11px] font-bold text-[#595959] uppercase mb-1.5 tracking-wide flex items-center gap-1">
+          <details className="group" data-testid="hub-ai-moves">
+            <summary className="cursor-pointer list-none text-[11px] font-bold text-[#595959] uppercase mb-1.5 tracking-wide flex items-center gap-1">
               <Zap className="w-3 h-3" /> Quick AI Moves
-            </p>
+              <ChevronRight className="w-3 h-3 transition-transform group-open:rotate-90" />
+            </summary>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {[
                 { mode: "sop_erp", Icon: ShieldCheck, label: "SOP / ERP", tint: "bg-[#DBEAFE] text-[#0056B3]" },
@@ -287,7 +265,7 @@ const Hub = () => {
                 </button>
               ))}
             </div>
-          </div>
+          </details>
 
           {/* Recent activity + Crew */}
           <div className="grid gap-3 sm:grid-cols-2">

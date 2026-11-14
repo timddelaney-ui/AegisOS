@@ -164,6 +164,8 @@ def beta_features() -> frozenset:
 
 
 def org_plan(org: Optional[dict], user: Optional[dict] = None) -> str:
+    if (user or {}).get("admin_unlocked"):
+        return "enterprise"
     plan = ((org or {}).get("plan") or "").strip().lower()
     if plan in PLANS:
         return plan
