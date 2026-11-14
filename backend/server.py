@@ -4836,3 +4836,37 @@ async def _stop_daq_orchestrator():
             await _daq_orchestrator.stop()
         except Exception:
             logger.debug("DAQ orchestrator shutdown error (non-fatal)", exc_info=True)
+
+
+# -----------------------------------------------------------------
+# Cloud MQTT consumer (rig telemetry -> MongoDB). Opt-in via MQTT_ENABLED=true.
+# org_id is the tenant key; existing team_id tenancy maps 1:1 onto it for live fan-out.
+# -----------------------------------------------------------------
+_mqtt_service = None
+
+
+async def _mqtt_live_sink(org_id: str, rig_id: str, table: str, docs: list):
+    for doc in docs:
+        sample = {k: v for k, v in doc.items() if k != "org_id"}
+        await liveops_broadcaster.publish(org_id, rig_id, {**sample, "kind": table, "source": "mqtt"})
+
+
+@app.on_event("startup")
+async def _start_mqtt_consumer():
+    global _mqtt_service
+    from services.mqtt_consumer import MqttConsumerService, MqttSettings, TelemetryIngestor
+    settings = MqttSettings.from_env()
+    if not settings.enabled:
+        return
+    try:
+        _mqtt_service = MqttConsumerService(TelemetryIngestor(db, live_sink=_mqtt_live_sink), settings)
+        await _mqtt_service.start()
+    except Exception:
+        logger.exception("MQTT consumer did not start")
+        _mqtt_service = None
+
+
+@app.on_event("shutdown")
+async def _stop_mqtt_consumer():
+    if _mqtt_service:
+        await _mqtt_service.stop()

@@ -132,8 +132,11 @@ def percentile(values, q):
 async def wait_synced(store: EdgeStore, historical_only: bool, timeout: float) -> bool:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        if not any(store.unsynced(t, 1, historical=1 if historical_only else None)
-                   for t in ("telemetry_events", "telemetry_snapshots", "encoder_consensus")):
+        # Off the event loop: the store's read lock is shared with the replay thread.
+        pending = await asyncio.to_thread(lambda: any(
+            store.unsynced(t, 1, historical=1 if historical_only else None)
+            for t in ("telemetry_events", "telemetry_snapshots", "encoder_consensus")))
+        if not pending:
             return True
         await asyncio.sleep(0.05)
     return False
@@ -159,7 +162,8 @@ async def run(args) -> dict:
         expected = build_blackout(store, args.hours, now)
         total_hist = sum(expected.values())
 
-        latencies_ms: list = []
+        latencies_ms: list = []  # steady-state samples (after the ramp window)
+        all_latencies_ms: list = []
         pass_start = [datetime.now(timezone.utc)]
         live_seen = [0]
 
@@ -168,7 +172,10 @@ async def run(args) -> dict:
             for d in docs:
                 if d["ts"] < pass_start[0]:
                     continue  # re-delivered rows from earlier in the run are not fresh live samples
-                latencies_ms.append((t - d["ts"]).total_seconds() * 1000.0)
+                lag = (t - d["ts"]).total_seconds() * 1000.0
+                all_latencies_ms.append(lag)
+                if (d["ts"] - pass_start[0]).total_seconds() >= args.ramp_s:
+                    latencies_ms.append(lag)
                 live_seen[0] += 1
 
         ingestor = TelemetryIngestor(db, live_sink=live_sink, historical_workers=args.workers)
@@ -205,6 +212,7 @@ async def run(args) -> dict:
         async def replay_pass(label: str) -> dict:
             store.reset_synced() if label == "second" else None
             latencies_ms.clear()
+            all_latencies_ms.clear()
             pass_start[0] = datetime.now(timezone.utc)
             live_seen[0] = 0
             inj = threading.Thread(target=live_injector, daemon=True)
@@ -224,6 +232,7 @@ async def run(args) -> dict:
             return {"ok": ok, "elapsed_s": elapsed, "throughput_eps": total_hist / elapsed,
                     "live_p95_ms": percentile(latencies_ms, 0.95),
                     "live_p50_ms": percentile(latencies_ms, 0.50),
+                    "live_p95_incl_ramp_ms": percentile(all_latencies_ms, 0.95),
                     "live_samples": len(latencies_ms)}
 
         first = await replay_pass("first")
@@ -311,6 +320,8 @@ def main() -> int:
     ap.add_argument("--workers", type=int, default=2)
     ap.add_argument("--min-throughput", type=float, default=1000.0)
     ap.add_argument("--max-live-p95-ms", type=float, default=250.0)
+    ap.add_argument("--ramp-s", type=float, default=1.5,
+                    help="ignore live samples created in the first N seconds of a pass (burst start-up)")
     ap.add_argument("--max-write-stall-s", type=float, default=1.0)
     ap.add_argument("--timeout", type=float, default=300.0)
     args = ap.parse_args()

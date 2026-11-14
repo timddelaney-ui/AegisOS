@@ -6,8 +6,8 @@ Routing
     blackout catch-up never delays or floods live dashboards.
 
 Idempotency
-  Every record is upserted with ``$setOnInsert`` keyed on ``(org_id, rig_id, id)`` (unique index),
-  so a replayed packet can never create a duplicate or overwrite stored/newer state. The rolling
+  Records are insert-only under a unique ``(org_id, rig_id, id)`` index; duplicate-key rejections on
+  replay are absorbed, so a replayed packet never creates a duplicate or overwrites stored state. The rolling
   ``rig_live_state`` document is only advanced by live records with a newer timestamp.
 
 Acknowledgement
@@ -28,7 +28,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
 from pydantic import ValidationError
-from pymongo import ASCENDING, UpdateOne
+from pymongo import ASCENDING, InsertOne
 from pymongo.errors import BulkWriteError
 
 from .telemetry_schema import (
@@ -118,7 +118,7 @@ class TelemetryIngestor:
         self._queue: asyncio.Queue = asyncio.Queue(maxsize=historical_queue_size)
         self._workers: List[asyncio.Task] = []
         self._tasks: set = set()
-        self._pool = ProcessPoolExecutor(max_workers=historical_workers)
+        self._pool = ProcessPoolExecutor(max_workers=max(1, historical_workers))
         self.metrics = IngestMetrics()
 
     # ---- lifecycle -----------------------------------------------------
@@ -134,6 +134,12 @@ class TelemetryIngestor:
             [("org_id", ASCENDING), ("rig_id", ASCENDING)], unique=True, name="org_rig_unique")
 
     async def start(self) -> None:
+        # Spawn and warm the validation workers up front so the first backfill burst is not slowed.
+        loop = asyncio.get_running_loop()
+        await asyncio.gather(*[
+            loop.run_in_executor(self._pool, _validate_records, table, "warm", "warm", [{}])
+            for table in list(MODEL_FOR_TABLE) * max(1, self.historical_workers)
+        ])
         for _ in range(self.historical_workers):
             self._workers.append(asyncio.create_task(self._historical_worker()))
 
@@ -235,24 +241,17 @@ class TelemetryIngestor:
         now = datetime.now(timezone.utc)
         for i in range(0, len(docs), self.upsert_chunk):
             chunk = docs[i:i + self.upsert_chunk]
-            ops = [
-                UpdateOne(
-                    {"org_id": d["org_id"], "rig_id": d["rig_id"], "id": d["id"]},
-                    {"$setOnInsert": {**d, "ingested_at": now, "source": "mqtt"}},
-                    upsert=True,
-                )
-                for d in chunk
-            ]
+            ops = [InsertOne({**d, "ingested_at": now, "source": "mqtt"}) for d in chunk]
             started = time.perf_counter()
             try:
                 result = await coll.bulk_write(ops, ordered=False)
-                inserted = result.upserted_count
+                inserted = result.inserted_count
             except BulkWriteError as exc:
-                # Concurrent upserts of the same key race on the unique index; those are duplicates.
+                # The unique (org_id, rig_id, id) index rejects replays; anything else is a real failure.
                 errors = exc.details.get("writeErrors", [])
                 if any(e.get("code") != 11000 for e in errors):
                     raise
-                inserted = exc.details.get("nUpserted", 0)
+                inserted = exc.details.get("nInserted", len(chunk) - len(errors))
             self.metrics.max_bulk_write_s = max(self.metrics.max_bulk_write_s, time.perf_counter() - started)
             batch.accepted += inserted
             batch.duplicates += len(chunk) - inserted

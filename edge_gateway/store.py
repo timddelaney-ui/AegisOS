@@ -40,9 +40,9 @@ CREATE TABLE IF NOT EXISTS encoder_consensus (
     max_delta_ft REAL, status TEXT NOT NULL,
     is_historical_sync INTEGER NOT NULL DEFAULT 0, synced INTEGER NOT NULL DEFAULT 0
 );
-CREATE INDEX IF NOT EXISTS events_unsynced ON telemetry_events(synced, is_historical_sync, ts);
-CREATE INDEX IF NOT EXISTS snapshots_unsynced ON telemetry_snapshots(synced, is_historical_sync, ts);
-CREATE INDEX IF NOT EXISTS consensus_unsynced ON encoder_consensus(synced, is_historical_sync, ts);
+CREATE INDEX IF NOT EXISTS events_unsynced2 ON telemetry_events(synced, is_historical_sync, ts, id);
+CREATE INDEX IF NOT EXISTS snapshots_unsynced2 ON telemetry_snapshots(synced, is_historical_sync, ts, id);
+CREATE INDEX IF NOT EXISTS consensus_unsynced2 ON encoder_consensus(synced, is_historical_sync, ts, id);
 """
 
 
