@@ -1,0 +1,22 @@
+# One-click backend deploy: Render -> New -> Blueprint -> pick this repo.
+# Then attach api.mycoiltubingpocketsupports.tech under the service's Custom Domains.
+services:
+  - type: web
+    name: aegis-api
+    runtime: docker
+    dockerContext: backend
+    dockerfilePath: backend/Dockerfile
+    healthCheckPath: /api/
+    envVars:
+      - {key: APP_ENV, value: production}
+      - {key: HITL_ENFORCE_OUTBOUND, value: "true"}
+      - {key: CORS_ORIGINS, value: "https://mycoiltubingpocketsupports.tech"}
+      - {key: PUBLIC_APP_URL, value: "https://mycoiltubingpocketsupports.tech"}
+      - {key: PUBLIC_API_URL, value: "https://api.mycoiltubingpocketsupports.tech"}
+      - {key: DB_NAME, value: aegis}
+      - {key: MONGO_URL, sync: false}
+      - {key: GOOGLE_CLIENT_ID, sync: false}
+      - {key: GOOGLE_CLIENT_SECRET, sync: false}
+      - {key: GEMINI_API_KEY, sync: false}
+      - {key: STRIPE_SECRET_KEY, sync: false}
+      - {key: STRIPE_WEBHOOK_SECRET, sync: false}

@@ -7,6 +7,8 @@ import os
 import re
 import json
 import hashlib
+import hmac
+from urllib.parse import urlencode
 import logging
 import asyncio
 import uuid
@@ -14,13 +16,17 @@ import string
 import random
 import secrets
 import httpx
+from fastapi.responses import RedirectResponse
 import requests
 import stripe
 from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone, timedelta
-from emergentintegrations.llm.chat import LlmChat, UserMessage
+try:
+    from emergentintegrations.llm.chat import LlmChat, UserMessage
+except ImportError:  # self-hosted deployments use GEMINI_API_KEY directly
+    LlmChat = UserMessage = None
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -453,10 +459,10 @@ async def create_session(request: Request, response: Response):
             raise HTTPException(status_code=401, detail="Invalid session")
         data = resp.json()
 
-    email = data["email"]
-    name = data["name"]
-    picture = data.get("picture")
-    session_token = data["session_token"]
+    return await _finish_login(response, data["email"], data["name"], data.get("picture"), data["session_token"])
+
+
+async def _finish_login(response: Response, email: str, name: str, picture: Optional[str], session_token: str):
 
     # Check if user exists
     existing = await db.users.find_one({"email": email}, {"_id": 0})
@@ -514,6 +520,61 @@ async def auth_me(user: dict = Depends(require_user)):
     if "role" not in data or not data.get("role"):
         data["role"] = "crew"
     return data
+
+
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "").strip()
+GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "").strip()
+PUBLIC_APP_URL = (os.environ.get("PUBLIC_APP_URL") or "https://mycoiltubingpocketsupports.tech").rstrip("/")
+PUBLIC_API_URL = (os.environ.get("PUBLIC_API_URL") or PUBLIC_APP_URL).rstrip("/")
+
+
+def _oauth_state(nonce: str) -> str:
+    key = (GOOGLE_CLIENT_SECRET or "dev").encode()
+    return nonce + "." + hmac.new(key, nonce.encode(), hashlib.sha256).hexdigest()[:32]
+
+
+@api_router.get("/auth/config")
+async def auth_config():
+    return {"provider": "google" if GOOGLE_CLIENT_ID else "emergent"}
+
+
+@api_router.get("/auth/google/login")
+async def google_login(response: Response):
+    if not GOOGLE_CLIENT_ID:
+        raise HTTPException(503, "Google sign-in is not configured (GOOGLE_CLIENT_ID).")
+    nonce = uuid.uuid4().hex
+    params = {
+        "client_id": GOOGLE_CLIENT_ID, "response_type": "code", "scope": "openid email profile",
+        "redirect_uri": f"{PUBLIC_API_URL}/api/auth/google/callback", "state": _oauth_state(nonce),
+        "prompt": "select_account",
+    }
+    redirect = RedirectResponse("https://accounts.google.com/o/oauth2/v2/auth?" + urlencode(params))
+    redirect.set_cookie("oauth_state", nonce, max_age=600, httponly=True, secure=True, samesite="lax", path="/")
+    return redirect
+
+
+@api_router.get("/auth/google/callback")
+async def google_callback(request: Request, code: Optional[str] = None, state: Optional[str] = None,
+                          oauth_state: Optional[str] = Cookie(None)):
+    if not GOOGLE_CLIENT_ID or not code or not state or not oauth_state \
+            or not hmac.compare_digest(state, _oauth_state(oauth_state)):
+        return RedirectResponse(f"{PUBLIC_APP_URL}/?auth_error=state")
+    async with httpx.AsyncClient(timeout=10) as http:
+        tok = await http.post("https://oauth2.googleapis.com/token", data={
+            "code": code, "client_id": GOOGLE_CLIENT_ID, "client_secret": GOOGLE_CLIENT_SECRET,
+            "redirect_uri": f"{PUBLIC_API_URL}/api/auth/google/callback", "grant_type": "authorization_code"})
+        if tok.status_code != 200:
+            return RedirectResponse(f"{PUBLIC_APP_URL}/?auth_error=token")
+        info = await http.get("https://openidconnect.googleapis.com/v1/userinfo",
+                              headers={"Authorization": f"Bearer {tok.json()['access_token']}"})
+    u = info.json() if info.status_code == 200 else {}
+    if not u.get("email") or not u.get("email_verified"):
+        return RedirectResponse(f"{PUBLIC_APP_URL}/?auth_error=email")
+    redirect = RedirectResponse(f"{PUBLIC_APP_URL}/app")
+    await _finish_login(redirect, u["email"], u.get("name") or u["email"].split("@")[0],
+                        u.get("picture"), f"sess_{uuid.uuid4().hex}{uuid.uuid4().hex}")
+    redirect.delete_cookie("oauth_state", path="/")
+    return redirect
 
 
 @api_router.post("/auth/logout")
@@ -1309,6 +1370,26 @@ async def delete_erp_template(template_id: str, user: dict = Depends(require_use
 EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
 GEMINI_MODEL = "gemini-2.5-flash"
 
+async def _llm_reply(session_id: str, system_message: str, text: str) -> str:
+    """Gemini via the direct Google API when GEMINI_API_KEY is set, else Emergent's proxy."""
+    gkey = os.environ.get("GEMINI_API_KEY", "").strip()
+    if gkey:
+        async with httpx.AsyncClient(timeout=60) as http:
+            r = await http.post(
+                f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent",
+                headers={"x-goog-api-key": gkey},
+                json={"systemInstruction": {"parts": [{"text": system_message}]},
+                      "contents": [{"role": "user", "parts": [{"text": text}]}]})
+            r.raise_for_status()
+            return r.json()["candidates"][0]["content"]["parts"][0]["text"]
+    if LlmChat is None:
+        raise RuntimeError("No LLM configured: set GEMINI_API_KEY")
+    chat = LlmChat(api_key=EMERGENT_LLM_KEY, session_id=session_id,
+                   system_message=system_message).with_model("gemini", GEMINI_MODEL)
+    return await chat.send_message(UserMessage(text=text))
+
+
+
 # ============ Email (Resend) ============
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 RESEND_FROM_EMAIL = os.environ.get("RESEND_FROM_EMAIL", "onboarding@resend.dev")
@@ -1523,7 +1604,7 @@ class AIChatRequest(BaseModel):
 async def ai_chat(req: AIChatRequest, user: dict = Depends(require_user)):
     if not _user_has_ai_access(user):
         raise HTTPException(403, "AI features require an active trial or Pro subscription")
-    if not EMERGENT_LLM_KEY:
+    if not (EMERGENT_LLM_KEY or os.environ.get("GEMINI_API_KEY")):
         raise HTTPException(500, "AI service not configured")
     if req.mode not in SYSTEM_PROMPTS:
         raise HTTPException(400, f"Invalid mode: {req.mode}")
@@ -1578,13 +1659,7 @@ async def ai_chat(req: AIChatRequest, user: dict = Depends(require_user)):
         # well names, and team-defined redaction terms BEFORE any text
         # leaves the pod. No-op if the team hasn't opted in.
         safe_user_text = await _maybe_scrub_for_team(user.get("team_id"), user_text)
-        chat = LlmChat(
-            api_key=EMERGENT_LLM_KEY,
-            session_id=session_id,
-            system_message=system_msg,
-        ).with_model("gemini", GEMINI_MODEL)
-
-        response = await chat.send_message(UserMessage(text=safe_user_text))
+        response = await _llm_reply(session_id, system_msg, safe_user_text)
 
         # Persist for history
         await db.ai_messages.insert_many([
@@ -2049,7 +2124,7 @@ async def crew_send(body: CrewMessage, user: dict = Depends(require_user)):
 
     # "hey skipper" or "@skipper" trigger — call Gemini with the assistant prompt
     lower = text.lower()
-    if _user_has_ai_access(user) and EMERGENT_LLM_KEY and ("hey skipper" in lower or "@skipper" in lower or lower.startswith("skipper")):
+    if _user_has_ai_access(user) and (EMERGENT_LLM_KEY or os.environ.get("GEMINI_API_KEY")) and ("hey skipper" in lower or "@skipper" in lower or lower.startswith("skipper")):
         query = text
         for marker in ("hey skipper", "@skipper", "skipper"):
             if lower.startswith(marker) or marker in lower:
@@ -2060,12 +2135,7 @@ async def crew_send(body: CrewMessage, user: dict = Depends(require_user)):
             session_id = f"skipper_team_{team_id}"
             # AI Privacy Mode — scrub BEFORE anything hits the model
             safe_query = await _maybe_scrub_for_team(team_id, query or text)
-            chat = LlmChat(
-                api_key=EMERGENT_LLM_KEY,
-                session_id=session_id,
-                system_message=SYSTEM_PROMPTS["assistant"],
-            ).with_model("gemini", GEMINI_MODEL)
-            response = await chat.send_message(UserMessage(text=safe_query))
+            response = await _llm_reply(session_id, SYSTEM_PROMPTS["assistant"], safe_query)
             await db.crew_messages.insert_one({
                 "message_id": f"msg_{uuid.uuid4().hex[:12]}",
                 "team_id": team_id,

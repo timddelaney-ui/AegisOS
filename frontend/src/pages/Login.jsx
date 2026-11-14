@@ -2,10 +2,18 @@ import React from "react";
 import { ShieldCheck, Cloud, Users, Sparkles, AlertOctagon, Calculator, BookOpen, Activity } from "lucide-react";
 import CoilAegisLogo from "../components/CoilAegisLogo";
 
-// REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
 const Login = () => {
-  const handleGoogleLogin = () => {
-    // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
+  const handleGoogleLogin = async () => {
+    const api = `${process.env.REACT_APP_BACKEND_URL || ""}/api`;
+    try {
+      const cfg = await fetch(`${api}/auth/config`).then((r) => r.json());
+      if (cfg.provider === "google") {
+        window.location.href = `${api}/auth/google/login`;
+        return;
+      }
+    } catch (e) {
+      // fall through to the legacy provider
+    }
     const redirectUrl = window.location.origin + "/app";
     window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
   };
