@@ -230,6 +230,7 @@ class HitlRequestCreate(BaseModel):
     summary: str
     details: Optional[str] = None
     payload_fingerprint: Optional[str] = None
+    destination: Optional[str] = None  # recipient/destination recorded in the audit trail
     expires_minutes: Optional[int] = 30
 
 
@@ -237,6 +238,21 @@ class HitlDecision(BaseModel):
     decision: str  # approve | reject
     confirm_text: Optional[str] = None
     reason: Optional[str] = None
+
+
+async def _chain_audit(user, action, *, requester=None, approver=None, target=None,
+                       payload_hash=None, decision=None, rig_id=None, meta=None):
+    """Tamper-evident audit entry. Never raises: audit failure must not break the action
+    already authorised, but is logged loudly."""
+    try:
+        await audit_chain.append(
+            db, org_id=org_id_of(user), action=action,
+            actor_user_id=requester or user.get("user_id"), actor_email=user.get("email"),
+            approver_user_id=approver, rig_id=rig_id, target=target,
+            payload_hash=payload_hash, decision=decision, meta=meta,
+        )
+    except Exception:
+        logger.exception("audit chain append failed for %s", action)
 
 
 @api_router.post("/hitl/requests")
@@ -260,6 +276,7 @@ async def create_hitl_request(body: HitlRequestCreate, user: dict = Depends(requ
         "summary": summary[:300],
         "details": (body.details or "").strip()[:2000] or None,
         "payload_fingerprint": (body.payload_fingerprint or "").strip()[:128] or None,
+        "destination": (body.destination or "").strip()[:500] or None,
         "status": "pending",  # pending | approved | rejected | consumed
         "created_by_user_id": user["user_id"],
         "created_by_email": user["email"],
@@ -335,6 +352,13 @@ async def decide_hitl_request(request_id: str, body: HitlDecision, user: dict = 
         target_id=request_id,
         meta={"request_action": rec.get("action")},
     )
+    await _chain_audit(
+        user, f"hitl.{rec.get('action')}", requester=rec.get("created_by_user_id"),
+        approver=user.get("user_id"), target=rec.get("destination"),
+        payload_hash=rec.get("payload_fingerprint"),
+        decision="approved" if decision == "approve" else "rejected",
+        meta={"request_id": request_id, "reason": (body.reason or "")[:500]},
+    )
     return {"request_id": request_id, "status": new_status, "decision_at": now.isoformat()}
 
 
@@ -395,6 +419,12 @@ async def _consume_hitl_approval(
         target_type="hitl_request",
         target_id=approval_id,
         meta={"request_action": action, "endpoint": endpoint},
+    )
+    await _chain_audit(
+        user, f"outbound.{action}", requester=rec.get("created_by_user_id"),
+        approver=rec.get("decision_by_user_id"), target=rec.get("destination"),
+        payload_hash=payload_fingerprint or rec.get("payload_fingerprint"),
+        decision="approved", meta={"request_id": approval_id, "endpoint": endpoint},
     )
 
 
@@ -472,6 +502,8 @@ async def create_session(request: Request, response: Response):
     )
 
     user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if user_doc and (user_doc.get("org_id") or user_doc.get("team_id")):
+        await _chain_audit(user_doc, "auth.login")
     return _serialize(user_doc)
 
 
@@ -4696,6 +4728,9 @@ register_phase1(api_router, db, require_user, get_current_user, _is_admin, _broa
 
 
 # ============ SECURITY & COMPLIANCE (Enterprise bundle) ============
+from middleware.tenant import org_id_of, org_plan, has_entitlement, ensure_tenant_indexes  # noqa: E402
+from services import audit_chain  # noqa: E402
+from services.org_routes import build_router as _build_org_router  # noqa: E402
 from security_module import build_router as _build_security_router, scrub_pii as _scrub_pii, audit_log as _audit_log  # noqa: E402
 
 
@@ -4717,8 +4752,8 @@ async def _require_enterprise(user: dict = Depends(require_user)):
     """Gate for `/security/*` writes. Honours BETA_UNLOCK the same way the
     frontend tier guard does so the flag is a single global switch.
     """
-    tier = _resolve_user_tier(user)
-    if BETA_UNLOCK or tier == "enterprise":
+    team = await db.teams.find_one({"team_id": user.get("team_id")}, {"_id": 0}) if user.get("team_id") else None
+    if has_entitlement(org_plan(team, user), "security_compliance"):
         return user
     raise HTTPException(403, "Security & Compliance requires an Enterprise plan.")
 
@@ -4731,6 +4766,7 @@ _security_router = _build_security_router(
     data_region=os.environ.get("DATA_REGION", "us-east"),
 )
 api_router.include_router(_security_router)
+api_router.include_router(_build_org_router(require_user=require_user, db=db, chain_audit=_chain_audit))
 
 from plugs_module import build_router as _build_plugs_router  # noqa: E402
 api_router.include_router(_build_plugs_router(require_user=require_user, db=db))
@@ -4776,6 +4812,11 @@ async def shutdown_db_client():
 
 @app.on_event("startup")
 async def _ensure_indexes():
+    try:
+        await audit_chain.ensure_indexes(db)
+        await ensure_tenant_indexes(db)
+    except Exception as e:
+        logger.warning("Tenant index creation deferred: %s", e)
     await db.reel_fatigue.create_index([("team_id", 1), ("reel_id", 1)], unique=True)
     try:
         await db.team_items.create_index([("team_id", 1), ("kind", 1), ("created_at", -1)])
