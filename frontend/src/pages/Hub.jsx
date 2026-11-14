@@ -3,8 +3,8 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth, API, isProUser } from "../context/AuthContext";
 import {
-  FileSpreadsheet, FolderOpen, Users, Sparkles, ChevronRight, AlertTriangle,
-  MessageSquare, Wrench, GraduationCap, AlertOctagon, FileText, Gauge,
+  FileSpreadsheet, FolderOpen, Users, Sparkles, ChevronRight, Crown, AlertTriangle,
+  MessageSquare, Wrench, GraduationCap, AlertOctagon, FileText, Calendar, Gauge,
   Ticket, MessageSquarePlus, Zap, Menu, ShieldCheck, HardHat, ClipboardList, Flame, Mail,
   Layers, Activity, Thermometer, Box, Package, Clock, CheckSquare, DollarSign, UserCog,
 } from "lucide-react";
