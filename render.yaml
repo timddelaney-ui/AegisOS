@@ -18,5 +18,9 @@ services:
       - {key: GOOGLE_CLIENT_ID, sync: false}
       - {key: GOOGLE_CLIENT_SECRET, sync: false}
       - {key: GEMINI_API_KEY, sync: false}
+      - {key: MQTT_ENABLED, value: "false"}
+      - {key: MQTT_BROKER_URL, sync: false}
+      - {key: MQTT_USERNAME, sync: false}
+      - {key: MQTT_PASSWORD, sync: false}
       - {key: STRIPE_SECRET_KEY, sync: false}
       - {key: STRIPE_WEBHOOK_SECRET, sync: false}

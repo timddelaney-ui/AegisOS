@@ -83,6 +83,7 @@ pyflakes==3.4.0
 Pygments==2.21.0
 PyJWT==2.15.0
 pymodbus==3.16.1
+aiomqtt==2.5.1
 paho-mqtt==2.1.0
 pymongo==4.20.0
 pyparsing==3.3.2

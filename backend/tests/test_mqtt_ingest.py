@@ -53,6 +53,9 @@ def test_parse_topic():
 
 
 def test_settings_validation():
+    MqttSettings(True, "mqtts://h:8883", None, None, None, username="u", password="p").validate()
+    with pytest.raises(ValueError):
+        MqttSettings(True, "mqtts://h:8883", None, None, None, username="u").validate()
     ok = MqttSettings(True, "mqtts://h:8883", "/ca", "/c", "/k")
     ok.validate()
     for bad in (MqttSettings(True, "", None, None, None),

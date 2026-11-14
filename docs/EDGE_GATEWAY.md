@@ -119,3 +119,12 @@ See `backend/middleware/tenant.py` and `backend/services/audit_chain.py`. `org_i
 `team_id`. Roles: `operator`, `company_man`, `fleet_manager`. Plans: `trial`, `field_pro`, `enterprise`
 (env overrides: `BETA_UNLOCK`, `BETA_FEATURES=a,b`). `GET /api/audit-logs` and `GET /api/audit-logs/verify`
 are fleet_manager-only.
+
+## Managed broker (EMQX Cloud / HiveMQ) with Render
+
+For a hosted broker with public-CA TLS and username/password auth instead of self-hosted mTLS:
+
+1. Create a broker deployment and two users: `aegis-cloud` (subscribe `aegis/+/+/telemetry/#`, publish `aegis/+/+/ack`) and one per rig (publish only its own `aegis/{org}/{rig}/telemetry/#`, subscribe its own `.../ack`). Restrict these with the broker's ACL/authorization rules.
+2. In Render, set `MQTT_BROKER_URL=mqtts://<host>:8883`, `MQTT_USERNAME`, `MQTT_PASSWORD`, then `MQTT_ENABLED=true`. `MQTT_TLS_CA` is optional here (system trust store is used).
+3. On each rig-PC set `AEGIS_MQTT_HOST`, `AEGIS_MQTT_USERNAME`, `AEGIS_MQTT_PASSWORD` and `AEGIS_MQTT_CA_FILE=/etc/ssl/certs/ca-certificates.crt`.
+4. Verify: `MQTT_ENABLED=true` logs a consumer connection; publish a test message and check the `telemetry_*` collections.

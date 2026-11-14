@@ -313,6 +313,8 @@ class MqttSettings:
     client_cert: Optional[str]
     client_key: Optional[str]
     client_id: str = "aegis-cloud-consumer"
+    username: Optional[str] = None
+    password: Optional[str] = None
 
     @classmethod
     def from_env(cls, env=os.environ) -> "MqttSettings":
@@ -323,6 +325,8 @@ class MqttSettings:
             client_cert=env.get("MQTT_CLIENT_CERT") or None,
             client_key=env.get("MQTT_CLIENT_KEY") or None,
             client_id=env.get("MQTT_CLIENT_ID", "aegis-cloud-consumer"),
+            username=env.get("MQTT_USERNAME") or None,
+            password=env.get("MQTT_PASSWORD") or None,
         )
 
     def validate(self) -> None:
@@ -331,8 +335,11 @@ class MqttSettings:
         parsed = urlparse(self.broker_url)
         if parsed.scheme not in ("mqtt", "mqtts") or not parsed.hostname:
             raise ValueError("MQTT_BROKER_URL must look like mqtts://host:8883")
-        if parsed.scheme == "mqtts" and not self.tls_ca:
-            raise ValueError("MQTT_TLS_CA is required for mqtts:// brokers")
+        # Managed brokers (EMQX Cloud, HiveMQ) use public CAs, so credentials may stand in for a CA file.
+        if parsed.scheme == "mqtts" and not self.tls_ca and not self.username:
+            raise ValueError("MQTT_TLS_CA (or MQTT_USERNAME for public-CA brokers) is required for mqtts:// brokers")
+        if bool(self.username) != bool(self.password):
+            raise ValueError("MQTT_USERNAME and MQTT_PASSWORD must be set together")
         if bool(self.client_cert) != bool(self.client_key):
             raise ValueError("MQTT_CLIENT_CERT and MQTT_CLIENT_KEY must be set together")
 
@@ -388,6 +395,8 @@ class MqttConsumerService:
                 async with aiomqtt.Client(
                     parsed.hostname, port,
                     identifier=self.settings.client_id,
+                    username=self.settings.username,
+                    password=self.settings.password,
                     clean_session=False,
                     protocol=aiomqtt.ProtocolVersion.V311,
                     tls_context=self.settings.tls_context(),
