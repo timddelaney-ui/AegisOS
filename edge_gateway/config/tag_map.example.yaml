@@ -1,0 +1,37 @@
+# Aegis OS rig tag map: vendor addresses -> canonical channels.
+# Allowed channels: <fluid>_rate / <fluid>_vol for acid, fr_slug, mmfr_slugs, gel_pills, water_flush;
+# injector_speed_ft_per_min, injector_direction, encoder_{1,2,3}_depth_ft,
+# wellhead_pressure_psi, circulating_pressure_psi, pipe_weight_lbs.
+# Values are scaled (value*scale+offset), then converted from `unit` to the canonical unit
+# (ft, ft/min, bbl, bbl/min, psi, lbs).
+adapters:
+  - name: injector-plc
+    protocol: modbus_tcp
+    connection: {host: 192.168.10.20, port: 502, unit_id: 1, timeout_s: 3, max_block_regs: 120}
+    tags:
+      - {channel: injector_speed_ft_per_min, source: {register: 100, kind: holding, type: float32, endianness: CDAB}, unit: m/min}
+      - {channel: injector_direction,        source: {register: 102, kind: holding, type: int16}}
+      - {channel: encoder_1_depth_ft,        source: {register: 110, kind: input, type: float32, endianness: ABCD}, unit: m}
+      - {channel: encoder_2_depth_ft,        source: {register: 112, kind: input, type: float32, endianness: ABCD}, unit: m}
+      - {channel: acid_vol,                  source: {register: 200, kind: holding, type: uint32, endianness: BADC}, unit: m3, scale: 0.001}
+  - name: pump-opcua
+    protocol: opcua
+    connection:
+      endpoint: opc.tcp://192.168.10.30:4840
+      security_policy: Basic256Sha256     # or None
+      security_mode: SignAndEncrypt
+      client_cert: /etc/aegis/opcua/client.der
+      client_key: /etc/aegis/opcua/client.pem
+      mode: subscribe                     # or poll
+      publish_ms: 250
+    tags:
+      - {channel: encoder_3_depth_ft,   source: {node_id: "ns=2;s=Enc3.Depth"}, unit: m}
+      - {channel: acid_rate,            source: {node_id: "ns=2;s=Acid.Rate"}, unit: gal/min}
+      - {channel: wellhead_pressure_psi, source: {node_id: "ns=2;s=WHP"}, unit: kPa}
+  - name: dau-wits
+    protocol: wits
+    connection: {host: 192.168.10.40, port: 5000}
+    tags:
+      - {channel: circulating_pressure_psi, source: {code: "0121", mnemonic: SPPA}, unit: psi}
+      - {channel: pipe_weight_lbs,          source: {code: "0114", mnemonic: HKLD}, unit: klbs}
+      - {channel: encoder_1_depth_ft,       source: {code: "0108", mnemonic: DBTM}, unit: ft}

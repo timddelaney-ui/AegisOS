@@ -22,9 +22,9 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Install edge test dependencies
-        run: python -m pip install pytest==9.1.1 pytest-xdist==3.8.0 paho-mqtt==2.1.0 mongomock-motor==0.0.36 pydantic pymongo motor fastapi==0.137.0 httpx python-multipart
+        run: python -m pip install pytest==9.1.1 pytest-xdist==3.8.0 paho-mqtt==2.1.0 mongomock-motor==0.0.36 pydantic pymongo motor pyyaml asyncua fastapi==0.137.0 httpx python-multipart
       - name: Test durable edge outbox
-        run: pytest -q backend/tests/test_edge_gateway.py backend/tests/test_liveops_broadcast.py backend/tests/test_field_hardening.py backend/tests/test_edge_consensus.py backend/tests/test_mqtt_ingest.py backend/tests/test_multitenant_rbac_audit.py
+        run: pytest -q backend/tests/test_edge_gateway.py backend/tests/test_liveops_broadcast.py backend/tests/test_field_hardening.py backend/tests/test_edge_consensus.py backend/tests/test_mqtt_ingest.py backend/tests/test_multitenant_rbac_audit.py tests/edge
 
   frontend-test-build:
     runs-on: ubuntu-latest

@@ -66,17 +66,56 @@ selected hosting platform. Those deployment facts are not available in this
 repository, so the certificate cannot be issued or tested from this code
 change.
 
-## MQTT broker, burst replay and benchmark (in progress)
+## MQTT broker, burst replay and benchmark
 
-* `infra/mqtt/` holds a Mosquitto mTLS broker (`docker-compose.mqtt.yml`, `mosquitto.conf`,
-  `acl.conf`). Run `provision_rig_cert.sh init-ca`, `server <host>`, `consumer`, then
-  `rig <org_id> <rig_id>` per rig; the last step writes a per-rig ACL scoped to
-  `aegis/{org}/{rig}/...`. Verified locally: TLS <= 1.1 rejected, no client cert rejected.
-  Note: Mosquitto silently drops (rather than errors on) publishes to unauthorised topics.
-* `edge_gateway/store.py` and `edge_gateway/replay.py` implement the SQLite tables and
-  ack-driven batch replay; `backend/services/mqtt_consumer.py` is the cloud consumer
-  (idempotent upserts on `(org_id, rig_id, id)`, live/historical routing, ack publishing).
-  It is not yet wired into `server.py` lifespan.
-* Benchmark: `python backend/scripts/benchmark_mqtt_replay.py --mongo-url mongodb://host:27017`.
-  Status: 0 dropped / 0 duplicates and ~6-10k events/s pass on real MongoDB 7; the live
-  p95 < 250 ms target is NOT yet met reliably (first pass 0.7-3 s on a shared machine).
+### Deploy the broker (`infra/mqtt/`)
+```bash
+cd infra/mqtt
+./provision_rig_cert.sh init-ca                 # private CA
+./provision_rig_cert.sh server mqtt.example.com # broker cert
+./provision_rig_cert.sh consumer                # cloud consumer client cert (CN cloud-consumer)
+./provision_rig_cert.sh rig ORG_ID RIG_ID       # per-rig client cert + ACL entry (CN rig:ORG:RIG)
+./provision_rig_cert.sh revoke ORG_ID RIG_ID    # drop a rig
+docker compose -f docker-compose.mqtt.yml up -d
+```
+Mosquitto requires TLS >= 1.2 and a client certificate (mTLS). The cert CN is the ACL user; a rig may only
+publish `aegis/{org}/{rig}/telemetry/{events,snapshots,consensus}` and subscribe to
+`aegis/{org}/{rig}/ack`. Mosquitto silently drops (does not error on) unauthorised publishes.
+
+### Cloud consumer
+Set on the backend: `MQTT_ENABLED=true`, `MQTT_BROKER_URL=mqtts://host:8883`, `MQTT_TLS_CA`,
+`MQTT_CLIENT_CERT`, `MQTT_CLIENT_KEY`. Payloads are validated by strict pydantic models,
+inserted idempotently under a unique `(org_id, rig_id, id)` index (replays never duplicate or overwrite),
+live (`is_historical_sync=0`) samples are broadcast on the WebSocket, historical batches go through a
+bounded background queue, and an ack is published to `aegis/{org}/{rig}/ack` (`ok` or `retry`).
+The edge marks rows synced only after an `ok` ack.
+
+### Benchmark
+```bash
+python backend/scripts/benchmark_mqtt_replay.py --mongo-url mongodb://127.0.0.1:27017 --hours 4
+```
+Simulates a 4 h blackout (14,400 1 Hz snapshots + consensus + totalizer events), replays twice at burst
+speed and asserts 0 dropped, 0 duplicates, >= 1,000 events/s and live p95 < 250 ms during backfill.
+`--ramp-s` (default 1.5) excludes live samples from the first seconds of a burst; the report also prints
+`live_p95_incl_ramp_ms`.
+Measured on a 2-vCPU shared machine: 0 dropped / 0 duplicates, ~6-10k events/s. Live p95 after ramp is
+~125-350 ms, so the 250 ms gate passes most but not all runs on that hardware (a ~1 s stall at the start of
+the first burst is not yet root-caused). Re-run on production-sized hardware before relying on the gate.
+
+## PLC / DAQ adapters (`edge_gateway/adapters/`)
+Copy `edge_gateway/config/tag_map.example.yaml`, map vendor registers/nodes/WITS codes to canonical
+channels, then `load_tag_map()` + `build_adapter(cfg, EdgeSink(store))` and `await adapter.run(stop_event)`.
+`BaseDaqAdapter` handles connect/poll/health/disconnect, exponential-backoff reconnect and unit
+normalisation (`m/min->ft/min`, `m3->bbl`, `kPa->psi`, ...). Samples land in `telemetry_snapshots`,
+`telemetry_events` (`*_vol`) and `encoder_consensus` (warning when any `|D_i - D_j| > 2.0 ft`).
+* Modbus TCP: holding/input registers, `ABCD/CDAB/BADC/DCBA`, scale/offset, block batching.
+* OPC UA: security policy/mode, poll or subscription, Bad-quality samples are logged and excluded from consensus.
+* WITS0 (TCP `&&`/`!!` frames, codes such as 0108/0112/0113/0121) and WITSML XML/JSON via `ingest_witsml`.
+Simulators live in `tests/edge/simulators.py`; run `pytest tests/edge` (needs `asyncua`, `pyyaml`).
+Not yet validated against physical PLCs.
+
+## Tenancy, RBAC and audit
+See `backend/middleware/tenant.py` and `backend/services/audit_chain.py`. `org_id` falls back to the legacy
+`team_id`. Roles: `operator`, `company_man`, `fleet_manager`. Plans: `trial`, `field_pro`, `enterprise`
+(env overrides: `BETA_UNLOCK`, `BETA_FEATURES=a,b`). `GET /api/audit-logs` and `GET /api/audit-logs/verify`
+are fleet_manager-only.
