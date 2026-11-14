@@ -8,6 +8,7 @@ import re
 import signal
 import sqlite3
 import ssl
+import sys
 import threading
 import time
 import uuid
@@ -15,7 +16,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from daq_listeners import PROTOCOL_TASKS
+_BACKEND_DIR = str(Path(__file__).resolve().parents[1] / "backend")
+if _BACKEND_DIR not in sys.path:
+    sys.path.append(_BACKEND_DIR)
+
+from daq_listeners import PROTOCOL_TASKS  # noqa: E402
 
 logger = logging.getLogger("aegis.edge")
 

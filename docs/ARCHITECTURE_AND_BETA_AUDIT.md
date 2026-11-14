@@ -22,7 +22,7 @@ Audit date: 2026-10-26. Method: static code review of the repo plus `python -m c
 | Auth | Emergent OAuth session exchange → own `session_token` (httpOnly cookie or `Bearer`), 7-day expiry, stored in `user_sessions` | `server.py` `get_current_user` / `require_user` |
 | Payments | Stripe checkout + signed webhook | `server.py` `/stripe/webhook` |
 | Integrations | Emergent LLM key (AI panel), Resend (email), object storage proxy (attachments) | `server.py` |
-| Edge buffer | Rig-PC SQLite outbox and MQTT publisher; cloud MQTT consumer and end-to-end acknowledgement path still require deployment | `backend/edge_gateway.py`, `docs/EDGE_GATEWAY.md` |
+| Edge buffer | Rig-PC SQLite outbox and MQTT publisher; cloud MQTT consumer and end-to-end acknowledgement path still require deployment | `edge_gateway/outbox.py`, `docs/EDGE_GATEWAY.md` |
 
 ### Database (MongoDB collections, grouped)
 - Identity/tenancy: `users`, `user_sessions`, `teams`, `crews`, `invite_codes`, `team_security_keys/settings`, `audit_log`, `tier_change_log`, `designation_log`

@@ -65,3 +65,18 @@ deployments need shared pub/sub. Provisioning an SSL/TLS certificate for
 selected hosting platform. Those deployment facts are not available in this
 repository, so the certificate cannot be issued or tested from this code
 change.
+
+## MQTT broker, burst replay and benchmark (in progress)
+
+* `infra/mqtt/` holds a Mosquitto mTLS broker (`docker-compose.mqtt.yml`, `mosquitto.conf`,
+  `acl.conf`). Run `provision_rig_cert.sh init-ca`, `server <host>`, `consumer`, then
+  `rig <org_id> <rig_id>` per rig; the last step writes a per-rig ACL scoped to
+  `aegis/{org}/{rig}/...`. Verified locally: TLS <= 1.1 rejected, no client cert rejected.
+  Note: Mosquitto silently drops (rather than errors on) publishes to unauthorised topics.
+* `edge_gateway/store.py` and `edge_gateway/replay.py` implement the SQLite tables and
+  ack-driven batch replay; `backend/services/mqtt_consumer.py` is the cloud consumer
+  (idempotent upserts on `(org_id, rig_id, id)`, live/historical routing, ack publishing).
+  It is not yet wired into `server.py` lifespan.
+* Benchmark: `python backend/scripts/benchmark_mqtt_replay.py --mongo-url mongodb://host:27017`.
+  Status: 0 dropped / 0 duplicates and ~6-10k events/s pass on real MongoDB 7; the live
+  p95 < 250 ms target is NOT yet met reliably (first pass 0.7-3 s on a shared machine).

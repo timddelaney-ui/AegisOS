@@ -1,0 +1,24 @@
+# Production MQTT broker for rig telemetry. Usage:
+#   ./provision_rig_cert.sh init-ca && ./provision_rig_cert.sh server mqtt.example.com
+#   docker compose -f docker-compose.mqtt.yml up -d
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2.0.20
+    container_name: aegis-mqtt
+    restart: unless-stopped
+    ports:
+      - "8883:8883"
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./acl.conf:/mosquitto/config/acl.conf:ro
+      - ./pki/ca.crt:/mosquitto/certs/ca.crt:ro
+      - ./pki/server.crt:/mosquitto/certs/server.crt:ro
+      - ./pki/server.key:/mosquitto/certs/server.key:ro
+      - mqtt-data:/mosquitto/data
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_sub -h localhost -p 8883 --cafile /mosquitto/certs/ca.crt --cert /mosquitto/certs/server.crt --key /mosquitto/certs/server.key -t '$$SYS/broker/uptime' -C 1 -W 5 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+volumes:
+  mqtt-data:
