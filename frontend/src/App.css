@@ -64,4 +64,17 @@ input[type="number"] {
 .job-tool-card { display: flex; gap: .75rem; align-items: center; width: 100%; padding: .8rem; border: 1px solid #475569; border-radius: .75rem; background: #0d1526; color: #f1f5f9; text-align: left; }
 .job-tool-card svg { flex-shrink: 0; color: #ff9c66; }
 .job-tool-card small { display: block; color: #b7c5d9; margin-top: .25rem; }
+.job-gauge { min-height: 130px; display: flex; flex-direction: column; gap: .5rem; justify-content: space-between; overflow-wrap: anywhere; }
+.job-gauge h3 { font-size: .8rem; color: #cbd5e1; }
+.job-gauge strong { font-size: 1.7rem; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.job-gauge strong small { font-size: .75rem; color: #cbd5e1; }
+.job-phases { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .3rem; }
+.job-phases button { padding: .5rem .2rem; font-size: .8rem; }
+.job-phases [aria-pressed="true"] { color: #ff9c66; border-color: #ff9c66; background: #291c19; }
+.job-today { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .5rem; }
+.job-today a { display: flex; flex-direction: column; gap: .5rem; overflow-wrap: anywhere; }
+.job-today strong { font-size: .85rem; }
+.job-today span { font-size: .75rem; color: #b7c5d9; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.job-checklist-item { display: flex; gap: .75rem; align-items: center; min-height: 44px; font-size: .85rem; padding-block: .4rem; }
+.job-checklist-item input { min-width: 24px; accent-color: #ff8a45; }
 @media print { .job-shell-header, .job-bottom-nav { display: none; } .job-shell { padding: 0; } }

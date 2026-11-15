@@ -6,6 +6,9 @@ import { API } from "../context/AuthContext";
 import { useRig, rigLabel } from "../context/RigContext";
 import AttachmentUploader from "./AttachmentUploader";
 import { requestHitlApproval } from "../lib/hitl";
+import { loadHandoverLog, treatmentLogText } from "../lib/handoverLog";
+import { getStateSync, setState } from "../lib/fieldStore";
+import { useAuth } from "../context/AuthContext";
 
 // 24-hour military-time display across the handover.
 import { fmtDateTime } from "../lib/timeFormat";
@@ -25,6 +28,10 @@ const buildText = (rigLabelStr, s) => {
   lines.push(`Window: last ${s.hours} hours`);
   lines.push(`Generated: ${fmt(s.generated_at)} by ${s.generated_by}`);
   lines.push("");
+  if (s.treatment_entries) {
+    lines.push(treatmentLogText(s.treatment_entries));
+    lines.push("");
+  }
 
   lines.push(`COMPLETED TASKS (${s.completed_tasks.length})`);
   if (s.completed_tasks.length === 0) lines.push("  — none");
@@ -72,6 +79,7 @@ const Section = ({ title, Icon, accent, count, children }) => (
 
 const HandoverModal = ({ open, onClose }) => {
   const { rigId } = useRig();
+  const { user } = useAuth();
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -95,14 +103,21 @@ const HandoverModal = ({ open, onClose }) => {
   const load = useCallback(async () => {
     setLoading(true); setError(null); setSummary(null); setCopied(false);
     try {
-      const { data } = await axios.get(`${API}/crew/handover-summary`, { params: { rig_id: rigId, hours }, withCredentials: true });
-      setSummary(data);
+      const [{ data }, treatment_entries] = await Promise.all([
+        axios.get(`${API}/crew/handover-summary`, { params: { rig_id: rigId, hours }, withCredentials: true }),
+        loadHandoverLog(rigId, hours),
+      ]);
+      const result = { ...data, treatment_entries };
+      setSummary(result);
+      setState(`handover:${user?.user_id}:${rigId}:${hours}`, result);
     } catch (e) {
       setError(e.response?.data?.detail || "Failed to build summary. Join a team first.");
+      const snapshot = getStateSync(`handover:${user?.user_id}:${rigId}:${hours}`, null);
+      if (snapshot) { setSummary(snapshot); setError("Cached handover summary - not current. Email requires connectivity and a fresh review."); }
     } finally {
       setLoading(false);
     }
-  }, [rigId, hours]);
+  }, [rigId, hours, user?.user_id]);
 
   useEffect(() => { if (open) load(); }, [open, load]);
 
@@ -167,6 +182,8 @@ const HandoverModal = ({ open, onClose }) => {
   };
 
   const sendEmail = async () => {
+    if (!navigator.onLine) { toast.error("Email requires connectivity. Copy the cached summary instead."); return; }
+    if (error || !summary) { toast.error("Refresh and review the summary before emailing."); return; }
     const list = recipients
       .split(/[,;\s\n]+/)
       .map((r) => r.trim())
@@ -211,6 +228,8 @@ const HandoverModal = ({ open, onClose }) => {
 
   // One-click shift-end: auto-generate body server-side, send to default recipients
   const sendShiftEnd = async () => {
+    if (!navigator.onLine) { toast.error("Shift-end email requires connectivity; nothing was sent."); return; }
+    if (error || !summary) { toast.error("Refresh and review the summary before emailing."); return; }
     const defaults = savedContacts.filter((c) => c.is_default_recipient);
     if (defaults.length === 0) {
       toast.error("No default-recipient crew contacts yet — add some first.");

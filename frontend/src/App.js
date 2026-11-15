@@ -1,6 +1,7 @@
 import React, { lazy, Suspense, useEffect, useState } from "react";
 import { Routes, Route, useLocation, Navigate } from "react-router-dom";
 import AppShell from "./components/AppShell";
+import JobPage from "./pages/JobPage";
 import Login from "./pages/Login";
 import AuthCallback from "./pages/AuthCallback";
 import Pricing from "./pages/Pricing";
@@ -103,7 +104,7 @@ const AppRouter = () => {
         <Route path="/payment/success" element={<PaymentSuccess />} />
         <Route path="/payment/cancel" element={<PaymentCancel />} />
         <Route element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
-        <Route path="/job" element={<Hub />} />
+        <Route path="/job" element={<JobPage />} />
         <Route path="/live" element={<ProtectedRoute feature="live_ops"><OperatorPage /></ProtectedRoute>} />
         <Route path="/log" element={<ProtectedRoute feature="treatment_log"><TreatmentPage /></ProtectedRoute>} />
         <Route path="/calc" element={<ProtectedRoute feature="workbooks"><Workbook /></ProtectedRoute>} />
