@@ -1,35 +1,92 @@
-import React from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Gauge, Home, MonitorCog } from "lucide-react";
-import MainOperatorScreen from "../components/MainOperatorScreen";
+import axios from "axios";
+import { ArrowLeft, Check, Loader2 } from "lucide-react";
+import { useAuth, API, isProUser } from "../context/AuthContext";
 
-export default function OperatorPage() {
-  const nav = useNavigate();
-  const tab = "flex items-center gap-1.5 px-4 py-1.5 rounded-lg transition-colors";
+const PLANS = [
+  { key: "ct_pro_monthly", price: "$9.99 CAD", period: "/ month", note: null },
+  { key: "ct_pro_yearly", price: "$79.99 CAD", period: "/ year", note: "Save 33%", highlight: true },
+];
+
+const FEATURES = [
+  "All 17 operation sheets",
+  "Emergency SOPs",
+  "Gemini AI Field Assistant",
+  "3D Wellbore viewer, survey CSV upload & plug tracking",
+  "Saved jobs and crew team workspaces",
+];
+
+export default function Pricing() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const [loadingPlan, setLoadingPlan] = useState(null);
+  const [error, setError] = useState("");
+
+  const subscribe = async (lookupKey) => {
+    if (!user) {
+      navigate("/login");
+      return;
+    }
+    setError("");
+    setLoadingPlan(lookupKey);
+    try {
+      const { data } = await axios.post(
+        `${API}/payments/checkout`,
+        { lookup_key: lookupKey, origin_url: window.location.origin },
+        { withCredentials: true },
+      );
+      window.location.href = data.checkout_url;
+    } catch (e) {
+      setError(e.response?.data?.detail || "Could not start checkout. Please try again.");
+      setLoadingPlan(null);
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-[#070C14] text-slate-100 flex flex-col font-sans" data-testid="operator-page">
-      <header className="flex flex-wrap items-center justify-between gap-3 px-5 py-2.5 bg-[#0D1526] border-b border-slate-800 md:sticky md:top-0 z-40">
-        <div className="flex items-center gap-3 flex-1 sm:flex-none">
-          <div className="w-8 h-8 rounded-lg bg-orange-600 flex items-center justify-center font-black text-white text-xs">CA</div>
-          <div>
-            <span className="font-extrabold text-base text-slate-100 tracking-wide">CoilAegis OS</span>
-            <div className="text-[10px] text-slate-400 font-mono">mycoiltubingpocketsupports.tech</div>
-          </div>
-        </div>
-        <div className="flex flex-wrap bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs font-semibold">
-          <button className={`${tab} bg-amber-500 text-slate-950 font-black`} data-testid="nav-operator-view-btn">
-            <Gauge className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Main Operator View</span><span className="sm:hidden">Operator</span>
-          </button>
-          <button onClick={() => nav("/hub")} title="Home Overview" className={`${tab} text-slate-400 hover:text-slate-200`} data-testid="nav-home-overview-btn">
-            <Home className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Home Overview</span>
-          </button>
-          <button onClick={() => nav("/live-ops/classic")} title="Classic Console" className={`${tab} text-slate-400 hover:text-slate-200`} data-testid="nav-classic-console-btn">
-            <MonitorCog className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Classic Console</span>
-          </button>
-        </div>
+    <div className="min-h-screen bg-[#F3F3F3] flex flex-col" data-testid="pricing-page">
+      <header className="bg-[#262626] text-white h-12 flex items-center px-3 flex-shrink-0">
+        <button onClick={() => navigate(-1)} className="flex items-center gap-1.5 text-sm font-semibold min-h-11">
+          <ArrowLeft className="w-4 h-4" /> Back
+        </button>
+        <h1 className="text-sm font-semibold ml-4">CT Workbook Pro</h1>
       </header>
-      <main className="flex-1">
-        <MainOperatorScreen />
+      <main className="flex-1 p-4 md:p-8 overflow-auto">
+        <div className="max-w-3xl mx-auto">
+          <div className="text-center mb-6">
+            <h2 className="text-2xl md:text-3xl font-bold text-[#262626] mb-2">Unlock CT Workbook Pro</h2>
+            <p className="text-sm text-[#595959]">Pay with PayPal. Cancel anytime. No tax added.</p>
+          </div>
+          {isProUser(user) && (
+            <p className="text-center text-sm font-semibold text-[#107C41] mb-4">You already have an active Pro plan.</p>
+          )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {PLANS.map((plan) => (
+              <div key={plan.key} className={`bg-white rounded-lg p-5 text-center border ${plan.highlight ? "border-[#FF6B1A] shadow-md" : "border-[#D4D4D4]"}`}>
+                <p className="text-3xl font-bold text-[#FF6B1A]">{plan.price}</p>
+                <p className="text-xs text-[#595959] mb-1">{plan.period}</p>
+                <p className="text-xs font-bold text-[#C44A08] h-4 mb-3">{plan.note || ""}</p>
+                <button
+                  onClick={() => subscribe(plan.key)}
+                  disabled={!!loadingPlan}
+                  data-testid={`subscribe-${plan.key}`}
+                  className="w-full bg-[#FF6B1A] hover:bg-[#C44A08] disabled:opacity-60 text-white py-3 rounded font-bold text-sm flex items-center justify-center gap-2 min-h-11"
+                >
+                  {loadingPlan === plan.key ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                  Subscribe with PayPal
+                </button>
+              </div>
+            ))}
+          </div>
+          {error && <p role="alert" className="text-center text-sm text-[#C00000] mt-4">{error}</p>}
+          <ul className="mt-6 space-y-2 max-w-md mx-auto">
+            {FEATURES.map((f) => (
+              <li key={f} className="flex items-center gap-2 text-sm text-[#444]">
+                <Check className="w-4 h-4 text-[#FF6B1A]" strokeWidth={3} />{f}
+              </li>
+            ))}
+          </ul>
+        </div>
       </main>
     </div>
   );

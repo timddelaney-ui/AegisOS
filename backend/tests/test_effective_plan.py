@@ -33,3 +33,30 @@ def test_fleet_paths():
         assert server._is_fleet_only_path(p), p
     for p in ("/api/ai/chat", "/api/jobs", "/api/teams", "/api/surveys/x", "/api/plugs", "/api/timecards"):
         assert not server._is_fleet_only_path(p), p
+
+
+def test_paypal_sync_activates_workbook_pro(monkeypatch):
+    import asyncio
+
+    updates = []
+
+    class Users:
+        async def update_one(self, query, update):
+            updates.append((query, update["$set"]))
+
+    class FakeDb:
+        users = Users()
+
+    async def fake_paypal(method, path, **kw):
+        return {"status": "ACTIVE", "plan_id": "P-Y", "custom_id": "u1",
+                "billing_info": {"next_billing_time": "2027-01-01T00:00:00Z"}}
+
+    monkeypatch.setattr(server, "db", FakeDb())
+    monkeypatch.setattr(server, "_paypal", fake_paypal)
+    monkeypatch.setitem(server.PAYPAL_PLAN_IDS, "ct_pro_yearly", "P-Y")
+    assert asyncio.run(server._sync_paypal_subscription("I-1")) == "ACTIVE"
+    query, fields = updates[0]
+    assert query == {"user_id": "u1"}
+    assert fields["subscription_status"] == "active"
+    assert fields["subscription_plan"] == "workbook_pro"
+    assert fields["paypal_subscription_id"] == "I-1"

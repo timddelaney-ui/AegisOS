@@ -18,7 +18,6 @@ import secrets
 import httpx
 from fastapi.responses import RedirectResponse, JSONResponse
 import requests
-import stripe
 from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
@@ -38,12 +37,18 @@ mongo_url = os.environ["MONGO_URL"]
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ["DB_NAME"]]
 
-# Stripe
 IS_PRODUCTION = os.environ.get("APP_ENV", "").lower() == "production"
-stripe.api_key = os.environ.get("STRIPE_SECRET_KEY") or ("" if IS_PRODUCTION else "sk_test_emergent")
-STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
-if IS_PRODUCTION and not (os.environ.get("STRIPE_SECRET_KEY") and STRIPE_WEBHOOK_SECRET):
-    raise RuntimeError("STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET are required when APP_ENV=production")
+
+# PayPal Subscriptions (CAD). Plans are created once by scripts_paypal_setup.py.
+PAYPAL_ENV = os.environ.get("PAYPAL_ENV", "live" if IS_PRODUCTION else "sandbox").lower()
+PAYPAL_BASE = "https://api-m.paypal.com" if PAYPAL_ENV == "live" else "https://api-m.sandbox.paypal.com"
+PAYPAL_CLIENT_ID = os.environ.get("PAYPAL_CLIENT_ID", "").strip()
+PAYPAL_CLIENT_SECRET = os.environ.get("PAYPAL_CLIENT_SECRET", "").strip()
+PAYPAL_WEBHOOK_ID = os.environ.get("PAYPAL_WEBHOOK_ID", "").strip()
+PAYPAL_PLAN_IDS = {
+    "ct_pro_monthly": os.environ.get("PAYPAL_PLAN_MONTHLY", "").strip(),
+    "ct_pro_yearly": os.environ.get("PAYPAL_PLAN_YEARLY", "").strip(),
+}
 
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
@@ -751,37 +756,95 @@ def _period_for_lookup(lookup_key: str) -> timedelta:
     return timedelta(days=365) if (lookup_key or "").endswith("yearly") else timedelta(days=30)
 
 
+_paypal_token: Dict[str, Any] = {"value": None, "expires": 0.0}
+
+
+async def _paypal(method: str, path: str, **kwargs) -> Dict[str, Any]:
+    if not (PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET):
+        raise HTTPException(503, "Payments are not configured")
+    async with httpx.AsyncClient(timeout=30) as http:
+        if not _paypal_token["value"] or _paypal_token["expires"] < asyncio.get_event_loop().time() + 60:
+            r = await http.post(f"{PAYPAL_BASE}/v1/oauth2/token", auth=(PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET),
+                                data={"grant_type": "client_credentials"})
+            r.raise_for_status()
+            body = r.json()
+            _paypal_token["value"] = body["access_token"]
+            _paypal_token["expires"] = asyncio.get_event_loop().time() + int(body.get("expires_in", 300))
+        r = await http.request(method, f"{PAYPAL_BASE}{path}",
+                               headers={"Authorization": f"Bearer {_paypal_token['value']}"}, **kwargs)
+        r.raise_for_status()
+        return r.json() if r.content else {}
+
+
+def _lookup_for_paypal_plan(plan_id: str) -> Optional[str]:
+    return next((k for k, v in PAYPAL_PLAN_IDS.items() if v and v == plan_id), None)
+
+
+async def _sync_paypal_subscription(sub_id: str, user_id: Optional[str] = None) -> Optional[str]:
+    """Fetch the subscription from PayPal (the source of truth) and mirror it onto the user.
+
+    Returns the PayPal subscription status.
+    """
+    sub = await _paypal("GET", f"/v1/billing/subscriptions/{sub_id}")
+    status = sub.get("status")
+    user_id = user_id or sub.get("custom_id")
+    query = {"user_id": user_id} if user_id else {"paypal_subscription_id": sub_id}
+    if status == "ACTIVE":
+        lookup = _lookup_for_paypal_plan(sub.get("plan_id", "")) or "ct_pro_monthly"
+        next_billing = _parse_utc((sub.get("billing_info") or {}).get("next_billing_time"))
+        # 3-day grace so a late renewal webhook never locks a paying user out.
+        expires = (next_billing + timedelta(days=3)) if next_billing else datetime.now(timezone.utc) + _period_for_lookup(lookup)
+        await db.users.update_one(query, {"$set": {
+            "subscription_status": "active",
+            "subscription_plan": _plan_for_lookup(lookup),
+            "subscription_expires_at": expires,
+            "paypal_subscription_id": sub_id,
+        }})
+    elif status in ("CANCELLED", "SUSPENDED", "EXPIRED"):
+        await db.users.update_one({"paypal_subscription_id": sub_id}, {"$set": {"subscription_status": "canceled"}})
+    return status
+
+
 @api_router.post("/payments/checkout")
 async def create_checkout(req: CheckoutRequest, user: dict = Depends(require_user)):
-    prices = stripe.Price.list(lookup_keys=[req.lookup_key], active=True, limit=1).data
-    if not prices:
-        raise HTTPException(500, f"Price not found: {req.lookup_key}")
-    price = prices[0]
-
-    kwargs = dict(
-        line_items=[{"price": price.id, "quantity": 1}],
-        mode="subscription",
-        success_url=f"{req.origin_url}/payment/success?session_id={{CHECKOUT_SESSION_ID}}",
-        cancel_url=f"{req.origin_url}/payment/cancel",
-        metadata={"user_id": user["user_id"], "lookup_key": req.lookup_key},
-        customer_email=user["email"],
-    )
-
-    # Small-supplier (CRA $30k) exemption: no GST/tax is collected, so automatic_tax stays off.
-    session = stripe.checkout.Session.create(**kwargs)
+    plan_id = PAYPAL_PLAN_IDS.get(req.lookup_key)
+    if not plan_id:
+        raise HTTPException(400, f"Unknown or unconfigured plan: {req.lookup_key}")
+    origin = req.origin_url.rstrip("/")
+    if origin != PUBLIC_APP_URL and origin not in _cors_origins:
+        origin = PUBLIC_APP_URL
+    try:
+        # No tax is added: the business is a CRA small supplier.
+        sub = await _paypal("POST", "/v1/billing/subscriptions", json={
+            "plan_id": plan_id,
+            "custom_id": user["user_id"],
+            "subscriber": {"email_address": user["email"]},
+            "application_context": {
+                "brand_name": "CT Field Workbook",
+                "user_action": "SUBSCRIBE_NOW",
+                "shipping_preference": "NO_SHIPPING",
+                "return_url": f"{origin}/payment/success",
+                "cancel_url": f"{origin}/payment/cancel",
+            },
+        })
+    except httpx.HTTPError:
+        logger.exception("PayPal subscription creation failed")
+        raise HTTPException(502, "Could not start checkout")
+    approve = next((l["href"] for l in sub.get("links", []) if l.get("rel") == "approve"), None)
+    if not approve:
+        raise HTTPException(502, "PayPal did not return an approval link")
 
     await db.payment_transactions.insert_one({
-        "session_id": session.id,
+        "session_id": sub["id"],
         "user_id": user["user_id"],
         "lookup_key": req.lookup_key,
-        "amount": (price.unit_amount or 0),
-        "currency": price.currency,
+        "currency": "CAD",
         "status": "initiated",
         "payment_status": "pending",
         "created_at": datetime.now(timezone.utc),
         "updated_at": datetime.now(timezone.utc),
     })
-    return {"checkout_url": session.url, "session_id": session.id}
+    return {"checkout_url": approve, "session_id": sub["id"]}
 
 
 @api_router.get("/payments/status/{session_id}")
@@ -792,37 +855,20 @@ async def get_payment_status(session_id: str):
 
     if record.get("payment_status") != "paid":
         try:
-            s = stripe.checkout.Session.retrieve(session_id)
-            if s.payment_status == "paid" or s.status == "complete":
-                # Fetch subscription details
-                sub_id = s.subscription
-                lookup = record["lookup_key"]
-                plan = _plan_for_lookup(lookup)
-                expires = datetime.now(timezone.utc) + _period_for_lookup(lookup)
-
+            status = await _sync_paypal_subscription(session_id, record["user_id"])
+            if status == "ACTIVE":
                 await db.payment_transactions.update_one(
-                    {"session_id": session_id, "payment_status": {"$ne": "paid"}},
-                    {"$set": {
-                        "status": "completed",
-                        "payment_status": "paid",
-                        "stripe_subscription_id": sub_id,
-                        "stripe_payment_intent_id": s.payment_intent,
-                        "updated_at": datetime.now(timezone.utc),
-                    }},
+                    {"session_id": session_id},
+                    {"$set": {"status": "completed", "payment_status": "paid", "updated_at": datetime.now(timezone.utc)}},
                 )
-                # Activate subscription on user
-                await db.users.update_one(
-                    {"user_id": record["user_id"]},
-                    {"$set": {
-                        "subscription_status": "active",
-                        "subscription_plan": plan,
-                        "subscription_expires_at": expires,
-                        "stripe_subscription_id": sub_id,
-                    }},
+            elif status in ("CANCELLED", "EXPIRED"):
+                await db.payment_transactions.update_one(
+                    {"session_id": session_id},
+                    {"$set": {"status": "failed", "payment_status": "failed", "updated_at": datetime.now(timezone.utc)}},
                 )
-                record = await db.payment_transactions.find_one({"session_id": session_id}, {"_id": 0})
-        except stripe.error.StripeError:
-            pass
+            record = await db.payment_transactions.find_one({"session_id": session_id}, {"_id": 0})
+        except (httpx.HTTPError, HTTPException):
+            logger.warning("PayPal status check failed for %s", session_id)
 
     return {
         "session_id": record["session_id"],
@@ -831,61 +877,45 @@ async def get_payment_status(session_id: str):
     }
 
 
-@api_router.post("/stripe/webhook")
-async def stripe_webhook(request: Request):
-    payload = await request.body()
-    sig = request.headers.get("stripe-signature", "")
+@api_router.post("/paypal/webhook")
+async def paypal_webhook(request: Request):
+    raw = await request.body()
     try:
-        event = stripe.Webhook.construct_event(payload, sig, STRIPE_WEBHOOK_SECRET)
-    except stripe.error.SignatureVerificationError:
+        event = json.loads(raw)
+    except ValueError:
+        raise HTTPException(400, "Invalid payload")
+    if not PAYPAL_WEBHOOK_ID:
+        raise HTTPException(503, "Webhook not configured")
+    h = request.headers
+    try:
+        verdict = await _paypal("POST", "/v1/notifications/verify-webhook-signature", json={
+            "auth_algo": h.get("paypal-auth-algo", ""),
+            "cert_url": h.get("paypal-cert-url", ""),
+            "transmission_id": h.get("paypal-transmission-id", ""),
+            "transmission_sig": h.get("paypal-transmission-sig", ""),
+            "transmission_time": h.get("paypal-transmission-time", ""),
+            "webhook_id": PAYPAL_WEBHOOK_ID,
+            "webhook_event": event,
+        })
+    except httpx.HTTPError:
+        raise HTTPException(400, "Signature verification failed")
+    if verdict.get("verification_status") != "SUCCESS":
         raise HTTPException(400, "Invalid signature")
 
-    obj = event["data"]["object"]
-    t = event["type"]
-
-    if t == "checkout.session.completed":
-        record = await db.payment_transactions.find_one({"session_id": obj["id"]}, {"_id": 0})
-        if record and record.get("payment_status") != "paid":
-            lookup = record["lookup_key"]
-            plan = _plan_for_lookup(lookup)
-            expires = datetime.now(timezone.utc) + _period_for_lookup(lookup)
-            await db.payment_transactions.update_one(
-                {"session_id": obj["id"], "payment_status": {"$ne": "paid"}},
-                {"$set": {
-                    "status": "completed",
-                    "payment_status": obj.get("payment_status", "paid"),
-                    "stripe_subscription_id": obj.get("subscription"),
-                    "stripe_payment_intent_id": obj.get("payment_intent"),
-                    "updated_at": datetime.now(timezone.utc),
-                }},
-            )
-            await db.users.update_one(
-                {"user_id": record["user_id"]},
-                {"$set": {
-                    "subscription_status": "active",
-                    "subscription_plan": plan,
-                    "subscription_expires_at": expires,
-                    "stripe_subscription_id": obj.get("subscription"),
-                }},
-            )
-    elif t == "customer.subscription.updated":
-        sub_id = obj["id"]
-        if obj.get("status") in ("active", "trialing"):
-            update = {"subscription_status": "active"}
-            lookup = (((obj.get("items") or {}).get("data") or [{}])[0].get("price") or {}).get("lookup_key")
-            if lookup:
-                update["subscription_plan"] = _plan_for_lookup(lookup)
-            if obj.get("current_period_end"):
-                update["subscription_expires_at"] = datetime.fromtimestamp(obj["current_period_end"], tz=timezone.utc)
-        else:
-            update = {"subscription_status": "canceled"}
-        await db.users.update_one({"stripe_subscription_id": sub_id}, {"$set": update})
-    elif t == "customer.subscription.deleted":
-        sub_id = obj["id"]
-        await db.users.update_one(
-            {"stripe_subscription_id": sub_id},
-            {"$set": {"subscription_status": "canceled"}},
-        )
+    etype = event.get("event_type", "")
+    resource = event.get("resource") or {}
+    sub_id = resource.get("billing_agreement_id") if etype.startswith("PAYMENT.SALE.") else resource.get("id")
+    synced = (
+        "BILLING.SUBSCRIPTION.ACTIVATED", "BILLING.SUBSCRIPTION.UPDATED", "BILLING.SUBSCRIPTION.RE-ACTIVATED",
+        "BILLING.SUBSCRIPTION.CANCELLED", "BILLING.SUBSCRIPTION.SUSPENDED", "BILLING.SUBSCRIPTION.EXPIRED",
+        "PAYMENT.SALE.COMPLETED",
+    )
+    if etype in synced and sub_id:
+        try:
+            await _sync_paypal_subscription(sub_id)
+        except httpx.HTTPError:
+            # Non-2xx makes PayPal retry the delivery.
+            raise HTTPException(502, "Could not sync subscription")
     return {"status": "ok"}
 
 

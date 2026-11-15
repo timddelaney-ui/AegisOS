@@ -23,5 +23,9 @@ services:
       - {key: MQTT_BROKER_URL, sync: false}
       - {key: MQTT_USERNAME, sync: false}
       - {key: MQTT_PASSWORD, sync: false}
-      - {key: STRIPE_SECRET_KEY, sync: false}
-      - {key: STRIPE_WEBHOOK_SECRET, sync: false}
+      - {key: PAYPAL_ENV, value: live}
+      - {key: PAYPAL_CLIENT_ID, sync: false}
+      - {key: PAYPAL_CLIENT_SECRET, sync: false}
+      - {key: PAYPAL_WEBHOOK_ID, sync: false}
+      - {key: PAYPAL_PLAN_MONTHLY, sync: false}
+      - {key: PAYPAL_PLAN_YEARLY, sync: false}
