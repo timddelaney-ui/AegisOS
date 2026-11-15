@@ -55,4 +55,13 @@ input[type="number"] {
 .job-tab { display: flex; flex-direction: column; justify-content: center; align-items: center; gap: .2rem; color: #b7c5d9; font-size: .75rem; font-weight: 700; border-radius: .5rem; }
 .job-tab.active { color: #ff9c66; background: #291c19; }
 .job-loading { min-height: 300px; display: flex; align-items: center; justify-content: center; gap: .75rem; color: #b7c5d9; }
+.job-page { padding: 1rem; max-width: 960px; margin-inline: auto; display: flex; flex-direction: column; gap: 1rem; padding-bottom: 4rem; }
+.job-card { padding: 1rem; background: #0d1526; border: 1px solid #475569; border-radius: 1rem; }
+.job-muted { color: #b7c5d9; font-size: .8rem; }
+.job-input { background: #070c14; color: #f1f5f9; border: 1px solid #64748b; padding: .5rem; border-radius: .5rem; min-width: 0; }
+.job-secondary { background: #182338; color: #e2e8f0; border: 1px solid #64748b; border-radius: .5rem; padding: .5rem .75rem; }
+.job-primary { background: #ff8a45; color: #17100b; font-weight: 800; display: flex; justify-content: center; align-items: center; border-radius: .75rem; padding: .75rem 1rem; }
+.job-tool-card { display: flex; gap: .75rem; align-items: center; width: 100%; padding: .8rem; border: 1px solid #475569; border-radius: .75rem; background: #0d1526; color: #f1f5f9; text-align: left; }
+.job-tool-card svg { flex-shrink: 0; color: #ff9c66; }
+.job-tool-card small { display: block; color: #b7c5d9; margin-top: .25rem; }
 @media print { .job-shell-header, .job-bottom-nav { display: none; } .job-shell { padding: 0; } }

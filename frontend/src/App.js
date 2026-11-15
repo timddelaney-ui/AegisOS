@@ -35,7 +35,7 @@ import ShadowVerificationPage from "./pages/ShadowVerificationPage";
 import ExecutiveDashboard from "./pages/ExecutiveDashboard";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ActiveReelProvider } from "./context/ActiveReelContext";
-import { UnitProvider, useUnits } from "./context/UnitContext";
+import { UnitProvider } from "./context/UnitContext";
 import { TierProvider, useTier } from "./context/TierContext";
 import TierTutorial, { useTierTutorial } from "./components/TierTutorial";
 import { UpgradeModal, TierProtectedRoute } from "./components/TierGate";
@@ -54,6 +54,8 @@ import { useAuth } from "./context/AuthContext";
 import { Loader2 } from "lucide-react";
 import FieldToolsBar from "./components/FieldToolsBar";
 import "./App.css";
+import { toolForPath } from "./config/toolRegistry";
+import { planRole } from "./lib/roles";
 
 const Workbook = lazy(() => import("./pages/WorkbookPage"));
 const WellborePage = lazy(() => import("./pages/WellborePage"));
@@ -70,6 +72,8 @@ const ProtectedRoute = ({ children, feature }) => {
     );
   }
   if (!user) return <Navigate to="/login" replace />;
+  const tool = toolForPath(location.pathname);
+  if (tool && !tool.roles.includes(planRole(user))) return <Navigate to="/job" replace />;
   // Every feature route is isolated: a bad input/render error in one module
   // recovers silently (or shows a local retry) instead of blanking the app.
   const guarded = <ErrorBoundary name={feature || "route"} resetKey={location.pathname}>{children}</ErrorBoundary>;
