@@ -37,6 +37,29 @@ const API = `${BACKEND_URL}/api`;
 
 axios.defaults.withCredentials = true;
 
+// The API is often on a different site than the app, so the session cookie can be
+// blocked as third-party. Keep the token from the Google hand-off and send it as
+// a Bearer header on API calls.
+const SESSION_TOKEN_KEY = "aegis_session_token";
+export const getSessionToken = () => {
+  try { return localStorage.getItem(SESSION_TOKEN_KEY); } catch { return null; }
+};
+export const setSessionToken = (token) => {
+  try {
+    if (token) localStorage.setItem(SESSION_TOKEN_KEY, token);
+    else localStorage.removeItem(SESSION_TOKEN_KEY);
+  } catch (error) { console.warn("[Auth] session token storage unavailable", error?.message); }
+};
+axios.interceptors?.request.use((config) => {
+  const token = getSessionToken();
+  if (token && typeof config.url === "string" && config.url.startsWith(API)) {
+    config.headers = config.headers || {};
+    if (typeof config.headers.set === "function") config.headers.set("Authorization", `Bearer ${token}`);
+    else config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
 const AuthContext = createContext(null);
 const OFFLINE_SESSION_KEY = "aegis_offline_workspace_v1";
 function cachedWorkspace() {
@@ -71,6 +94,7 @@ export const AuthProvider = ({ children }) => {
       updateUser(saved);
       setOfflineWorkspace(!!saved);
       if ([401, 403].includes(e.response?.status)) {
+        setSessionToken(null);
         try { localStorage.removeItem(OFFLINE_SESSION_KEY); } catch (error) { console.warn("[Auth] cache removal failed", error?.message); }
       }
     } finally {
@@ -79,7 +103,7 @@ export const AuthProvider = ({ children }) => {
   }, [setUser]);
 
   useEffect(() => {
-    if (window.location.hash?.includes("session_id=")) {
+    if (/(session_id|auth_code)=/.test(window.location.hash || "")) {
       setLoading(false);
       return;
     }
@@ -96,6 +120,7 @@ export const AuthProvider = ({ children }) => {
     } catch (e) {
       console.warn("Logout call failed (session may already be gone):", e?.message);
     }
+    setSessionToken(null);
     setUser(null);
     setOfflineWorkspace(false);
     try { localStorage.removeItem(OFFLINE_SESSION_KEY); } catch (error) { console.warn("[Auth] cache removal failed", error?.message); }

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import axios from "axios";
-import { useAuth, API } from "../context/AuthContext";
+import { useAuth, API, setSessionToken } from "../context/AuthContext";
 import { FileSpreadsheet, Loader2 } from "lucide-react";
 
 const AuthCallback = () => {
@@ -16,23 +16,23 @@ const AuthCallback = () => {
     hasProcessed.current = true;
 
     const hash = location.hash;
-    const match = hash.match(/session_id=([^&]+)/);
+    const googleCode = hash.match(/auth_code=([^&]+)/);
+    const match = googleCode || hash.match(/session_id=([^&]+)/);
     if (!match) {
       navigate("/login");
       return;
     }
-    const sessionId = match[1];
 
     (async () => {
       try {
-        const { data } = await axios.post(
-          `${API}/auth/session`,
-          { session_id: sessionId },
-          { withCredentials: true }
-        );
-        setUser(data);
+        const { data } = googleCode
+          ? await axios.post(`${API}/auth/google/exchange`, { code: match[1] }, { withCredentials: true })
+          : await axios.post(`${API}/auth/session`, { session_id: match[1] }, { withCredentials: true });
+        const { session_token: sessionToken, ...profile } = data || {};
+        if (sessionToken) setSessionToken(sessionToken);
+        setUser(profile);
         window.history.replaceState(null, "", window.location.pathname);
-        navigate("/hub", { replace: true, state: { user: data } });
+        navigate("/hub", { replace: true, state: { user: profile } });
       } catch (e) {
         setError("Sign-in failed. Please try again.");
         setTimeout(() => navigate("/login"), 2000);
