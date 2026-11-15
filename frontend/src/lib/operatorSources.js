@@ -1,6 +1,6 @@
 const liveFields = {
   depth: ["depth_ft", "encoder_1_depth_ft", "encoder_2_depth_ft", "encoder_3_depth_ft", "traction_wheel_depth_ft", "gooseneck_depth_ft", "levelwind_depth_ft"],
-  whp: ["whp_psi", "wellhead_pressure_psi"], weight: ["weight_lb"],
+  whp: ["whp_psi", "wellhead_pressure_psi"], weight: ["weight_lb", "pipe_weight_lbs"],
   internalPress: ["p_internal_psi"], annulusPress: ["p_external_psi", "annulus_pressure_psi"],
   vonMises: ["vm_utilization"], n2Rate: ["n2Rate"],
   skatePressure: ["traction_pressure_psi", "p_skate_psi"],
