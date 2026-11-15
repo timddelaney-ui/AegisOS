@@ -24,7 +24,7 @@ export const TIER_SPECS = {
     label: "Personal",
     tagline: "Individual field engineer",
     price_monthly_usd: 9.99,
-    price_yearly_usd: 79,
+    price_yearly_usd: 79.99,
     seats: "1 seat",
     highlights: [
       "AI assistant",

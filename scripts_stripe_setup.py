@@ -1,4 +1,4 @@
-"""Setup Stripe catalog: $5/month or $60/year subscription plans."""
+"""Setup Stripe catalog: $9.99 CAD/month or $79.99 CAD/year (no GST: CRA small-supplier exemption) subscription plans."""
 import os, stripe
 from dotenv import load_dotenv
 load_dotenv("/app/backend/.env")
@@ -9,10 +9,9 @@ CATALOG = [
     {
         "emergent_product_id": "ct_workbook_pro",
         "name": "CT Workbook Pro",
-        "tax_code": "txcd_10103001",  # SaaS
         "prices": [
-            {"lookup_key": "ct_pro_monthly", "amount": 500,  "currency": "usd", "interval": "month"},
-            {"lookup_key": "ct_pro_yearly",  "amount": 6000, "currency": "usd", "interval": "year"},
+            {"lookup_key": "ct_pro_monthly", "amount": 999,  "currency": "cad", "interval": "month"},
+            {"lookup_key": "ct_pro_yearly",  "amount": 7999, "currency": "cad", "interval": "year"},
         ],
     },
 ]
@@ -24,7 +23,6 @@ def get_or_create_product(entry):
             return p
     return stripe.Product.create(
         name=entry["name"],
-        tax_code=entry.get("tax_code"),
         metadata={"managed_by": "emergent", "emergent_product_id": entry["emergent_product_id"]},
     )
 
@@ -46,7 +44,7 @@ for entry in CATALOG:
                 recurring={"interval": p["interval"]},
             )
             price = stripe.Price.create(**kwargs)
-            print(f"  Created price: {price.id} ({p['lookup_key']}) - ${p['amount']/100}/{p['interval']}")
+            print(f"  Created price: {price.id} ({p['lookup_key']}) - ${p['amount']/100:.2f} {p['currency'].upper()}/{p['interval']}")
         else:
             print(f"  Price exists: {existing[0].id} ({p['lookup_key']})")
 
