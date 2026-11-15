@@ -70,11 +70,20 @@ export function ToolCard({ tool, onAction }) {
   );
 }
 
+export function useToolActions() {
+  const [aiOpen, setAiOpen] = useState(false);
+  const onAction = (id) => {
+    if (id === "training") setAiOpen(true);
+    else document.dispatchEvent(new CustomEvent(id === "redeem" ? "open-redeem" : "open-feedback"));
+  };
+  return { aiOpen, onAction, closeAI: () => setAiOpen(false) };
+}
+
 export default function Hub() {
   const { user } = useAuth();
   const tier = useTier();
   const [prefs, setPrefs] = useState(() => getStateSync(`hub_prefs:${user?.user_id}`, { hub_tiles: [] }));
-  const [aiOpen, setAiOpen] = useState(false);
+  const { aiOpen, onAction, closeAI } = useToolActions();
   const loadPrefs = useCallback(async () => {
     try {
       const { data } = await axios.get(`${API}/me/prefs`, { withCredentials: true });
@@ -84,10 +93,6 @@ export default function Hub() {
   }, [user?.user_id]);
   // Old home preferences no longer redirect away from the job-first home.
   useEffect(() => { loadPrefs(); }, [loadPrefs]);
-  const onAction = (id) => {
-    if (id === "training") setAiOpen(true);
-    else document.dispatchEvent(new CustomEvent(id === "redeem" ? "open-redeem" : "open-feedback"));
-  };
   const tiles = prefs.hub_tiles || [];
   const tools = filterTools({ user, hidden: tiles.filter((item) => item.visible === false).map((item) => item.id), ...tier })
     .filter((tool) => tool.legacyHub)
@@ -97,7 +102,7 @@ export default function Hub() {
       <div className="flex items-center justify-between"><h1 className="text-xl font-bold">Your tools</h1><HubCustomizeButton onApply={loadPrefs} /></div>
       <HubModules>{tools.map((tool) => <ToolCard key={tool.id} tileId={tool.id} title={tool.title} tool={tool} onAction={onAction} />)}</HubModules>
       {!isProUser(user) && <p className="job-muted">Cheaper than a coffee - view plans for more tools.</p>}
-      <AIPanel open={aiOpen} onClose={() => setAiOpen(false)} mode="training" />
+      <AIPanel open={aiOpen} onClose={closeAI} mode="training" />
     </div>
   );
 }

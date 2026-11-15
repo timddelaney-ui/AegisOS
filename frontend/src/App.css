@@ -87,4 +87,8 @@ input[type="number"] {
 .job-alarm.critical { border-color: #fda4af; color: #fecdd3; }
 .job-sparkline { display: block; width: 100%; height: 100px; margin-block: .5rem; }
 .job-page [aria-pressed="true"].job-secondary { border-color: #ff9c66; color: #ff9c66; }
+.job-safety-card { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; padding: .75rem; background: #29131e; color: #fecdd3; border: 1px solid #fda4af; border-radius: .75rem; }
+.job-safety-card span { color: #fecdd3; font-size: .8rem; margin-left: auto; }
+.job-tool-filters { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .25rem; }
+.job-tool-filters button { font-size: .75rem; padding: .5rem .15rem; }
 @media print { .job-shell-header, .job-bottom-nav { display: none; } .job-shell { padding: 0; } }

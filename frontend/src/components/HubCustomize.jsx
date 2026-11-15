@@ -3,12 +3,11 @@ import axios from "axios";
 import { toast } from "sonner";
 import { API } from "../context/AuthContext";
 import { HUB_TILES, DEFAULT_TILE_ORDER } from "../lib/hubRegistry";
-import { X, Eye, EyeOff, ArrowUp, ArrowDown, Home } from "lucide-react";
+import { X, Eye, EyeOff, ArrowUp, ArrowDown } from "lucide-react";
 
 export const HubCustomizeButton = ({ onApply }) => {
   const [open, setOpen] = useState(false);
   const [tiles, setTiles] = useState([]);
-  const [homeDefault, setHomeDefault] = useState("hub");
 
   const load = async () => {
     try {
@@ -23,7 +22,6 @@ export const HubCustomizeButton = ({ onApply }) => {
       // Drop IDs that are no longer in registry
       const filtered = merged.filter((t) => HUB_TILES[t.id]).sort((a, b) => a.order - b.order);
       setTiles(filtered.map((t, i) => ({ ...t, order: i })));
-      setHomeDefault(r.data?.home_default || "hub");
     } catch { /* ignore */ }
   };
 
@@ -40,7 +38,7 @@ export const HubCustomizeButton = ({ onApply }) => {
 
   const save = async () => {
     try {
-      await axios.patch(`${API}/me/prefs`, { hub_tiles: tiles, home_default: homeDefault }, { withCredentials: true });
+      await axios.patch(`${API}/me/prefs`, { hub_tiles: tiles, home_default: "hub" }, { withCredentials: true });
       toast.success("Hub layout saved");
       setOpen(false);
       onApply && onApply();
@@ -56,7 +54,7 @@ export const HubCustomizeButton = ({ onApply }) => {
         onClick={openModal}
         className="text-[11px] font-bold bg-white border border-[#D4D4D4] hover:border-[#FF6B1A] rounded px-2 py-1 text-[#262626] flex items-center gap-1"
       >
-        <Eye className="w-3 h-3" />Customize home
+        <Eye className="w-3 h-3" /        >Customize tools
       </button>
 
       {open && (
@@ -69,15 +67,6 @@ export const HubCustomizeButton = ({ onApply }) => {
             <div className="flex items-center justify-between p-3 border-b border-[#E5E5E5]">
               <h2 className="font-bold text-sm text-[#262626] flex items-center gap-2"><Eye className="w-4 h-4" />Customize your Home</h2>
               <button onClick={() => setOpen(false)} className="text-[#595959] hover:bg-[#F3F4F6] rounded p-1"><X className="w-4 h-4" /></button>
-            </div>
-
-            <div className="p-3 border-b border-[#E5E5E5]">
-              <p className="text-[11px] font-bold uppercase text-[#595959] mb-1 flex items-center gap-1"><Home className="w-3 h-3" />Home default</p>
-              <select data-testid="home-default-select" value={homeDefault} onChange={(e) => setHomeDefault(e.target.value)} className="w-full border rounded px-2 py-1 text-sm">
-                <option value="hub">Hub (this page)</option>
-                <option value="live-ops">Live Ops dashboard</option>
-                <option value="workbook">Workbook (17 sheets)</option>
-              </select>
             </div>
 
             <div className="flex-1 overflow-y-auto p-3 space-y-1">
@@ -96,7 +85,7 @@ export const HubCustomizeButton = ({ onApply }) => {
                       </div>
                     )}
                     <span className="flex-1 min-w-0 text-xs font-bold truncate">{meta?.label || t.id}</span>
-                    <button data-testid={`toggle-tile-${t.id}`} onClick={() => toggle(t.id)} className={`p-1 rounded ${t.visible ? "text-[#FF6B1A]" : "text-[#C4C4C4]"}`}>
+                    <button data-testid={`toggle-tile-${t.id}`} disabled={meta.required} title={meta.required ? "Always available" : "Toggle visibility"} onClick={() => toggle(t.id)} className={`p-1 rounded ${t.visible ? "text-[#FF6B1A]" : "text-[#C4C4C4]"}`}>
                       {t.visible ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
                     </button>
                     <button data-testid={`move-up-${t.id}`} onClick={() => move(i, -1)} disabled={i === 0} className="p-1 text-[#595959] disabled:opacity-30"><ArrowUp className="w-4 h-4" /></button>
