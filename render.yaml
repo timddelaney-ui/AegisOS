@@ -10,7 +10,7 @@ services:
     envVars:
       - {key: APP_ENV, value: production}
       - {key: HITL_ENFORCE_OUTBOUND, value: "true"}
-      - {key: CORS_ORIGINS, value: "https://mycoiltubingpocketsupports.tech"}
+      - {key: CORS_ORIGINS, value: "https://mycoiltubingpocketsupports.tech,https://aegis-os2.vercel.app"}
       - {key: PUBLIC_APP_URL, value: "https://mycoiltubingpocketsupports.tech"}
       - {key: PUBLIC_API_URL, value: "https://api.mycoiltubingpocketsupports.tech"}
       - {key: DB_NAME, value: aegis}
