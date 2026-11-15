@@ -153,3 +153,20 @@ Focused checks:
 python -m pytest backend/tests/test_personal_wellbore.py -q
 node --experimental-vm-modules --test tests/frontend/wellboreGeometry.test.mjs
 ```
+
+## Private R2 file storage
+
+Company documents and photo/PDF attachments can use a private Cloudflare R2
+bucket. Create an R2 token scoped to that bucket with object read/write access.
+Add `R2_ENDPOINT_URL` (the account's HTTPS S3 API endpoint), `R2_BUCKET_NAME`,
+`R2_ACCESS_KEY_ID`, and `R2_SECRET_ACCESS_KEY` to the backend's environment
+secret settings. Do not place credentials in the repository or frontend.
+After deploying this code and saving those values, set
+`ATTACHMENT_STORAGE_BACKEND=r2` and redeploy. Keep bucket public access disabled.
+
+Uploads after the switch are stored in R2; older records without a provider
+marker continue to use Emergent storage. This does **not** migrate existing
+files: retain legacy credentials and storage access until those objects have
+been migrated and verified. Existing document and attachment team permissions
+and outbound approval requirements remain in effect. Test both a new upload and
+an existing download after enabling R2.

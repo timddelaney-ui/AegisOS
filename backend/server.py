@@ -1038,7 +1038,7 @@ async def delete_ctd_scenario(scenario_id: str, user: dict = Depends(require_use
 
 
 # ============ Company Documents (SOP library — team scoped) ============
-# Reuses the Emergent Object Storage layer (initialised later in file).
+# Reuses the object storage layer (initialised later in file).
 DOC_CATEGORIES = {"sop", "maintenance", "daily_checklist", "pre_job_checklist",
                   "reference", "regulation", "other"}
 DOC_ALLOWED_EXT = {"pdf", "png", "jpg", "jpeg", "webp"}
@@ -1113,6 +1113,7 @@ async def upload_company_doc(
         "tags": tag_list,
         "filename": raw_name[:200],
         "storage_path": result.get("path", storage_path),
+        "storage_backend": result.get("storage_backend", "emergent"),
         "content_type": mime,
         "size": result.get("size", len(data)),
         "uploader_user_id": user["user_id"],
@@ -1190,7 +1191,7 @@ async def download_company_doc(doc_id: str, auth: Optional[str] = None,
     if (not rec.get("team_id") or rec.get("team_id") != user.get("team_id")) and not _is_admin(user):
         raise HTTPException(403, "Document belongs to another team.")
     try:
-        data, ctype = _get_object(rec["storage_path"])
+        data, ctype = _get_object(rec["storage_path"], rec.get("storage_backend", "emergent"))
     except HTTPException:
         raise
     except Exception as e:
@@ -4568,7 +4569,7 @@ async def treatments_events_timeline(
 
 
 
-# ============ FILE / MEDIA STORAGE (Emergent Object Storage) ============
+# ============ FILE / MEDIA STORAGE ============
 STORAGE_BASE = (os.environ.get("INTEGRATION_PROXY_URL") or "").strip() or "https://integrations.emergentagent.com"
 STORAGE_URL = STORAGE_BASE.rstrip("/") + "/objstore/api/v1/storage"
 STORAGE_APP_NAME = "ctpocket"
@@ -4608,6 +4609,17 @@ def init_storage() -> Optional[str]:
 
 
 def _put_object(path: str, data: bytes, content_type: str) -> dict:
+    backend = os.environ.get("ATTACHMENT_STORAGE_BACKEND", "emergent").strip().lower()
+    if backend == "r2":
+        from services import r2_storage
+        try:
+            return r2_storage.put_object(path, data, content_type)
+        except r2_storage.StorageConfigurationError as e:
+            logger.error("R2 storage configuration error: %s", e)
+            raise HTTPException(503, "R2 storage is not configured.")
+    if backend != "emergent":
+        logger.error("Unsupported attachment storage backend: %s", backend)
+        raise HTTPException(503, "Object storage is not configured.")
     key = init_storage()
     if not key:
         raise HTTPException(503, "Object storage unavailable — retry shortly.")
@@ -4622,7 +4634,22 @@ def _put_object(path: str, data: bytes, content_type: str) -> dict:
     return r.json()
 
 
-def _get_object(path: str) -> tuple:
+def _get_object(path: str, backend: str = "emergent") -> tuple:
+    if backend == "r2":
+        from services import r2_storage
+        from botocore.exceptions import ClientError
+        try:
+            return r2_storage.get_object(path)
+        except r2_storage.StorageConfigurationError as e:
+            logger.error("R2 storage configuration error: %s", e)
+            raise HTTPException(503, "R2 storage is not configured.")
+        except ClientError as e:
+            if e.response.get("Error", {}).get("Code") in ("NoSuchKey", "NotFound", "404"):
+                raise HTTPException(404, "File not found in storage.")
+            raise
+    if backend != "emergent":
+        logger.error("Unsupported stored object backend: %s", backend)
+        raise HTTPException(503, "Object storage is not configured.")
     key = init_storage()
     if not key:
         raise HTTPException(503, "Object storage unavailable.")
@@ -4712,6 +4739,7 @@ async def upload_attachment(
         "caption": (caption or "").strip()[:300] or None,
         "filename": raw_name[:200],
         "storage_path": result.get("path", storage_path),
+        "storage_backend": result.get("storage_backend", "emergent"),
         "content_type": mime,
         "size": result.get("size", len(data)),
         "kind": "image" if mime.startswith("image/") else "pdf",
@@ -4769,7 +4797,7 @@ async def download_attachment(attachment_id: str, auth: Optional[str] = None, us
     if doc.get("team_id") and doc["team_id"] != user.get("team_id") and not _is_admin(user):
         raise HTTPException(403, "Attachment belongs to another team.")
     try:
-        data, ctype = _get_object(doc["storage_path"])
+        data, ctype = _get_object(doc["storage_path"], doc.get("storage_backend", "emergent"))
     except HTTPException:
         raise
     except Exception as e:
@@ -4915,7 +4943,8 @@ async def _ensure_indexes():
 @app.on_event("startup")
 async def _init_storage_on_boot():
     try:
-        init_storage()
+        if os.environ.get("ATTACHMENT_STORAGE_BACKEND", "emergent").strip().lower() == "emergent":
+            init_storage()
     except Exception as e:
         logger.warning("Storage boot init deferred: %s", e)
 
