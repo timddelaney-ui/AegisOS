@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import { Layers, Box, Play, Pause, RotateCcw, Users, Upload } from "lucide-react";
@@ -11,7 +11,8 @@ import {
 } from "../lib/operatorConfig";
 import { stationAt, surveyTD, DLS_WARN, DLS_CRIT } from "../lib/surveyInterp";
 import { DEMO_WELLBORE } from "../lib/wellboreGeometry";
-import SurveyWellbore3D from "./operator/SurveyWellbore3D";
+const SurveyRenderer = lazy(() => import("./operator/SurveyWellbore3D"));
+const SurveyWellbore3D = (props) => <Suspense fallback={<div className="job-loading" role="status">Loading 3D viewer...</div>}><SurveyRenderer {...props} /></Suspense>;
 import { PlugTally } from "./operator/PlugTally";
 import { PlugManagerModal, PLUG_TYPES } from "./operator/PlugManagerModal";
 import { usePlugTestRun } from "./operator/usePlugTestRun";

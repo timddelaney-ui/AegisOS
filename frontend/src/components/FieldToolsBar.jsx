@@ -49,7 +49,7 @@ export default function FieldToolsBar() {
           <button onClick={() => toggleManual(false)} className="px-3 py-2 rounded border-2 border-white text-xs font-bold" data-testid="manual-exit">Exit manual mode</button>
         </div>
       )}
-      <div className="aegis-no-print fixed bottom-8 left-2 z-[60] flex flex-col items-start gap-1" data-testid="field-tools">
+      <div className="aegis-no-print fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] left-2 z-[60] flex flex-col items-start gap-1" data-testid="field-tools">
         {open && (
           <div className="flex flex-wrap gap-1 p-2 rounded-lg bg-white border-2 border-black shadow-xl max-w-[92vw]">
             <button className={btn} onClick={() => doExport("json")} data-testid="export-json"><Download className="w-4 h-4" />Export JSON</button>

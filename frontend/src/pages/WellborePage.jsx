@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
@@ -8,7 +8,8 @@ import { useAuth, API } from "../context/AuthContext";
 import { useActiveReel } from "../context/ActiveReelContext";
 import { isSupervisorOrHigher, isGuest } from "../lib/roles";
 import ShareLinksButton from "../components/ShareLinksButton";
-import SurveyWellbore3D from "../components/operator/SurveyWellbore3D";
+const SurveyRenderer = lazy(() => import("../components/operator/SurveyWellbore3D"));
+const SurveyWellbore3D = (props) => <Suspense fallback={<div className="job-loading" role="status">Loading 3D viewer...</div>}><SurveyRenderer {...props} /></Suspense>;
 import { ViewerToolbar, ZoomButtons } from "../components/operator/ViewerToolbar";
 import { PlugManagerModal, PLUG_TYPES } from "../components/operator/PlugManagerModal";
 import { useOperatorUnits } from "../components/operator/useOperatorUnits";
