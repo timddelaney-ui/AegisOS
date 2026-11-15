@@ -1,4 +1,4 @@
-// Aegis OS service worker (v4).
+// Aegis OS service worker (v4.1).
 //   • Static same-origin assets: cache-first with background revalidate.
 //   • HTML navigation: network-first; falls back to the cached app shell,
 //     then /offline.html, so the installed PWA opens with no signal.
@@ -10,7 +10,7 @@
 //   • Background Sync ("aegis-drain"): replays the IndexedDB outbox written by
 //     src/lib/fieldStore.js even if no tab is open. Each item carries a client_id
 //     so the server de-duplicates replays.
-const SW_VERSION = "v4.0.0";
+const SW_VERSION = "v4.1.0";
 const STATIC_CACHE = `ct-static-${SW_VERSION}`;
 
 const SHELL = ["/", "/offline.html", "/manifest.json"];

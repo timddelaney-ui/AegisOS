@@ -10,6 +10,7 @@ import {
   minTierFor,
   FEATURE_SPECS,
 } from "../lib/tiers";
+import { getStateSync, setState } from "../lib/fieldStore";
 
 const TierContext = createContext(null);
 
@@ -39,9 +40,11 @@ export const TierProvider = ({ children }) => {
       const nextTier = data?.tier && TIER_ORDER.includes(data.tier) ? data.tier : TIER_PERSONAL;
       setTier(nextTier);
       setBetaUnlock(Boolean(data?.beta_unlock));
+      setState(`offline_tier:${user.user_id}`, { tier: nextTier, betaUnlock: Boolean(data?.beta_unlock) });
     } catch (e) {
-      setTier(TIER_PERSONAL);
-      setBetaUnlock(false);
+      const saved = !e.response ? getStateSync(`offline_tier:${user.user_id}`, null) : null;
+      setTier(saved && TIER_ORDER.includes(saved.tier) ? saved.tier : TIER_PERSONAL);
+      setBetaUnlock(!!saved?.betaUnlock);
     } finally {
       setLoaded(true);
     }

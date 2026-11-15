@@ -5,7 +5,10 @@ import { toast } from "sonner";
 import { Upload, Users, Plus } from "lucide-react";
 import { Phase1PageHeader } from "../components/Phase1Header";
 import { useAuth, API } from "../context/AuthContext";
-import { useActiveReel } from "../context/ActiveReelContext";
+import { useCurrentDepth } from "../context/ActiveReelContext";
+import { useActiveJobSelection, useJobActions } from "../context/ActiveJobContext";
+import { useJobPrefill } from "../hooks/useJobPrefill";
+import { getStateSync, setState } from "../lib/fieldStore";
 import { isSupervisorOrHigher, isGuest } from "../lib/roles";
 import ShareLinksButton from "../components/ShareLinksButton";
 const SurveyRenderer = lazy(() => import("../components/operator/SurveyWellbore3D"));
@@ -23,15 +26,19 @@ const errorMessage = (error, fallback) => typeof error?.response?.data?.detail =
 export default function WellborePage() {
   const { user } = useAuth();
   const u = useOperatorUnits();
-  const { currentDepth, setCurrentDepth } = useActiveReel();
+  const { currentDepth, setCurrentDepth } = useCurrentDepth();
+  const job = useActiveJobSelection();
+  const { updateJob } = useJobActions();
+  const seed = useJobPrefill();
   const canUpload = !isGuest(user) && (!user?.team_id || isSupervisorOrHigher(user));
-  const [surveys, setSurveys] = useState([]);
-  const [activeId, setActiveId] = useState(null);
+  const surveysKey = `api_cache:${user?.user_id}:/surveys:{}`;
+  const [surveys, setSurveys] = useState(() => getStateSync(surveysKey, null)?.data?.surveys || []);
+  const activeId = job.well.surveyId;
   const [loadError, setLoadError] = useState(null);
   const [file, setFile] = useState(null);
-  const [wellName, setWellName] = useState("");
+  const [wellName, setWellName] = useState(job.well.name);
   const [uploading, setUploading] = useState(false);
-  const [depth, setDepth] = useState(currentDepth || 14233);
+  const [depth, setDepth] = useState(seed.depthFt ?? currentDepth ?? 14233);
   const [view, setView] = useState("3d");
   const [command, setCommand] = useState(null);
   const [orbit, setOrbit] = useState(false);
@@ -61,13 +68,13 @@ export default function WellborePage() {
       const { data } = await axios.get(`${API}/surveys`, { withCredentials: true });
       const list = (data.surveys || []).filter((item) => item.stations?.length > 1);
       setSurveys(list);
-      setActiveId(data.active_survey_id || list[0]?.survey_id || null);
+      setState(surveysKey, { data, savedAt: new Date().toISOString() });
       setLoadError(null);
     } catch (error) {
       console.error("[Wellbore] survey load failed", error);
       setLoadError(errorMessage(error, "Could not load your saved surveys. The view below is a demo."));
     }
-  }, []);
+  }, [surveysKey]);
   useEffect(() => { refresh(); }, [refresh]);
 
   const loadPlugs = useCallback(async () => {
@@ -93,14 +100,14 @@ export default function WellborePage() {
     setCommand((previous) => ({ type, n: (previous?.n || 0) + 1 }));
   };
   const selectSurvey = async (id) => {
-    if (id === DEMO_WELLBORE.survey_id) { setActiveId(id); return; }
+    if (id === DEMO_WELLBORE.survey_id) { updateJob({ well: { name: job.well.name, surveyId: null } }); return; }
     const selected = surveys.find((item) => item.survey_id === id);
     const canActivate = isSupervisorOrHigher(user) || selected?.team_id === `personal:${user.user_id}`;
     if (canActivate) {
       try { await axios.post(`${API}/surveys/${id}/activate`, {}, { withCredentials: true }); }
       catch (error) { toast.error(errorMessage(error, "Could not activate this survey.")); return; }
     }
-    setActiveId(id);
+    updateJob({ well: { name: selected?.well_name || job.well.name, surveyId: id } });
   };
 
   const upload = async () => {
@@ -114,8 +121,9 @@ export default function WellborePage() {
     try {
       const response = await axios.post(`${API}/surveys/upload`, data, { withCredentials: true });
       await axios.post(`${API}/surveys/${response.data.survey_id}/activate`, {}, { withCredentials: true });
+      updateJob({ well: { name: wellName.trim(), surveyId: response.data.survey_id } });
       toast.success(user?.team_id ? "Survey saved to your team." : "Survey saved privately to your account.");
-      setFile(null); setWellName("");
+      setFile(null);
       if (fileInput.current) fileInput.current.value = "";
       await refresh();
     } catch (error) { toast.error(errorMessage(error, "Could not save the survey.")); }
@@ -139,6 +147,7 @@ export default function WellborePage() {
 
   return (
     <div className="min-h-screen ca-console-shell text-slate-100">
+      <p className="job-muted px-3 py-2">View depth snapshot: {seed.source}. Survey geometry is not a live measurement.</p>
       <Phase1PageHeader title="Wellbore & Plugs" subtitle="Explore the well path, locate plugs and inspect the bit."
         right={!isDemo && user?.team_id === survey.team_id && user?.team_id ? <ShareLinksButton scope="wellbore" compact /> : null} />
       <div className="max-w-6xl mx-auto p-3 space-y-4 pb-24">

@@ -4,6 +4,7 @@ import AppShell from "./components/AppShell";
 import JobPage from "./pages/JobPage";
 import LivePage from "./pages/LivePage";
 import MorePage from "./pages/MorePage";
+import CalcPage from "./pages/CalcPage";
 import Login from "./pages/Login";
 import AuthCallback from "./pages/AuthCallback";
 import Pricing from "./pages/Pricing";
@@ -93,7 +94,7 @@ const AppRouter = () => {
   }
   return (
     <>
-      <FieldToolsBar />
+      {["/login", "/terms", "/pricing", "/payment/success", "/payment/cancel"].includes(location.pathname) && <FieldToolsBar />}
       <TrainingModeBanner />
       <BetaFeedbackDrawer />
       <Suspense fallback={<ScreenLoading />}><Routes>
@@ -108,7 +109,7 @@ const AppRouter = () => {
         <Route path="/job" element={<JobPage />} />
         <Route path="/live" element={<ProtectedRoute feature="live_ops"><LivePage /></ProtectedRoute>} />
         <Route path="/log" element={<ProtectedRoute feature="treatment_log"><TreatmentPage /></ProtectedRoute>} />
-        <Route path="/calc" element={<ProtectedRoute feature="workbooks"><Workbook /></ProtectedRoute>} />
+        <Route path="/calc" element={<CalcPage />} />
         <Route path="/more" element={<MorePage />} />
         <Route path="/sop" element={<ProtectedRoute feature="workbooks"><Workbook /></ProtectedRoute>} />
         <Route path="/app" element={<ProtectedRoute feature="workbooks"><Workbook /></ProtectedRoute>} />

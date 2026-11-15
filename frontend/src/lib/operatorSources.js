@@ -3,6 +3,7 @@ const liveFields = {
   whp: ["whp_psi", "wellhead_pressure_psi"], weight: ["weight_lb"],
   internalPress: ["p_internal_psi"], annulusPress: ["p_external_psi", "annulus_pressure_psi"],
   vonMises: ["vm_utilization"], n2Rate: ["n2Rate"],
+  skatePressure: ["traction_pressure_psi", "p_skate_psi"],
 };
 export function operatorValueSource({ feedMode, liveStale, lastLiveSample }, key) {
   const hasLiveField = lastLiveSample && (liveFields[key] || [key]).some((field) => lastLiveSample[field] != null);

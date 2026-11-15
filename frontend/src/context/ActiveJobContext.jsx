@@ -16,6 +16,7 @@ function loadJobs(key) {
     const job = createActiveJob(uuid(), {
       rig: localStorage.getItem("ctp_active_rig_v2") || "RIG1",
       activeReel: getStateSync("active_reel_snapshot", null)?.activeReel || null,
+      legacyInputs: true,
     });
     return { activeJobId: job.jobId, jobs: [job] };
   } catch (error) {
@@ -43,8 +44,8 @@ function JobSession({ storageKey, children }) {
     checkItem: (phase, itemId, done) => dispatch({ type: "check", phase, itemId, done, at: new Date().toISOString() }),
   }), [job.rig]);
   const selection = useMemo(() => ({
-    jobId: job.jobId, rig: job.rig, runNumber: job.runNumber, well: job.well, activeReel: job.activeReel,
-  }), [job.jobId, job.rig, job.runNumber, job.well, job.activeReel]);
+    jobId: job.jobId, rig: job.rig, runNumber: job.runNumber, well: job.well, activeReel: job.activeReel, legacyInputs: !!job.legacyInputs,
+  }), [job.jobId, job.rig, job.runNumber, job.well, job.activeReel, job.legacyInputs]);
   const value = useMemo(() => ({ ...job, jobs: state.jobs, ...actions }), [job, state.jobs, actions]);
   return (
     <ActionsContext.Provider value={actions}>

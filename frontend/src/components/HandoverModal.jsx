@@ -9,6 +9,8 @@ import { requestHitlApproval } from "../lib/hitl";
 import { loadHandoverLog, treatmentLogText } from "../lib/handoverLog";
 import { getStateSync, setState } from "../lib/fieldStore";
 import { useAuth } from "../context/AuthContext";
+import { useActiveJobSelection } from "../context/ActiveJobContext";
+import { draftKey, readDrafts } from "../lib/treatmentDrafts";
 
 // 24-hour military-time display across the handover.
 import { fmtDateTime } from "../lib/timeFormat";
@@ -80,6 +82,8 @@ const Section = ({ title, Icon, accent, count, children }) => (
 const HandoverModal = ({ open, onClose }) => {
   const { rigId } = useRig();
   const { user } = useAuth();
+  const job = useActiveJobSelection();
+  const localDrafts = readDrafts(draftKey(user?.user_id, job.jobId)).filter((entry) => entry.rig_id === rigId);
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -585,6 +589,10 @@ const HandoverModal = ({ open, onClose }) => {
 
           {summary && (
             <>
+              {localDrafts.length > 0 && <p className="job-card">This job has {localDrafts.length} unsent or unconfirmed device drafts. They are not included in the shared handover or crew email; review them in Log.</p>}
+              <Section title="Treatment log (rig / selected time window)" Icon={FileText} accent="#0E7490" count={summary.treatment_entries?.length || 0}>
+                <pre className="whitespace-pre-wrap break-words font-sans text-[#262626]">{treatmentLogText(summary.treatment_entries || [])}</pre>
+              </Section>
               <Section title="Completed tasks" Icon={ClipboardCheck} accent="#FF6B1A" count={summary.completed_tasks.length}>
                 {summary.completed_tasks.length === 0 ? (
                   <div className="text-[#8A8A8A] italic px-1">No checklist activity in this window.</div>

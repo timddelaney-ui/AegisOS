@@ -1,6 +1,8 @@
 import React, { useMemo, useState, useEffect, useRef } from "react";
 import { Phase1PageHeader } from "../components/Phase1Header";
-import { useActiveReel } from "../context/ActiveReelContext";
+import { useCurrentDepth } from "../context/ActiveReelContext";
+import { useActiveJobSelection } from "../context/ActiveJobContext";
+import { useJobPrefill } from "../hooks/useJobPrefill";
 import { useUnits } from "../context/UnitContext";
 import { triaxialVonMises, vmEnvelope, intervalAt } from "../lib/ctPhysics";
 import { AlertTriangle, Volume2, VolumeX, Zap } from "lucide-react";
@@ -18,12 +20,14 @@ const num = (v, def = 0) => {
 };
 
 export default function VonMisesPage() {
-  const { activeReel, currentDepth, setCurrentDepth } = useActiveReel();
+  const { activeReel } = useActiveJobSelection();
+  const { currentDepth, setCurrentDepth } = useCurrentDepth();
+  const seed = useJobPrefill();
   const u = useUnits();
-  const [depth, setDepth] = useState(currentDepth || 0);
-  const [p_i, setPi] = useState(5000);
-  const [p_o, setPo] = useState(0);
-  const [F_axial, setF] = useState(0);
+  const [depth, setDepth] = useState(seed.depthFt ?? currentDepth ?? 0);
+  const [p_i, setPi] = useState(seed.telemetry?.internalPress ?? 5000);
+  const [p_o, setPo] = useState(seed.telemetry?.annulusPress ?? 0);
+  const [F_axial, setF] = useState(seed.telemetry?.axial_force_lbf ?? 0);
   const [muted, setMuted] = useState(() => {
     try { return localStorage.getItem("coilaegis_vm_muted") === "1"; } catch { return false; }
   });
@@ -98,6 +102,7 @@ export default function VonMisesPage() {
 
   return (
     <div className="min-h-screen ca-console-shell relative">
+      <p className="job-muted px-3 py-2">Initial snapshot / Depth: {seed.sources.depth}; internal pressure: {seed.sources.internalPress}; external pressure: {seed.sources.annulusPress}; axial force: {seed.telemetry?.axial_force_lbf != null ? seed.sources.axial_force_lbf : "manual default"}. Results are calculated, not live readings.</p>
       <div className="relative z-10">
       <Phase1PageHeader title="API RP 5C7 Triaxial · Von Mises Egg" subtitle="Thick-wall Lamé · 80 % SMYS working limit · 100 % SMYS yield · [API RP 5C7 §4.2.1 / ISO 13628-7]" right={
         <div className="flex items-center gap-1">

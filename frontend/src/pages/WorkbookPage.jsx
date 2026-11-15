@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Clock } from "lucide-react";
 import ExcelHeader from "../components/ExcelHeader";
 import FormulaBar from "../components/FormulaBar";
@@ -7,18 +7,19 @@ import SheetContent from "../components/SheetContent";
 import EmergencySheet from "../components/EmergencySheet";
 import SheetTabs from "../components/SheetTabs";
 import Paywall from "../components/Paywall";
-import RigSelector from "../components/RigSelector";
 import ServiceToggle, { useServiceView } from "../components/ServiceToggle";
-import { AdvisoryStrip } from "../components/AdvisoryDisclaimer";
 import { useUnits } from "../context/UnitContext";
 import { useAuth, isProUser } from "../context/AuthContext";
 import { workbookData } from "../mock/workbookData";
 import { sheetInService } from "../lib/serviceCatalog";
+import { useJobPrefill } from "../hooks/useJobPrefill";
 
 const FREE_SHEETS = ["Pipe_Stretch", "Sand_Cleanout", "Fishing_Ops", "CT_Milling", "Frac_Through_CT", "Annular_Frac"];
 
 export default function WorkbookPage() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const seed = useJobPrefill();
   const initialLoadJob = location.state?.loadJob;
   const [currentSheet, setCurrentSheet] = useState(
     location.pathname === "/sop" || location.state?.openEmergency ? "EMERGENCY" : initialLoadJob?.sheet_key || "Pipe_Stretch",
@@ -48,7 +49,7 @@ export default function WorkbookPage() {
 
   useEffect(() => {
     if (initialLoadJob?.unit_system) setSystem(initialLoadJob.unit_system === "met" ? "metric" : "imperial");
-    if (initialLoadJob) window.history.replaceState({}, "");
+    if (initialLoadJob || location.state?.openEmergency) navigate(location.pathname, { replace: true, state: null });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -57,12 +58,11 @@ export default function WorkbookPage() {
     : workbookData[currentSheet] ? `=VET_MODEL("${workbookData[currentSheet].sop.split("|")[0].trim()}")` : "=CALCULATE_CT_MODEL(API_5CT_SPEC)";
 
   return (
-    <div className="workbook-root bg-[#F3F3F3] text-[#262626] flex flex-col min-h-[70dvh]">
+    <div className="workbook-root job-legacy-screen bg-[#F3F3F3] text-[#262626] flex flex-col min-h-[70dvh]">
       <ExcelHeader />
-      <RigSelector />
       <ServiceToggle compact />
       <FormulaBar formulaText={formulaText} />
-      <AdvisoryStrip />
+      <p className="job-muted px-3 py-2">Input snapshot: {seed.source}. Explicit saved inputs take priority.</p>
       {!isPro && (
         <div className={`border-b px-3 py-1.5 flex items-center justify-between text-[11px] flex-shrink-0 ${trial.active ? "bg-[#FFF3CD] text-[#856404]" : "bg-[#F8D7DA] text-[#721C24]"}`}>
           <span className="font-semibold flex items-center gap-1.5">
@@ -75,7 +75,7 @@ export default function WorkbookPage() {
       <div className="flex-1 overflow-y-auto p-2">
         {sheetIsLocked ? <Paywall sheetTitle={currentSheet === "EMERGENCY" ? "Emergency SOPs" : workbookData[currentSheet]?.title || "This sheet"} trialExpired={!trial.active} />
           : currentSheet === "EMERGENCY" ? <EmergencySheet />
-            : <SheetContent sheetKey={currentSheet} unitSystem={unitSystem} onUnitChange={setUnitSystem} initialValues={loadedValues} hasTeam={!!user?.team_id} />}
+            : <SheetContent sheetKey={currentSheet} unitSystem={unitSystem} onUnitChange={setUnitSystem} initialValues={loadedValues} hasTeam={!!user?.team_id} jobSeed={seed} />}
       </div>
       <SheetTabs currentSheet={currentSheet} onSelectSheet={(key) => { setCurrentSheet(key); setLoadedValues(null); }} freeSheets={FREE_SHEETS} isPro={isPro} trialActive={trial.active} />
     </div>

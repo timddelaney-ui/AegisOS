@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useMemo } from "react";
+import React, { createContext, useCallback, useContext, useMemo, useRef } from "react";
 import { useActiveJobSelection, useJobActions, useJobMode } from "./ActiveJobContext";
 import { useTier } from "./TierContext";
 import { useCachedApi } from "../hooks/useCachedApi";
@@ -12,6 +12,8 @@ export const OperatorTelemetryContext = createContext({
   telemetry: null, sourceLabel: "no current feed", history: [], bitFt: null,
 });
 export const useOperatorTelemetry = () => useContext(OperatorTelemetryContext);
+const SnapshotReaderContext = createContext(() => null);
+export const useOperatorSnapshotReader = () => useContext(SnapshotReaderContext);
 
 function ScopedFeed({ job, surveys, children }) {
   const feedMode = useJobMode();
@@ -33,7 +35,10 @@ function ScopedFeed({ job, surveys, children }) {
     setFeedMode,
     bitFt: corr.moveTarget === "ct_string" ? feed.telemetry.depth + corr.offsetFt : feed.telemetry.depth,
   }), [feed, feedMode, sourceLabel, sourceFor, live, minFt, maxFt, corr, survey, surveys, job.well, updateJob, setFeedMode]);
-  return <OperatorTelemetryContext.Provider value={value}>{children}</OperatorTelemetryContext.Provider>;
+  const latest = useRef(value);
+  latest.current = value;
+  const readSnapshot = useCallback(() => latest.current, []);
+  return <SnapshotReaderContext.Provider value={readSnapshot}><OperatorTelemetryContext.Provider value={value}>{children}</OperatorTelemetryContext.Provider></SnapshotReaderContext.Provider>;
 }
 
 export function OperatorTelemetryProvider({ children }) {

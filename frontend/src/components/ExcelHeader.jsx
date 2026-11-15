@@ -103,7 +103,7 @@ const AppHeader = () => {
           >
             <HelpCircle className="w-5 h-5" />
           </button>
-          <button onClick={() => setMenuOpen(true)} data-testid="menu-open" className="p-2 -mr-1 hover:bg-white/10 rounded tap-44" aria-label="Open menu">
+          <button onClick={() => setMenuOpen(true)} data-testid="menu-open" className="p-2 hover:bg-white/10 rounded tap-44" aria-label="Open menu">
             <Menu className="w-5 h-5" />
           </button>
         </div>

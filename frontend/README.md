@@ -2,6 +2,57 @@
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
 
+## Job-first field workspace
+
+React 19, CRACO and React Router remain unchanged. Authenticated tools share an
+AppShell with Job (`/job`), Live (`/live`), Log (`/log`), Calc (`/calc`) and More
+(`/more`). Existing tool URLs remain valid; `/` and `/hub` redirect authenticated
+users to Job. Workbook and the 3D viewer are lazy-loaded. Emergency SOPs, the
+advisory notice and connection status remain available throughout the workspace.
+
+`src/config/toolRegistry.js` is the single discovery source for titles, routes,
+phases, roles, tiers and pinned tools. Existing server permissions still apply.
+Operational jobs are **device-local**, per signed-in account, under
+`aegis_active_jobs_v1:<userId>`; they are not the server's saved-calculation jobs.
+Plan / Rig up / Run / Handover checklists and SIM / STANDBY / LIVE mode persist.
+SI/IMP retains its existing global preference. Telemetry and changing depth are
+separate from job/checklist state. Calculator prefills are opening-time snapshots,
+not continuously changing inputs; saved/explicit inputs take precedence. The first
+migrated job can restore legacy workbook/fatigue inputs; later jobs are isolated.
+
+After a successful online visit, the service worker precaches static/lazy assets.
+Offline reopening uses the last verified workspace and cached plan access, labeled
+as such, without caching credentials. Reconnection checks the server again;
+confirmed 401/403 responses remove cached access. Logout removes offline access.
+Clearing browser storage removes local jobs/drafts; use shared logs for durable
+crew records.
+
+Treatment logs remain **rig-scoped**, not job-ID-scoped. Offline entries are durable
+device drafts with explicit destination review/upload. They are never automatically
+replayed: treatment creation/entry endpoints have no idempotency support. Ambiguous
+delivery is marked unconfirmed; verify the shared log before retrying or removing
+the draft. A draft tied to a different treatment cannot silently move to a new one.
+Shared treatment creation and email require connectivity. Handover previews the
+selected rig/time-window log; unsent drafts are explicitly excluded. Existing crew
+contacts, confirmations and human-in-the-loop approval govern email.
+
+### Validation and known risks
+
+Use `CI=true npm run build` and `CI=true npm test -- --watchAll=false --runInBand`.
+Reducer, registry, feed provenance, input prefills, durable drafts, cache races and
+offline-workspace behavior have focused tests. The unchanged baseline also fails
+two CT-segment benchmark assertions, the StringHistoryImport axios mock setup and
+CRA/Jest resolution of `react-router/dom`; no calculation formulas were changed to
+make those failures disappear.
+
+The optional Emergent overlay tarball may be unreachable during dependency
+installation. Validation can use an isolated manifest copy without those optional
+development tools; do not migrate the build system. The main application bundle
+remains large despite the new lazy screens. Cross-device operational-job sync,
+server-idempotent log replay and job-ID-specific shared log partitioning require
+separate backend work. Final site acceptance should exercise real DAQ, crew email,
+existing classic consoles and device-specific 3D performance.
+
 ## Available Scripts
 
 In the project directory, you can run:

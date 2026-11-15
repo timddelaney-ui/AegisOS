@@ -78,7 +78,7 @@ export default function NotificationCenter() {
 
   const path = location.pathname;
   const onTeamPage = path.startsWith("/team");
-  const onTreatmentPage = path.startsWith("/treatment");
+  const onTreatmentPage = path.startsWith("/treatment") || path === "/log";
 
   // Fire an OS notification (only visible when tab is backgrounded).
   const notifyOS = useCallback((title, body, onClick) => {

@@ -15,7 +15,7 @@ export function registerServiceWorker() {
     }).catch(() => {});
     return;
   }
-  window.addEventListener("load", async () => {
+  const register = async () => {
     try {
       const reg = await navigator.serviceWorker.register("/service-worker.js");
       // If a new SW took over while the user had the app open, reload once so
@@ -38,7 +38,9 @@ export function registerServiceWorker() {
       // Non-fatal — the app works fine without SW
       console.debug("SW register failed:", err?.message || err);
     }
-  });
+  };
+  if (document.readyState === "complete") register();
+  else window.addEventListener("load", register, { once: true });
 }
 
 const STORAGE_KEY = "ctp_install_prompt_dismissed_v1";

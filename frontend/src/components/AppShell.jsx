@@ -5,6 +5,8 @@ import { useRig, rigLabel } from "../context/RigContext";
 import { AdvisoryStrip } from "./AdvisoryDisclaimer";
 import { useActiveJob } from "../context/ActiveJobContext";
 import { OperatorTelemetryProvider } from "../context/OperatorTelemetryContext";
+import { useAuth } from "../context/AuthContext";
+import FieldToolsBar from "./FieldToolsBar";
 
 const tabs = [
   { to: "/job", label: "Job", Icon: BriefcaseBusiness },
@@ -17,6 +19,7 @@ const tabs = [
 export default function AppShell() {
   const { rigId } = useRig();
   const job = useActiveJob();
+  const { offlineWorkspace } = useAuth();
   const { pathname } = useLocation();
   const section = pathname === "/app" || ["/stress", "/fatigue", "/ctd-calculator", "/wellbore"].includes(pathname)
     ? "/calc" : pathname.startsWith("/live-ops") ? "/live" : pathname === "/treatment" ? "/log" : pathname;
@@ -31,8 +34,9 @@ export default function AppShell() {
         <span className="job-rig-badge">{rigLabel(rigId)}</span>
         <Link to="/sop" className="job-sop" aria-label="Emergency SOPs"><AlertOctagon size={18} /> SOP</Link>
       </header>
+      <div className="job-status-row"><span className="job-muted">{offlineWorkspace ? "Offline workspace / last verified access" : "Job-first field workspace"}</span><FieldToolsBar inline /></div>
       <AdvisoryStrip />
-      <main className="job-shell-content"><OperatorTelemetryProvider><Outlet /></OperatorTelemetryProvider></main>
+      <main className="job-shell-content"><OperatorTelemetryProvider><Outlet key={`${job.jobId}:${job.rig}:${job.runNumber}`} /></OperatorTelemetryProvider></main>
       <nav className="job-bottom-nav" aria-label="Main navigation">
         {tabs.map(({ to, label, Icon }) => (
           <NavLink key={to} to={to} className={({ isActive }) => isActive || section === to ? "job-tab active" : "job-tab"}>

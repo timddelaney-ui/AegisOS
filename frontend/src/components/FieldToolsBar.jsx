@@ -10,7 +10,7 @@ const THEME_ICON = { standard: Contrast, sunlight: Sun, night: Moon };
 const btn = "aegis-no-print flex items-center gap-1 px-3 py-2 rounded border-2 border-black bg-white text-black text-xs font-bold";
 
 // Always-available field controls: sync status, cabin theme, one-tap local export, manual override.
-export default function FieldToolsBar() {
+export default function FieldToolsBar({ inline = false }) {
   const [open, setOpen] = useState(false);
   const [online, setOnline] = useState(typeof navigator === "undefined" ? true : navigator.onLine);
   const [pending, setPending] = useState(0);
@@ -49,9 +49,9 @@ export default function FieldToolsBar() {
           <button onClick={() => toggleManual(false)} className="px-3 py-2 rounded border-2 border-white text-xs font-bold" data-testid="manual-exit">Exit manual mode</button>
         </div>
       )}
-      <div className="aegis-no-print fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] left-2 z-[60] flex flex-col items-start gap-1" data-testid="field-tools">
+      <div className={inline ? "aegis-no-print relative z-[60] flex flex-col items-end gap-1" : "aegis-no-print fixed bottom-8 left-2 z-[60] flex flex-col items-start gap-1"} data-testid="field-tools">
         {open && (
-          <div className="flex flex-wrap gap-1 p-2 rounded-lg bg-white border-2 border-black shadow-xl max-w-[92vw]">
+          <div className={`flex flex-wrap gap-1 p-2 rounded-lg bg-white border-2 border-black shadow-xl max-w-[92vw] ${inline ? "absolute right-0 top-full w-[340px]" : ""}`}>
             <button className={btn} onClick={() => doExport("json")} data-testid="export-json"><Download className="w-4 h-4" />Export JSON</button>
             <button className={btn} onClick={() => doExport("csv")} data-testid="export-csv"><Download className="w-4 h-4" />Export CSV</button>
             <button className={btn} onClick={cycleTheme} data-testid="theme-toggle"><ThemeIcon className="w-4 h-4" />{theme}</button>
