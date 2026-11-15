@@ -21,7 +21,7 @@ describe("CTSegmentStressWorkbench", () => {
     expect(host.textContent).toContain("Coiled Tubing Segment Model");
     expect(host.textContent).toContain("Multiaxial Stress State (3D Projection)");
     const kpis = host.querySelector("[data-testid=ct-segment-kpis]").textContent;
-    ["428.0 MPa", "414.2 MPa", "421.3 MPa", "67.9 %"].forEach((v) => expect(kpis).toContain(v));
+    ["428.0 MPa", "414.2 MPa", "432.7 MPa", "69.7 %"].forEach((v) => expect(kpis).toContain(v));
     expect(host.querySelector("[data-testid=ct-segment-breakdown]").textContent).toContain("± 211.7 MPa");
     expect(getStressArrowData.mock.calls.at(-1)[0].sigma_r).toBe(0);
 

@@ -1,7 +1,7 @@
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 
-jest.mock("axios", () => ({ get: jest.fn(), post: jest.fn() }));
+jest.mock("axios", () => ({ defaults: {}, get: jest.fn(), post: jest.fn() }));
 jest.mock("sonner", () => ({ toast: { error: jest.fn(), success: jest.fn() } }));
 
 import axios from "axios";
