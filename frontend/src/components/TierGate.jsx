@@ -108,8 +108,9 @@ export function UpgradeModal() {
             <div className="text-[11px] text-slate-500 mb-2">{spec?.tagline}</div>
             {spec?.price_monthly_usd ? (
               <div className="text-xl font-bold" style={{ color: spec?.accent }}>
-                ${spec.price_monthly_usd}<span className="text-xs text-slate-400 font-normal"> /mo</span>
-                {" "}· ${spec.price_yearly_usd}<span className="text-xs text-slate-400 font-normal"> /yr</span>
+                $9.99 CAD<span className="text-xs text-slate-400 font-normal"> / month</span>
+                {" "}· $79.99 CAD<span className="text-xs text-slate-400 font-normal"> / year (Save 33%)</span>
+                <div className="text-[10px] text-slate-500 font-normal mt-1">No tax added.</div>
               </div>
             ) : (
               <div className="text-xl font-bold" style={{ color: spec?.accent }}>Custom — contact sales</div>

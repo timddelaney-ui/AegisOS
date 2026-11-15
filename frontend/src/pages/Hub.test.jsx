@@ -33,7 +33,7 @@ test.each([
   ["enterprise", "ops_manager"],
 ])("renders Hub for the %s tier and %s role without losing tools", (tier, role) => {
   useAuth.mockReturnValue({
-    user: { name: "Test user", role, subscription_tier: tier },
+    user: { name: "Test user", role, subscription_tier: tier, effective_plan: tier === "personal" ? "workbook_pro" : "aegis_fleet" },
   });
 
   const html = renderToString(<Hub />);
@@ -46,7 +46,10 @@ test.each([
     "equipment", "schedule", "treatment", "emergency", "training", "redeem", "feedback",
   ];
   if (role === "ops_manager") expected.push("crew-admin");
-  expect(tiles.sort()).toEqual(expected.sort());
+  // Reel Track, Manager Mode and Rig Telemetry tiles require Aegis Fleet.
+  const fleetOnly = ["live-ops", "daq", "reels", "fatigue", "crew-admin"];
+  const visible = tier === "personal" ? expected.filter((id) => !fleetOnly.includes(id)) : expected;
+  expect(tiles.sort()).toEqual(visible.sort());
   if (tier === "personal") {
     expect(html).toContain("Cheaper than a coffee");
   } else {

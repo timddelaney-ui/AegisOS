@@ -6,7 +6,8 @@ import { CheckCircle2, Loader2, XCircle } from "lucide-react";
 
 export const PaymentSuccess = () => {
   const [params] = useSearchParams();
-  const sessionId = params.get("session_id");
+  // PayPal returns the subscription as `subscription_id`.
+  const sessionId = params.get("session_id") || params.get("subscription_id");
   const [status, setStatus] = useState("polling");
   const [attempts, setAttempts] = useState(0);
   const navigate = useNavigate();

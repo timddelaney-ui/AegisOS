@@ -19,7 +19,8 @@ const tabs = [
 export default function AppShell() {
   const { rigId } = useRig();
   const job = useActiveJob();
-  const { offlineWorkspace } = useAuth();
+  const { user, offlineWorkspace } = useAuth();
+  const visibleTabs = tabs.filter(({ to }) => to !== "/live" || user?.effective_plan === "aegis_fleet");
   const { pathname } = useLocation();
   const section = pathname === "/app" || ["/stress", "/fatigue", "/ctd-calculator", "/wellbore"].includes(pathname)
     ? "/calc" : pathname.startsWith("/live-ops") ? "/live" : pathname === "/treatment" ? "/log" : pathname;
@@ -38,7 +39,7 @@ export default function AppShell() {
       <AdvisoryStrip />
       <main className="job-shell-content"><OperatorTelemetryProvider><Outlet key={`${job.jobId}:${job.rig}:${job.runNumber}`} /></OperatorTelemetryProvider></main>
       <nav className="job-bottom-nav" aria-label="Main navigation">
-        {tabs.map(({ to, label, Icon }) => (
+        {visibleTabs.map(({ to, label, Icon }) => (
           <NavLink key={to} to={to} className={({ isActive }) => isActive || section === to ? "job-tab active" : "job-tab"}>
             <Icon size={20} aria-hidden="true" /><span>{label}</span>
           </NavLink>

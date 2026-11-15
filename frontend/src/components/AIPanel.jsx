@@ -1,16 +1,12 @@
 import React, { useState, useRef, useEffect } from "react";
-import { X, Send, Loader2, Sparkles, Brain, AlertOctagon, FileText, Wrench, MessageSquare, GraduationCap, ChevronDown, ChevronRight, ShieldCheck } from "lucide-react";
+import { X, Send, Loader2, Sparkles, Wrench, MessageSquare, GraduationCap, ChevronDown, ChevronRight } from "lucide-react";
 import axios from "axios";
 import { API, useAuth } from "../context/AuthContext";
 
 const MODES = [
   { id: "assistant", label: "Field Assistant", Icon: MessageSquare, blurb: "Ask anything about the current sheet — pump rates, safe limits, procedures." },
-  { id: "interpret", label: "Explain Results", Icon: Brain, blurb: "Plain-field interpretation of the calculated numbers, risks, and next steps." },
-  { id: "sop_erp", label: "SOP / ERP", Icon: ShieldCheck, blurb: "Compliance-grade SOP + Safe-work + ERP guidance tied to this scenario — every answer cites API / AER / OH&S / CSA / IWCF." },
   { id: "troubleshoot", label: "Troubleshoot", Icon: Wrench, blurb: "Diagnose downhole scenarios (stuck pipe, kick, lost circulation) per industry SOPs." },
   { id: "training", label: "Training", Icon: GraduationCap, blurb: "New hand? Get plain-English explanations of what's happening downhole and why the numbers matter." },
-  { id: "program", label: "Job Program", Icon: FileText, blurb: "Draft a step-by-step CT job procedure from the current parameters." },
-  { id: "emergency", label: "Emergency", Icon: AlertOctagon, blurb: "Well-control and HSE emergency guidance per OH&S, AER, IWCF." },
 ];
 
 // Parse assistant response into labelled sections.
@@ -93,7 +89,11 @@ const AIMessage = ({ content }) => {
   );
 };
 
-const AIPanel = ({ open, onClose, contextBuilder, initialMode = "assistant" }) => {
+// The API accepts assistant | troubleshoot | training; older shortcuts fall back to the assistant.
+const normalizeMode = (m) => (MODES.some((x) => x.id === m) ? m : "assistant");
+
+const AIPanel = ({ open, onClose, contextBuilder, initialMode: requestedMode = "assistant" }) => {
+  const initialMode = normalizeMode(requestedMode);
   const { user } = useAuth();
   const [mode, setMode] = useState(initialMode);
   const [messages, setMessages] = useState([]);

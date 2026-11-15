@@ -53,7 +53,7 @@ import TermsPage from "./pages/TermsPage";
 import { AdvisoryFooter, AdvisoryModal } from "./components/AdvisoryDisclaimer";
 import { Toaster } from "./components/ui/sonner";
 import InstallAppPrompt, { registerServiceWorker } from "./components/InstallAppPrompt";
-import { useAuth } from "./context/AuthContext";
+import { useAuth, isFleetUser } from "./context/AuthContext";
 import { Loader2 } from "lucide-react";
 import FieldToolsBar from "./components/FieldToolsBar";
 import "./App.css";
@@ -77,6 +77,7 @@ const ProtectedRoute = ({ children, feature }) => {
   if (!user) return <Navigate to="/login" replace />;
   const tool = toolForPath(location.pathname);
   if (tool && !tool.roles.includes(planRole(user))) return <Navigate to="/job" replace />;
+  if (tool?.fleetOnly && !isFleetUser(user)) return <Navigate to="/" replace />;
   // Every feature route is isolated: a bad input/render error in one module
   // recovers silently (or shows a local retry) instead of blanking the app.
   const guarded = <ErrorBoundary name={feature || "route"} resetKey={location.pathname}>{children}</ErrorBoundary>;

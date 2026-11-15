@@ -79,8 +79,8 @@ export const AuthProvider = ({ children }) => {
     updateUser(data);
     setOfflineWorkspace(false);
     if (data?.user_id) {
-      const { user_id, name, role, team_id, subscription_tier, subscription_status, trial_expires_at } = data;
-      try { localStorage.setItem(OFFLINE_SESSION_KEY, JSON.stringify({ user_id, name, role, team_id, subscription_tier, subscription_status, trial_expires_at })); }
+      const { user_id, name, role, team_id, subscription_tier, subscription_status, trial_expires_at, effective_plan } = data;
+      try { localStorage.setItem(OFFLINE_SESSION_KEY, JSON.stringify({ user_id, name, role, team_id, subscription_tier, subscription_status, trial_expires_at, effective_plan })); }
       catch (error) { console.warn("[Auth] could not cache offline workspace", error?.message); }
     }
   }, []);
@@ -137,8 +137,15 @@ export const AuthProvider = ({ children }) => {
 
 export { API, BACKEND_URL };
 
+// Plan values come from GET /api/auth/me -> effective_plan.
+export const effectivePlan = (user) => user?.effective_plan || null;
+export const isFleetUser = (user) => effectivePlan(user) === "aegis_fleet";
+// Workbook Pro features (all sheets, SOPs, AI, wellbore, jobs, teams): paid plans and active trials.
+export const hasWorkbookAccess = (user) => ["workbook_pro", "aegis_fleet", "trial"].includes(effectivePlan(user));
+
 export const isProUser = (user) => {
   if (!user) return false;
+  if (effectivePlan(user)) return ["workbook_pro", "aegis_fleet"].includes(effectivePlan(user));
   if (user.subscription_tier === "enterprise") return true;
   if (user.subscription_status === "active") return true;
   return false;

@@ -16,9 +16,8 @@ import string
 import random
 import secrets
 import httpx
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, JSONResponse
 import requests
-import stripe
 from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
@@ -38,12 +37,18 @@ mongo_url = os.environ["MONGO_URL"]
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ["DB_NAME"]]
 
-# Stripe
 IS_PRODUCTION = os.environ.get("APP_ENV", "").lower() == "production"
-stripe.api_key = os.environ.get("STRIPE_SECRET_KEY") or ("" if IS_PRODUCTION else "sk_test_emergent")
-STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
-if IS_PRODUCTION and not (os.environ.get("STRIPE_SECRET_KEY") and STRIPE_WEBHOOK_SECRET):
-    raise RuntimeError("STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET are required when APP_ENV=production")
+
+# PayPal Subscriptions (CAD). Plans are created once by scripts_paypal_setup.py.
+PAYPAL_ENV = os.environ.get("PAYPAL_ENV", "live" if IS_PRODUCTION else "sandbox").lower()
+PAYPAL_BASE = "https://api-m.paypal.com" if PAYPAL_ENV == "live" else "https://api-m.sandbox.paypal.com"
+PAYPAL_CLIENT_ID = os.environ.get("PAYPAL_CLIENT_ID", "").strip()
+PAYPAL_CLIENT_SECRET = os.environ.get("PAYPAL_CLIENT_SECRET", "").strip()
+PAYPAL_WEBHOOK_ID = os.environ.get("PAYPAL_WEBHOOK_ID", "").strip()
+PAYPAL_PLAN_IDS = {
+    "ct_pro_monthly": os.environ.get("PAYPAL_PLAN_MONTHLY", "").strip(),
+    "ct_pro_yearly": os.environ.get("PAYPAL_PLAN_YEARLY", "").strip(),
+}
 
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
@@ -58,7 +63,7 @@ class User(BaseModel):
     team_id: Optional[str] = None
     role: str = "crew"  # crew | field_manager | ops_manager
     subscription_status: str = "free"  # free | active | canceled
-    subscription_plan: Optional[str] = None  # monthly | yearly
+    subscription_plan: Optional[str] = None  # workbook_pro | aegis_fleet | invite
     subscription_expires_at: Optional[datetime] = None
     trial_expires_at: Optional[datetime] = None
 
@@ -172,6 +177,9 @@ async def liveops_websocket(websocket: WebSocket):
     user = await _user_from_session_token(websocket.cookies.get("session_token"))
     if not user or not user.get("team_id"):
         await websocket.close(code=4401)
+        return
+    if get_effective_plan(user) != "aegis_fleet":
+        await websocket.close(code=4403)
         return
 
     session_token = websocket.cookies.get("session_token")
@@ -534,6 +542,7 @@ async def auth_me(user: dict = Depends(require_user)):
     # Ensure `role` is always present (default 'crew' for legacy users)
     if "role" not in data or not data.get("role"):
         data["role"] = "crew"
+    data["effective_plan"] = get_effective_plan(user)
     return data
 
 
@@ -673,60 +682,169 @@ def _resolve_user_tier(user: dict) -> str:
     return "personal"
 
 
+FLEET_PLAN_KEYS = {"aegis_fleet"}
+# Aegis Fleet only: Reel Track, Manager Mode, Rig Telemetry.
+FLEET_ONLY_PREFIXES = (
+    "/api/reels", "/api/fatigue",
+    "/api/rbac/promote", "/api/job-packages", "/api/timecards/approve-payroll", "/api/rigs",
+    "/api/liveops", "/api/daq",
+)
+
+
+def _is_beta_invitee(user: dict) -> bool:
+    """BETA_UNLOCK only applies to admins and users who redeemed an invite code."""
+    return bool(user.get("admin_unlocked")) or user.get("subscription_plan") == "invite" or bool(user.get("beta_invited"))
+
+
+def get_effective_plan(user: Optional[dict]) -> str:
+    """Resolve the entitlement plan: aegis_fleet | workbook_pro | trial | free."""
+    if not user:
+        return "free"
+    now = datetime.now(timezone.utc)
+    if (user.get("admin_unlocked")
+            or (user.get("subscription_tier") or "").strip().lower() == "enterprise"
+            or (user.get("subscription_plan") or "") in FLEET_PLAN_KEYS):
+        return "aegis_fleet"
+    if user.get("subscription_status") == "active":
+        exp = _parse_utc(user.get("subscription_expires_at"))
+        if exp is None or exp > now:
+            return "workbook_pro"
+    trial_exp = _parse_utc(user.get("trial_expires_at"))
+    if trial_exp is not None and trial_exp > now:
+        return "trial"
+    return "free"
+
+
+def _is_fleet_only_path(path: str) -> bool:
+    return any(path == p or path.startswith(p + "/") for p in FLEET_ONLY_PREFIXES)
+
+
+@app.middleware("http")
+async def fleet_plan_gate(request: Request, call_next):
+    if request.method != "OPTIONS" and _is_fleet_only_path(request.url.path):
+        token = request.cookies.get("session_token")
+        auth = request.headers.get("authorization", "")
+        user = await _user_from_session_token(token)
+        if not user and auth.startswith("Bearer "):
+            user = await _user_from_session_token(auth[7:])
+        # Unauthenticated requests fall through so the route itself returns 401.
+        if user and get_effective_plan(user) != "aegis_fleet":
+            return JSONResponse({"detail": "This feature requires an Aegis Fleet plan."}, status_code=403)
+    return await call_next(request)
+
+
 @api_router.get("/me/tier")
 async def my_tier(user: dict = Depends(require_user)):
-    """Returns the viewer's active plan tier plus the global BETA_UNLOCK
-    flag so the client can disable paywalls uniformly during Field Beta.
+    """Returns the viewer's active plan tier plus the BETA_UNLOCK flag
+    (honoured only for admins and invited beta users).
     """
     tier = _resolve_user_tier(user)
     return {
         "tier": tier,
-        "beta_unlock": BETA_UNLOCK or bool(user.get("admin_unlocked")),
+        "effective_plan": get_effective_plan(user),
+        "beta_unlock": (BETA_UNLOCK and _is_beta_invitee(user)) or bool(user.get("admin_unlocked")),
         "subscription_status": user.get("subscription_status", "free"),
         "subscription_plan": user.get("subscription_plan"),
     }
 
 
+def _plan_for_lookup(lookup_key: str) -> str:
+    return "aegis_fleet" if (lookup_key or "").startswith("aegis_fleet") else "workbook_pro"
+
+
+def _period_for_lookup(lookup_key: str) -> timedelta:
+    return timedelta(days=365) if (lookup_key or "").endswith("yearly") else timedelta(days=30)
+
+
+_paypal_token: Dict[str, Any] = {"value": None, "expires": 0.0}
+
+
+async def _paypal(method: str, path: str, **kwargs) -> Dict[str, Any]:
+    if not (PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET):
+        raise HTTPException(503, "Payments are not configured")
+    async with httpx.AsyncClient(timeout=30) as http:
+        if not _paypal_token["value"] or _paypal_token["expires"] < asyncio.get_event_loop().time() + 60:
+            r = await http.post(f"{PAYPAL_BASE}/v1/oauth2/token", auth=(PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET),
+                                data={"grant_type": "client_credentials"})
+            r.raise_for_status()
+            body = r.json()
+            _paypal_token["value"] = body["access_token"]
+            _paypal_token["expires"] = asyncio.get_event_loop().time() + int(body.get("expires_in", 300))
+        r = await http.request(method, f"{PAYPAL_BASE}{path}",
+                               headers={"Authorization": f"Bearer {_paypal_token['value']}"}, **kwargs)
+        r.raise_for_status()
+        return r.json() if r.content else {}
+
+
+def _lookup_for_paypal_plan(plan_id: str) -> Optional[str]:
+    return next((k for k, v in PAYPAL_PLAN_IDS.items() if v and v == plan_id), None)
+
+
+async def _sync_paypal_subscription(sub_id: str, user_id: Optional[str] = None) -> Optional[str]:
+    """Fetch the subscription from PayPal (the source of truth) and mirror it onto the user.
+
+    Returns the PayPal subscription status.
+    """
+    sub = await _paypal("GET", f"/v1/billing/subscriptions/{sub_id}")
+    status = sub.get("status")
+    user_id = user_id or sub.get("custom_id")
+    query = {"user_id": user_id} if user_id else {"paypal_subscription_id": sub_id}
+    if status == "ACTIVE":
+        lookup = _lookup_for_paypal_plan(sub.get("plan_id", "")) or "ct_pro_monthly"
+        next_billing = _parse_utc((sub.get("billing_info") or {}).get("next_billing_time"))
+        # 3-day grace so a late renewal webhook never locks a paying user out.
+        expires = (next_billing + timedelta(days=3)) if next_billing else datetime.now(timezone.utc) + _period_for_lookup(lookup)
+        await db.users.update_one(query, {"$set": {
+            "subscription_status": "active",
+            "subscription_plan": _plan_for_lookup(lookup),
+            "subscription_expires_at": expires,
+            "paypal_subscription_id": sub_id,
+        }})
+    elif status in ("CANCELLED", "SUSPENDED", "EXPIRED"):
+        await db.users.update_one({"paypal_subscription_id": sub_id}, {"$set": {"subscription_status": "canceled"}})
+    return status
+
+
 @api_router.post("/payments/checkout")
 async def create_checkout(req: CheckoutRequest, user: dict = Depends(require_user)):
-    prices = stripe.Price.list(lookup_keys=[req.lookup_key], active=True, limit=1).data
-    if not prices:
-        raise HTTPException(500, f"Price not found: {req.lookup_key}")
-    price = prices[0]
-
-    kwargs = dict(
-        line_items=[{"price": price.id, "quantity": 1}],
-        mode="subscription",
-        success_url=f"{req.origin_url}/payment/success?session_id={{CHECKOUT_SESSION_ID}}",
-        cancel_url=f"{req.origin_url}/payment/cancel",
-        metadata={"user_id": user["user_id"], "lookup_key": req.lookup_key},
-        customer_email=user["email"],
-    )
-
-    # Country CA + SaaS digital => SMP eligible (tax_mode = "full")
+    plan_id = PAYPAL_PLAN_IDS.get(req.lookup_key)
+    if not plan_id:
+        raise HTTPException(400, f"Unknown or unconfigured plan: {req.lookup_key}")
+    origin = req.origin_url.rstrip("/")
+    if origin != PUBLIC_APP_URL and origin not in _cors_origins:
+        origin = PUBLIC_APP_URL
     try:
-        session = stripe.checkout.Session.create(**kwargs, managed_payments={"enabled": True})
-    except stripe.error.InvalidRequestError as e:
-        msg = (e.user_message or "").lower()
-        if "managed payments" in msg or "ineligible" in msg:
-            session = stripe.checkout.Session.create(
-                **kwargs, automatic_tax={"enabled": True}, billing_address_collection="required"
-            )
-        else:
-            raise
+        # No tax is added: the business is a CRA small supplier.
+        sub = await _paypal("POST", "/v1/billing/subscriptions", json={
+            "plan_id": plan_id,
+            "custom_id": user["user_id"],
+            "subscriber": {"email_address": user["email"]},
+            "application_context": {
+                "brand_name": "CT Field Workbook",
+                "user_action": "SUBSCRIBE_NOW",
+                "shipping_preference": "NO_SHIPPING",
+                "return_url": f"{origin}/payment/success",
+                "cancel_url": f"{origin}/payment/cancel",
+            },
+        })
+    except httpx.HTTPError:
+        logger.exception("PayPal subscription creation failed")
+        raise HTTPException(502, "Could not start checkout")
+    approve = next((l["href"] for l in sub.get("links", []) if l.get("rel") == "approve"), None)
+    if not approve:
+        raise HTTPException(502, "PayPal did not return an approval link")
 
     await db.payment_transactions.insert_one({
-        "session_id": session.id,
+        "session_id": sub["id"],
         "user_id": user["user_id"],
         "lookup_key": req.lookup_key,
-        "amount": (price.unit_amount or 0),
-        "currency": price.currency,
+        "currency": "CAD",
         "status": "initiated",
         "payment_status": "pending",
         "created_at": datetime.now(timezone.utc),
         "updated_at": datetime.now(timezone.utc),
     })
-    return {"checkout_url": session.url, "session_id": session.id}
+    return {"checkout_url": approve, "session_id": sub["id"]}
 
 
 @api_router.get("/payments/status/{session_id}")
@@ -737,39 +855,20 @@ async def get_payment_status(session_id: str):
 
     if record.get("payment_status") != "paid":
         try:
-            s = stripe.checkout.Session.retrieve(session_id)
-            if s.payment_status == "paid" or s.status == "complete":
-                # Fetch subscription details
-                sub_id = s.subscription
-                lookup = record["lookup_key"]
-                plan = "monthly" if lookup == "ct_pro_monthly" else "yearly"
-                expires = datetime.now(timezone.utc) + (
-                    timedelta(days=30) if plan == "monthly" else timedelta(days=365)
-                )
-
+            status = await _sync_paypal_subscription(session_id, record["user_id"])
+            if status == "ACTIVE":
                 await db.payment_transactions.update_one(
-                    {"session_id": session_id, "payment_status": {"$ne": "paid"}},
-                    {"$set": {
-                        "status": "completed",
-                        "payment_status": "paid",
-                        "stripe_subscription_id": sub_id,
-                        "stripe_payment_intent_id": s.payment_intent,
-                        "updated_at": datetime.now(timezone.utc),
-                    }},
+                    {"session_id": session_id},
+                    {"$set": {"status": "completed", "payment_status": "paid", "updated_at": datetime.now(timezone.utc)}},
                 )
-                # Activate subscription on user
-                await db.users.update_one(
-                    {"user_id": record["user_id"]},
-                    {"$set": {
-                        "subscription_status": "active",
-                        "subscription_plan": plan,
-                        "subscription_expires_at": expires,
-                        "stripe_subscription_id": sub_id,
-                    }},
+            elif status in ("CANCELLED", "EXPIRED"):
+                await db.payment_transactions.update_one(
+                    {"session_id": session_id},
+                    {"$set": {"status": "failed", "payment_status": "failed", "updated_at": datetime.now(timezone.utc)}},
                 )
-                record = await db.payment_transactions.find_one({"session_id": session_id}, {"_id": 0})
-        except stripe.error.StripeError:
-            pass
+            record = await db.payment_transactions.find_one({"session_id": session_id}, {"_id": 0})
+        except (httpx.HTTPError, HTTPException):
+            logger.warning("PayPal status check failed for %s", session_id)
 
     return {
         "session_id": record["session_id"],
@@ -778,51 +877,45 @@ async def get_payment_status(session_id: str):
     }
 
 
-@api_router.post("/stripe/webhook")
-async def stripe_webhook(request: Request):
-    payload = await request.body()
-    sig = request.headers.get("stripe-signature", "")
+@api_router.post("/paypal/webhook")
+async def paypal_webhook(request: Request):
+    raw = await request.body()
     try:
-        event = stripe.Webhook.construct_event(payload, sig, STRIPE_WEBHOOK_SECRET)
-    except stripe.error.SignatureVerificationError:
+        event = json.loads(raw)
+    except ValueError:
+        raise HTTPException(400, "Invalid payload")
+    if not PAYPAL_WEBHOOK_ID:
+        raise HTTPException(503, "Webhook not configured")
+    h = request.headers
+    try:
+        verdict = await _paypal("POST", "/v1/notifications/verify-webhook-signature", json={
+            "auth_algo": h.get("paypal-auth-algo", ""),
+            "cert_url": h.get("paypal-cert-url", ""),
+            "transmission_id": h.get("paypal-transmission-id", ""),
+            "transmission_sig": h.get("paypal-transmission-sig", ""),
+            "transmission_time": h.get("paypal-transmission-time", ""),
+            "webhook_id": PAYPAL_WEBHOOK_ID,
+            "webhook_event": event,
+        })
+    except httpx.HTTPError:
+        raise HTTPException(400, "Signature verification failed")
+    if verdict.get("verification_status") != "SUCCESS":
         raise HTTPException(400, "Invalid signature")
 
-    obj = event["data"]["object"]
-    t = event["type"]
-
-    if t == "checkout.session.completed":
-        record = await db.payment_transactions.find_one({"session_id": obj["id"]}, {"_id": 0})
-        if record and record.get("payment_status") != "paid":
-            lookup = record["lookup_key"]
-            plan = "monthly" if lookup == "ct_pro_monthly" else "yearly"
-            expires = datetime.now(timezone.utc) + (
-                timedelta(days=30) if plan == "monthly" else timedelta(days=365)
-            )
-            await db.payment_transactions.update_one(
-                {"session_id": obj["id"], "payment_status": {"$ne": "paid"}},
-                {"$set": {
-                    "status": "completed",
-                    "payment_status": obj.get("payment_status", "paid"),
-                    "stripe_subscription_id": obj.get("subscription"),
-                    "stripe_payment_intent_id": obj.get("payment_intent"),
-                    "updated_at": datetime.now(timezone.utc),
-                }},
-            )
-            await db.users.update_one(
-                {"user_id": record["user_id"]},
-                {"$set": {
-                    "subscription_status": "active",
-                    "subscription_plan": plan,
-                    "subscription_expires_at": expires,
-                    "stripe_subscription_id": obj.get("subscription"),
-                }},
-            )
-    elif t == "customer.subscription.deleted":
-        sub_id = obj["id"]
-        await db.users.update_one(
-            {"stripe_subscription_id": sub_id},
-            {"$set": {"subscription_status": "canceled"}},
-        )
+    etype = event.get("event_type", "")
+    resource = event.get("resource") or {}
+    sub_id = resource.get("billing_agreement_id") if etype.startswith("PAYMENT.SALE.") else resource.get("id")
+    synced = (
+        "BILLING.SUBSCRIPTION.ACTIVATED", "BILLING.SUBSCRIPTION.UPDATED", "BILLING.SUBSCRIPTION.RE-ACTIVATED",
+        "BILLING.SUBSCRIPTION.CANCELLED", "BILLING.SUBSCRIPTION.SUSPENDED", "BILLING.SUBSCRIPTION.EXPIRED",
+        "PAYMENT.SALE.COMPLETED",
+    )
+    if etype in synced and sub_id:
+        try:
+            await _sync_paypal_subscription(sub_id)
+        except httpx.HTTPError:
+            # Non-2xx makes PayPal retry the delivery.
+            raise HTTPException(502, "Could not sync subscription")
     return {"status": "ok"}
 
 
@@ -1415,20 +1508,36 @@ async def delete_erp_template(template_id: str, user: dict = Depends(require_use
 
 # ============ AI / GEMINI ROUTES ============
 EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
-GEMINI_MODEL = "gemini-2.5-flash"
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+AI_MODES = {"assistant", "troubleshoot", "training"}
+AI_ADVISORY = "Advisory only — verify against company SOPs, OEM string limits, and wellsite supervisor sign-off."
+AI_STANDARDS = (
+    "\n\nGround operational answers in API RP 5C7, API RP 16ST, AER Directives, and IWCF well-control standards. "
+    f"End every operational response with exactly: {AI_ADVISORY}"
+)
 
-async def _llm_reply(session_id: str, system_message: str, text: str) -> str:
-    """Gemini via the direct Google API when GEMINI_API_KEY is set, else Emergent's proxy."""
+
+async def _llm_reply(session_id: str, system_message: str, text: str, history: Optional[List[Dict[str, str]]] = None) -> str:
+    """Gemini via google-genai when GEMINI_API_KEY is set, else Emergent's proxy.
+
+    `history` is a list of prior {"role": "user"|"assistant", "content": str} turns.
+    """
     gkey = os.environ.get("GEMINI_API_KEY", "").strip()
     if gkey:
-        async with httpx.AsyncClient(timeout=60) as http:
-            r = await http.post(
-                f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent",
-                headers={"x-goog-api-key": gkey},
-                json={"systemInstruction": {"parts": [{"text": system_message}]},
-                      "contents": [{"role": "user", "parts": [{"text": text}]}]})
-            r.raise_for_status()
-            return r.json()["candidates"][0]["content"]["parts"][0]["text"]
+        from google import genai
+        from google.genai import types
+        contents = [
+            types.Content(role="model" if m["role"] == "assistant" else "user",
+                          parts=[types.Part.from_text(text=m["content"])])
+            for m in (history or [])
+        ]
+        contents.append(types.Content(role="user", parts=[types.Part.from_text(text=text)]))
+        client = genai.Client(api_key=gkey)
+        resp = await client.aio.models.generate_content(
+            model=GEMINI_MODEL, contents=contents,
+            config=types.GenerateContentConfig(system_instruction=system_message),
+        )
+        return (resp.text or "").strip()
     if LlmChat is None:
         raise RuntimeError("No LLM configured: set GEMINI_API_KEY")
     chat = LlmChat(api_key=EMERGENT_LLM_KEY, session_id=session_id,
@@ -1641,7 +1750,7 @@ SYSTEM_PROMPTS = {
 
 
 class AIChatRequest(BaseModel):
-    mode: str  # assistant | interpret | emergency | program | troubleshoot
+    mode: str  # assistant | troubleshoot | training
     message: str
     session_id: Optional[str] = None
     context: Optional[Dict[str, Any]] = None  # sheet_key, inputs, results, warnings
@@ -1649,15 +1758,17 @@ class AIChatRequest(BaseModel):
 
 @api_router.post("/ai/chat")
 async def ai_chat(req: AIChatRequest, user: dict = Depends(require_user)):
-    if not _user_has_ai_access(user):
+    if get_effective_plan(user) == "free":
         raise HTTPException(403, "AI features require an active trial or Pro subscription")
+    if req.mode not in AI_MODES:
+        raise HTTPException(400, f"Invalid mode: {req.mode}. Use one of {sorted(AI_MODES)}")
     if not (EMERGENT_LLM_KEY or os.environ.get("GEMINI_API_KEY")):
         raise HTTPException(500, "AI service not configured")
-    if req.mode not in SYSTEM_PROMPTS:
-        raise HTTPException(400, f"Invalid mode: {req.mode}")
 
     session_id = req.session_id or f"ai_{user['user_id']}_{uuid.uuid4().hex[:8]}"
     system_msg = SYSTEM_PROMPTS[req.mode]
+    if req.mode in ("assistant", "troubleshoot"):
+        system_msg += AI_STANDARDS
 
     # Enrich user message with sheet context if provided
     user_text = req.message
@@ -1706,7 +1817,12 @@ async def ai_chat(req: AIChatRequest, user: dict = Depends(require_user)):
         # well names, and team-defined redaction terms BEFORE any text
         # leaves the pod. No-op if the team hasn't opted in.
         safe_user_text = await _maybe_scrub_for_team(user.get("team_id"), user_text)
-        response = await _llm_reply(session_id, system_msg, safe_user_text)
+        prior = await db.ai_messages.find(
+            {"user_id": user["user_id"], "session_id": session_id}, {"_id": 0, "role": 1, "content": 1}
+        ).sort("created_at", 1).to_list(40)
+        response = await _llm_reply(session_id, system_msg, safe_user_text, history=prior)
+        if req.mode in ("assistant", "troubleshoot") and AI_ADVISORY not in response:
+            response = f"{response.rstrip()}\n\n*{AI_ADVISORY}*"
 
         # Persist for history
         await db.ai_messages.insert_many([
@@ -1723,6 +1839,8 @@ async def ai_chat(req: AIChatRequest, user: dict = Depends(require_user)):
 
 @api_router.get("/ai/history/{session_id}")
 async def ai_history(session_id: str, user: dict = Depends(require_user)):
+    if get_effective_plan(user) == "free":
+        raise HTTPException(403, "AI features require an active trial or Pro subscription")
     docs = await db.ai_messages.find(
         {"session_id": session_id, "user_id": user["user_id"]},
         {"_id": 0}
@@ -4872,7 +4990,7 @@ register_phase1(api_router, db, require_user, get_current_user, _is_admin, _broa
 
 
 # ============ SECURITY & COMPLIANCE (Enterprise bundle) ============
-from middleware.tenant import org_id_of, org_plan, has_entitlement, ensure_tenant_indexes  # noqa: E402
+from middleware.tenant import org_id_of, org_plan, has_entitlement, ensure_tenant_indexes, PLAN_FEATURES  # noqa: E402
 from services import audit_chain  # noqa: E402
 from services.org_routes import build_router as _build_org_router  # noqa: E402
 from security_module import build_router as _build_security_router, scrub_pii as _scrub_pii, audit_log as _audit_log  # noqa: E402
@@ -4897,7 +5015,11 @@ async def _require_enterprise(user: dict = Depends(require_user)):
     frontend tier guard does so the flag is a single global switch.
     """
     team = await db.teams.find_one({"team_id": user.get("team_id")}, {"_id": 0}) if user.get("team_id") else None
-    if has_entitlement(org_plan(team, user), "security_compliance"):
+    plan = org_plan(team, user)
+    # Global beta flags only apply to admins / invited users, never organic signups.
+    if has_entitlement(plan, "security_compliance") and (
+        plan in ("enterprise",) or _is_beta_invitee(user) or "security_compliance" in PLAN_FEATURES.get(plan, ())
+    ):
         return user
     raise HTTPException(403, "Security & Compliance requires an Enterprise plan.")
 

@@ -9,12 +9,12 @@ import SheetTabs from "../components/SheetTabs";
 import Paywall from "../components/Paywall";
 import ServiceToggle, { useServiceView } from "../components/ServiceToggle";
 import { useUnits } from "../context/UnitContext";
-import { useAuth, isProUser } from "../context/AuthContext";
+import { useAuth, isProUser, hasWorkbookAccess } from "../context/AuthContext";
 import { workbookData } from "../mock/workbookData";
 import { sheetInService } from "../lib/serviceCatalog";
 import { useJobPrefill } from "../hooks/useJobPrefill";
 
-const FREE_SHEETS = ["Pipe_Stretch", "Sand_Cleanout", "Fishing_Ops", "CT_Milling", "Frac_Through_CT", "Annular_Frac"];
+const FREE_SHEETS = ["Pipe_Stretch", "Sand_Cleanout", "Fishing_Ops"];
 
 export default function WorkbookPage() {
   const location = useLocation();
@@ -31,6 +31,7 @@ export default function WorkbookPage() {
   const { user } = useAuth();
   const { service } = useServiceView();
   const isPro = isProUser(user);
+  const unlocked = hasWorkbookAccess(user) || isPro;
   const msLeft = user?.trial_expires_at ? new Date(user.trial_expires_at).getTime() - Date.now() : 0;
   const trial = { active: msLeft > 0, daysLeft: Math.max(0, Math.floor(msLeft / 86400000)), hoursLeft: Math.max(0, Math.floor(msLeft / 3600000)) };
 
@@ -53,7 +54,7 @@ export default function WorkbookPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const sheetIsLocked = !isPro && (currentSheet === "EMERGENCY" || !FREE_SHEETS.includes(currentSheet) || !trial.active);
+  const sheetIsLocked = !unlocked && (currentSheet === "EMERGENCY" || !FREE_SHEETS.includes(currentSheet));
   const formulaText = currentSheet === "EMERGENCY" ? "=SAFETY_PROTOCOL(AER_DIRECTIVE_020)"
     : workbookData[currentSheet] ? `=VET_MODEL("${workbookData[currentSheet].sop.split("|")[0].trim()}")` : "=CALCULATE_CT_MODEL(API_5CT_SPEC)";
 
@@ -77,7 +78,7 @@ export default function WorkbookPage() {
           : currentSheet === "EMERGENCY" ? <EmergencySheet />
             : <SheetContent sheetKey={currentSheet} unitSystem={unitSystem} onUnitChange={setUnitSystem} initialValues={loadedValues} hasTeam={!!user?.team_id} jobSeed={seed} />}
       </div>
-      <SheetTabs currentSheet={currentSheet} onSelectSheet={(key) => { setCurrentSheet(key); setLoadedValues(null); }} freeSheets={FREE_SHEETS} isPro={isPro} trialActive={trial.active} />
+      <SheetTabs currentSheet={currentSheet} onSelectSheet={(key) => { setCurrentSheet(key); setLoadedValues(null); }} freeSheets={FREE_SHEETS} isPro={unlocked} trialActive />
     </div>
   );
 }
