@@ -96,6 +96,26 @@ describe("Aegis OS telemetry and engineering model", () => {
     expect(mapped.encoderWarning).toBe(true);
   });
 
+  test("maps flattened EMQX snapshots into existing live pressure, depth and weight channels", () => {
+    const mapped = fromDaqSample(SEED_TELEMETRY, {
+      rig_id: "RIG1",
+      ts: "2026-11-15T00:00:00Z",
+      channels: {
+        encoder_1_depth_ft: 1200,
+        encoder_2_depth_ft: 1201,
+        wellhead_pressure_psi: 3500,
+        pipe_weight_lbs: 4200,
+      },
+      encoder_1_depth_ft: 1200,
+      encoder_2_depth_ft: 1201,
+      wellhead_pressure_psi: 3500,
+      pipe_weight_lbs: 4200,
+    });
+    expect(mapped.depth).toBe(1200.5);
+    expect(mapped.whp).toBe(3500);
+    expect(mapped.weight).toBe(4200);
+  });
+
   test("retains explicitly missing configured encoders for consensus warnings", () => {
     const mapped = fromDaqSample(SEED_TELEMETRY, {
       depth_ft: 100,

@@ -12,6 +12,9 @@ import ScenarioManager from "../components/ctd/ScenarioManager";
 import NitrogenPlanner from "../components/ctd/NitrogenPlanner";
 import PressureDepthPlot from "../components/ctd/PressureDepthPlot";
 import AIPanel from "../components/AIPanel";
+import { useUnits } from "../context/UnitContext";
+import { useJobPrefill } from "../hooks/useJobPrefill";
+import { prefillDrillingValues } from "../lib/jobPrefill";
 
 // Conversions used only to translate user inputs into internal Imperial.
 const conv = {
@@ -157,9 +160,11 @@ const EnvelopeBadge = ({ status }) => {
 
 const CTDrillingCalculator = () => {
   const navigate = useNavigate();
-  const [unitSystem, setUnitSystem] = useState("imp");
+  const units = useUnits();
+  const seed = useJobPrefill();
+  const [unitSystem, setUnitSystem] = useState(units.isMetric ? "met" : "imp");
   const [aiOpen, setAiOpen] = useState(false);
-  const [vals, setVals] = useState(DEFAULT_IMP);
+  const [vals, setVals] = useState(() => prefillDrillingValues(units.isMetric ? DEFAULT_MET : DEFAULT_IMP, units.isMetric ? "met" : "imp", seed));
 
   const setField = (k) => (e) => setVals((v) => ({ ...v, [k]: e.target.value }));
   const setMode = (mode) => setVals((v) => ({ ...v, mode }));
@@ -167,6 +172,7 @@ const CTDrillingCalculator = () => {
   const switchUnits = (next) => {
     if (next === unitSystem) return;
     setUnitSystem(next);
+    units.setSystem(next === "met" ? "metric" : "imperial");
     setVals((prev) => ({ ...(next === "imp" ? DEFAULT_IMP : DEFAULT_MET), mode: prev.mode }));
   };
 
@@ -191,6 +197,7 @@ const CTDrillingCalculator = () => {
     const baseline = safeUnit === "imp" ? DEFAULT_IMP : DEFAULT_MET;
     const next = { ...baseline, ...(values || {}), mode: mode || "balanced" };
     setUnitSystem(safeUnit);
+    units.setSystem(safeUnit === "met" ? "metric" : "imperial");
     setVals(next);
   };
 
@@ -265,7 +272,8 @@ const CTDrillingCalculator = () => {
       };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#F3F3F3] to-[#E8ECEF] flex flex-col print:bg-white">
+    <div className="job-legacy-screen bg-gradient-to-b from-[#F3F3F3] to-[#E8ECEF] flex flex-col print:bg-white">
+      <p className="job-muted px-3 py-2">Initial job snapshot: {seed.source}. Calculated results are advisory, not live readings.</p>
       <div className="print:hidden">
         <ExcelHeader />
         <AdvisoryStrip />

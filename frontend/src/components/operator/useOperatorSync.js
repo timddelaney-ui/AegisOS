@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import { API } from "../../context/AuthContext";
@@ -46,7 +46,7 @@ export function useDepthCorrelation(surveyId) {
   }, [persist]);
 
   useEffect(() => () => { if (pending.current) persist(pending.current); clearTimeout(timer.current); }, [persist]);
-  return { offsetFt, moveTarget, log, setOffset, setTarget };
+  return useMemo(() => ({ offsetFt, moveTarget, log, setOffset, setTarget }), [offsetFt, moveTarget, log, setOffset, setTarget]);
 }
 
 const CUSTOM_LS = "coilaegis_custom_channels_v1";

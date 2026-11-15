@@ -1,5 +1,7 @@
 import { buildDossierHtml } from "../LiveOpsPage";
 
+jest.mock("react-router-dom", () => ({ useNavigate: () => jest.fn() }));
+
 const emptyChannel = { min: 0, max: 0, avg: 0, count: 0 };
 
 describe("buildDossierHtml", () => {

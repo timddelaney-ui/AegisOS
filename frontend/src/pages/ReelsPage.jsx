@@ -85,7 +85,7 @@ export default function ReelsPage() {
   };
 
   const activateReel = async (id) => {
-    try { await axios.post(`${API}/reels/${id}/activate`, {}, { withCredentials: true }); toast.success("Active reel set"); refresh(); }
+    try { await axios.post(`${API}/reels/${id}/activate`, {}, { withCredentials: true }); toast.success("Active reel set"); refresh({ adoptActive: true }); }
     catch (e) { toast.error(e.response?.data?.detail || "Failed"); }
   };
 

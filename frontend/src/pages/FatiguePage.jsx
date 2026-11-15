@@ -4,7 +4,9 @@ import axios from "axios";
 import { toast } from "sonner";
 import { Phase1PageHeader } from "../components/Phase1Header";
 import { useAuth, API } from "../context/AuthContext";
-import { useActiveReel } from "../context/ActiveReelContext";
+import { useCurrentDepth } from "../context/ActiveReelContext";
+import { useActiveJobSelection } from "../context/ActiveJobContext";
+import { useJobPrefill } from "../hooks/useJobPrefill";
 import { damageColor, injectorSkateMechanics, DEFAULT_SKATE, intervalAt } from "../lib/ctPhysics";
 import { isSupervisorOrHigher } from "../lib/roles";
 import { Play, Pause, RotateCcw, Zap, AlertTriangle, Gauge } from "lucide-react";
@@ -16,13 +18,17 @@ import { parseNumericInput, plausibilityError } from "../lib/inputSafety";
 export default function FatiguePage() {
   const { user } = useAuth();
   const canReset = isSupervisorOrHigher(user);
-  const { activeReel, currentDepth, setCurrentDepth } = useActiveReel();
+  const job = useActiveJobSelection();
+  const { activeReel } = job;
+  const { currentDepth, setCurrentDepth } = useCurrentDepth();
+  const seed = useJobPrefill();
   const [state, setState] = useState(null);
   const units = useUnits();
-  const saved = useMemo(() => getStateSync("fatigue_inputs", null), []);
-  const [pressure, setPressure] = useState(saved?.pressure ?? 1200);
+  const snapshotKey = `${job.jobId}:fatigue_inputs`;
+  const saved = useMemo(() => getStateSync(snapshotKey, null) || (job.legacyInputs ? getStateSync("fatigue_inputs", null) : null), [snapshotKey, job.legacyInputs]);
+  const [pressure, setPressure] = useState(saved?.pressure ?? seed.telemetry?.skatePressure ?? 1200);
   const [simOn, setSimOn] = useState(false);
-  const [depth, setDepth] = useState(saved?.depth ?? currentDepth ?? 0); // canonical ft
+  const [depth, setDepth] = useState(saved?.depth ?? seed.depthFt ?? currentDepth ?? 0); // canonical ft
   const [depthText, setDepthText] = useState(null); // raw typed text while editing (display units)
   const [cycles, setCycles] = useState(() => getStateSync("fatigue_cycles", {}));
   const timerRef = useRef(null);
@@ -39,9 +45,9 @@ export default function FatiguePage() {
   const sandbox = !!activeReel?.sandbox;
 
   useEffect(() => {
-    saveSnapshot("fatigue_inputs", { depth, pressure });
+    saveSnapshot(snapshotKey, { depth, pressure });
     walAppend("fatigue_inputs", { depth_ft: depth, pressure_psi: pressure, reel_id: activeReel?.reel_id });
-  }, [depth, pressure, activeReel?.reel_id]);
+  }, [depth, pressure, activeReel?.reel_id, snapshotKey]);
 
   const refresh = async () => {
     if (!activeReel) return;
@@ -108,7 +114,8 @@ export default function FatiguePage() {
   }), [pressureErr, pressureParsed.value, seg.od_in, seg.wt_in]);
 
   return (
-    <div className="min-h-screen bg-[#F3F3F3]">
+    <div className="job-legacy-screen bg-[#F3F3F3]">
+      <p className="job-muted px-3 py-2">Initial snapshot / Depth: {seed.sources.depth}; skate pressure: {saved ? "saved input" : seed.sources.skatePressure}. Fatigue results are calculated; manually entered cycles remain explicit.</p>
       <Phase1PageHeader title="Reel Fatigue · Palmgren-Miner" subtitle={`Driven by live traction pressure · ${spacing} ft stations · [API RP 5C7 §6 / Palmgren-Miner · Manson-Coffin low-cycle]`} right={<ShareLinksButton scope="fatigue" compact />} />
       <div className="max-w-6xl mx-auto p-3 space-y-3">
         <EngineeringDisclaimer />

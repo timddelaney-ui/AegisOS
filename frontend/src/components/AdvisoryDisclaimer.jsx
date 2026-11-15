@@ -12,7 +12,7 @@ const STORAGE_KEY = "ctp_disclaimer_ack_v1";
 export const AdvisoryFooter = () => {
   const location = useLocation();
   // Workbook has its own inline advisory strip; skip the fixed footer there to avoid overlap with SheetTabs
-  if (location.pathname === "/app") return null;
+  if (!["/", "/login", "/terms", "/pricing", "/payment/success", "/payment/cancel"].includes(location.pathname) && !location.pathname.startsWith("/share/")) return null;
   return (
     <div
       data-testid="advisory-footer"

@@ -8,12 +8,17 @@ import {
   Star, AlertTriangle, StickyNote, Columns,
 } from "lucide-react";
 import { API, useAuth } from "../context/AuthContext";
-import { useRig, rigLabel } from "../context/RigContext";
-import RigSelector from "../components/RigSelector";
+import { rigLabel } from "../context/RigContext";
+import { useActiveJobSelection } from "../context/ActiveJobContext";
+import { useOperatorTelemetry } from "../context/OperatorTelemetryContext";
 import { usePullToRefresh, PullIndicator } from "../hooks/usePullToRefresh";
 import { fmtTime as fmtClock, fmtShort as fmtTime } from "../lib/timeFormat";
 import LiveStripSidebar from "../components/LiveStripSidebar";
-import { OPERATION_CODE_BY_NUM, PHASE_COLOR } from "../lib/operationCodes";
+import { OPERATION_CODES, OPERATION_CODE_BY_NUM, PHASE_COLOR } from "../lib/operationCodes";
+import { getStateSync, setState } from "../lib/fieldStore";
+import { draftKey, readDrafts, addDraft, updateDrafts } from "../lib/treatmentDrafts";
+import LocalLogDrafts from "../components/LocalLogDrafts";
+import { isCrewOrHigher } from "../lib/roles";
 
 const POLL_MS = 3000;
 
@@ -37,20 +42,20 @@ const NPT_LABEL = Object.fromEntries(NPT_CATEGORIES.map((n) => [n.id, n.label]))
 // 24-hour "HH:MM:SS" clock for the vertical stamp bar beside each entry.
 const stampBar = (iso) => fmtClock(iso);
 
-const StartCard = ({ rigId, onStarted }) => {
-  const [name, setName] = useState("");
-  const [wellNo, setWellNo] = useState("");
+const StartCard = ({ rigId, onStarted, well, runNumber }) => {
+  const [name, setName] = useState(well ? `${well} / Run ${runNumber}` : "");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
 
   const start = async () => {
+    if (!navigator.onLine) { toast.error("Starting a shared treatment requires connectivity. Record local entries below while offline."); return; }
     if (!name.trim()) { toast.error("Give it a name (well number, job, etc.)"); return; }
     setBusy(true);
     try {
       const { data } = await axios.post(`${API}/treatments`, {
         rig_id: rigId,
         name: name.trim(),
-        well_or_job_no: wellNo.trim() || null,
+        well_or_job_no: well || null,
         note: note.trim() || null,
       }, { withCredentials: true });
       toast.success(`Treatment started: ${data.name}`);
@@ -72,15 +77,13 @@ const StartCard = ({ rigId, onStarted }) => {
         <input data-testid="treatment-name" value={name} onChange={(e) => setName(e.target.value)}
           placeholder="Treatment name (e.g. Sand cleanout · 4-32-45-06W5) *"
           className="col-span-2 px-2.5 py-2 border border-[#CCC] rounded text-sm" />
-        <input data-testid="treatment-well" value={wellNo} onChange={(e) => setWellNo(e.target.value)}
-          placeholder="Well / Job # (optional)"
-          className="px-2.5 py-2 border border-[#CCC] rounded text-sm" />
+        <p className="text-sm min-h-11 flex items-center">Well: {well || "Select once in Job details"} / Run {runNumber}</p>
         <input data-testid="treatment-note" value={note} onChange={(e) => setNote(e.target.value)}
           placeholder="Kick-off note (optional)"
           className="px-2.5 py-2 border border-[#CCC] rounded text-sm" />
       </div>
       <button data-testid="treatment-start" disabled={busy || !name.trim()} onClick={start}
-        className="text-sm font-bold text-white bg-[#C44A08] hover:bg-[#0A4F28] px-4 py-2 rounded disabled:opacity-50 inline-flex items-center gap-1.5">
+        className="job-secondary text-sm font-bold disabled:opacity-50 inline-flex items-center gap-1.5">
         {busy ? <><Loader2 className="w-4 h-4 animate-spin" /> Starting…</> : <><Play className="w-4 h-4" /> Start treatment</>}
       </button>
     </div>
@@ -95,7 +98,7 @@ const toLocalDTInput = (iso) => {
 };
 const fromLocalDTInput = (s) => (s ? new Date(s).toISOString() : null);
 
-const EntryComposer = ({ treatmentId, onAdded }) => {
+const EntryComposer = ({ treatmentId, onAdded, onSaveDraft, telemetrySnapshot }) => {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [useCustomTime, setUseCustomTime] = useState(false);
@@ -105,23 +108,40 @@ const EntryComposer = ({ treatmentId, onAdded }) => {
   const [nptCategory, setNptCategory] = useState("equipment");
   const [nptMinutes, setNptMinutes] = useState("");
   const inputRef = useRef(null);
+  const sendingRef = useRef(false);
 
-  const send = async (overrideText) => {
+  const send = async (overrideText, operationCode) => {
+    if (sendingRef.current) return;
     const t = (overrideText ?? text).trim();
     if (!t) return;
-    if (kind === "npt" && (!nptMinutes || Number(nptMinutes) <= 0)) {
+    if (!operationCode && kind === "npt" && (!nptMinutes || Number(nptMinutes) <= 0)) {
       toast.error("NPT requires a duration in minutes.");
       return;
     }
     setBusy(true);
+    sendingRef.current = true;
     try {
-      const body = { text: t, kind };
-      if (useCustomTime && eventAt) body.event_at = fromLocalDTInput(eventAt);
-      if (kind === "npt") {
+      const body = { text: t, kind: operationCode ? "event" : kind, event_at: useCustomTime && eventAt ? fromLocalDTInput(eventAt) : new Date().toISOString(), telemetry_snapshot: telemetrySnapshot };
+      if (operationCode) body.operation_code = operationCode;
+      if (!operationCode && kind === "npt") {
         body.npt_category = nptCategory;
         body.npt_minutes = Number(nptMinutes);
       }
-      const { data } = await axios.post(`${API}/treatments/${treatmentId}/entries`, body, { withCredentials: true });
+      let data;
+      if (!navigator.onLine || !treatmentId) {
+        data = await onSaveDraft(body);
+        toast.warning("Saved on this device only. Review and upload when connected.");
+      } else {
+        try {
+          const response = await axios.post(`${API}/treatments/${treatmentId}/entries`, body, { withCredentials: true });
+          data = response.data;
+          onAdded(data);
+        } catch (error) {
+          if (error.response) throw error;
+          data = await onSaveDraft(body, "uncertain");
+          toast.warning("Delivery unconfirmed. A local copy is saved; review the server log before retrying.");
+        }
+      }
       if (overrideText === undefined) {
         setText("");
         setKind("note");
@@ -129,11 +149,10 @@ const EntryComposer = ({ treatmentId, onAdded }) => {
       }
       setUseCustomTime(false);
       setEventAt(toLocalDTInput());
-      onAdded(data);
       inputRef.current?.focus();
       return data;
-    } catch (e) { toast.error(e.response?.data?.detail || "Failed to log entry."); return null; }
-    finally { setBusy(false); }
+    } catch (e) { toast.error(e.response?.data?.detail || e.message || "Failed to log entry."); return null; }
+    finally { sendingRef.current = false; setBusy(false); }
   };
 
   // Quick-stamp: drop a timestamped marker in one tap, fill in later from phone or desktop.
@@ -143,13 +162,18 @@ const EntryComposer = ({ treatmentId, onAdded }) => {
       const stamp = new Date();
       const hhmm = `${String(stamp.getHours()).padStart(2, "0")}:${String(stamp.getMinutes()).padStart(2, "0")}`;
       const placeholder = `⏱ ${hhmm} — (fill in later)`;
-      await send(placeholder);
-      toast.success(`Stamped ${hhmm} — edit the note any time`, { duration: 3500 });
+      const saved = await send(placeholder);
+      if (saved && !saved.sync_status) toast.success(`Stamped ${hhmm} — edit the note any time`, { duration: 3500 });
     } finally { setQuickStamping(false); }
   };
 
   return (
-    <form className="bg-white border-t border-[#D4D4D4] p-2 flex flex-col gap-1.5 sticky bottom-0 safe-bottom" onSubmit={(e) => { e.preventDefault(); send(); }} data-testid="treatment-composer">
+    <form className="bg-white border-t border-[#D4D4D4] p-2 flex flex-col gap-1.5" onSubmit={(e) => { e.preventDefault(); send(); }} data-testid="treatment-composer">
+      <div className="flex flex-wrap gap-1" aria-label="Timestamped quick log entries">
+        {OPERATION_CODES.filter((operation) => [12, 20, 60, 8].includes(operation.code)).map((operation) =>
+          <button type="button" key={operation.code} className="job-secondary text-xs" disabled={busy}
+            onClick={() => send(operation.desc, operation.code)}>{operation.label}</button>)}
+      </div>
       {/* Kind selector */}
       <div className="flex items-center gap-1" data-testid="treatment-kind-selector">
         {ENTRY_KINDS.map((k) => {
@@ -160,6 +184,7 @@ const EntryComposer = ({ treatmentId, onAdded }) => {
               key={k.id}
               type="button"
               data-testid={`treatment-kind-${k.id}`}
+              aria-pressed={active}
               onClick={() => setKind(k.id)}
               className="text-[10px] font-bold uppercase px-2 py-1 rounded flex items-center gap-1 transition-colors"
               style={active
@@ -235,9 +260,10 @@ const EntryComposer = ({ treatmentId, onAdded }) => {
             type="submit"
             disabled={busy || !text.trim()}
             data-testid="treatment-entry-send"
+            aria-label={treatmentId ? "Add log entry" : "Save local log entry"}
             className="text-sm font-bold text-white bg-[#C44A08] hover:bg-[#0A4F28] px-3 rounded disabled:opacity-50 inline-flex items-center gap-1 tap-44 min-w-[52px] justify-center flex-1"
           >
-            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Send className="w-4 h-4" /><span>{treatmentId ? "Log" : "Save"}</span></>}
           </button>
         </div>
       </div>
@@ -281,6 +307,7 @@ const TreatmentEntryRow = ({ entry, mine, treatmentId, onPatched, onDeleted }) =
   const displayAt = entry.event_at || entry.created_at;
   const createdAt = entry.created_at;
   const wasBackdated = entry.event_at && Math.abs(new Date(entry.event_at) - new Date(entry.created_at)) > 60 * 1000;
+  const source = (field) => entry.telemetry_snapshot?.sources?.[field] || entry.telemetry_snapshot?.source || "source not recorded";
 
   const save = async () => {
     const t = text.trim();
@@ -389,14 +416,14 @@ const TreatmentEntryRow = ({ entry, mine, treatmentId, onPatched, onDeleted }) =
                 <div
                   data-testid={`treatment-entry-snapshot-${entry.entry_id}`}
                   className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[10px] tabular-nums text-[#595959] bg-[#F5F7FA] rounded px-1.5 py-1 border border-[#E2E8F0]">
-                  <span className="font-bold uppercase tracking-wider text-[9px] text-[#1E293B]">● Live snapshot</span>
-                  {entry.telemetry_snapshot.depth_ft != null && <span>Depth <b className="text-[#0E7490]">{Math.round(entry.telemetry_snapshot.depth_ft)} ft</b></span>}
-                  {entry.telemetry_snapshot.weight_lb != null && <span>Wt <b>{Math.round(entry.telemetry_snapshot.weight_lb)} lbs</b></span>}
-                  {entry.telemetry_snapshot.p_internal_psi != null && <span>P_int <b className="text-[#B91C1C]">{Math.round(entry.telemetry_snapshot.p_internal_psi)} psi</b></span>}
-                  {entry.telemetry_snapshot.p_external_psi != null && <span>P_whp <b>{Math.round(entry.telemetry_snapshot.p_external_psi)} psi</b></span>}
-                  {entry.telemetry_snapshot.traction_pressure_psi != null && <span>Skate <b className="text-[#B45309]">{Math.round(entry.telemetry_snapshot.traction_pressure_psi)} psi</b></span>}
-                  {entry.telemetry_snapshot.vm_utilization != null && <span>VM <b className="text-[#6D28D9]">{(entry.telemetry_snapshot.vm_utilization * 100 * 0.8).toFixed(1)}%</b></span>}
-                  {entry.telemetry_snapshot.fatigue_worst != null && <span>Fat <b>{(entry.telemetry_snapshot.fatigue_worst * 100).toFixed(2)}%</b></span>}
+                  <span className="font-bold uppercase tracking-wider text-[9px] text-[#1E293B]">Recorded snapshot / {entry.telemetry_snapshot.source || "source not recorded"}</span>
+                  {entry.telemetry_snapshot.depth_ft != null && <span>Depth <b className="text-[#0E7490]">{Math.round(entry.telemetry_snapshot.depth_ft)} ft</b> / {source("depth_ft")}</span>}
+                  {entry.telemetry_snapshot.weight_lb != null && <span>Wt <b>{Math.round(entry.telemetry_snapshot.weight_lb)} lbs</b> / {source("weight_lb")}</span>}
+                  {entry.telemetry_snapshot.p_internal_psi != null && <span>P_int <b className="text-[#B91C1C]">{Math.round(entry.telemetry_snapshot.p_internal_psi)} psi</b> / {source("p_internal_psi")}</span>}
+                  {entry.telemetry_snapshot.p_external_psi != null && <span>P_whp <b>{Math.round(entry.telemetry_snapshot.p_external_psi)} psi</b> / {source("p_external_psi")}</span>}
+                  {entry.telemetry_snapshot.traction_pressure_psi != null && <span>Skate <b className="text-[#B45309]">{Math.round(entry.telemetry_snapshot.traction_pressure_psi)} psi</b> / {source("traction_pressure_psi")}</span>}
+                  {(entry.telemetry_snapshot.von_mises_pct_smys ?? entry.telemetry_snapshot.vm_utilization) != null && <span>VM <b className="text-[#6D28D9]">{entry.telemetry_snapshot.von_mises_pct_smys != null ? entry.telemetry_snapshot.von_mises_pct_smys.toFixed(1) : (entry.telemetry_snapshot.vm_utilization * 100 * 0.8).toFixed(1)}%</b> / {source("von_mises_pct_smys")}</span>}
+                  {entry.telemetry_snapshot.fatigue_worst != null && <span>Fat <b>{(entry.telemetry_snapshot.fatigue_worst * 100).toFixed(2)}%</b> / {source("fatigue_worst")}</span>}
                 </div>
               )}
             </div>
@@ -413,12 +440,29 @@ const TreatmentEntryRow = ({ entry, mine, treatmentId, onPatched, onDeleted }) =
   );
 };
 
+function LogComposerWithTelemetry(props) {
+  const { telemetry, sourceLabel, sourceFor } = useOperatorTelemetry();
+  const telemetrySnapshot = telemetry ? {
+    depth_ft: telemetry.depth, weight_lb: telemetry.weight, p_internal_psi: telemetry.internalPress,
+    p_external_psi: telemetry.whp, von_mises_pct_smys: telemetry.vonMises, source: sourceLabel,
+    sources: Object.fromEntries([["depth_ft", "depth"], ["weight_lb", "weight"], ["p_internal_psi", "internalPress"], ["p_external_psi", "whp"], ["von_mises_pct_smys", "vonMises"]].map(([field, channel]) => [field, sourceFor?.(channel) || sourceLabel])),
+  } : null;
+  return <EntryComposer {...props} telemetrySnapshot={telemetrySnapshot} />;
+}
+
 const TreatmentPage = () => {
   const navigate = useNavigate();
-  const { rigId } = useRig();
+  const job = useActiveJobSelection();
+  const rigId = job.rig;
   const { user } = useAuth();
-  const [active, setActive] = useState(null);
-  const [entries, setEntries] = useState([]);
+  const cacheKey = `treatment_cache:${user?.user_id}:${rigId}`;
+  const snapshot = getStateSync(cacheKey, null);
+  const [active, setActive] = useState(snapshot?.active || null);
+  const [entries, setEntries] = useState(snapshot?.entries || []);
+  const [error, setError] = useState(snapshot ? "Cached rig log - refresh to verify the current treatment." : null);
+  const localKey = draftKey(user?.user_id, job.jobId);
+  const [drafts, setDrafts] = useState(() => readDrafts(localKey));
+  const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [closing, setClosing] = useState(false);
@@ -443,20 +487,25 @@ const TreatmentPage = () => {
     try {
       const { data } = await axios.get(`${API}/treatments/active`, { params: { rig_id: rigId }, withCredentials: true });
       const trt = data.treatment;
-      setActive(trt);
       if (trt) {
         const eResp = await axios.get(`${API}/treatments/${trt.treatment_id}/entries`, { withCredentials: true });
+        setActive(trt);
         setEntries(eResp.data.entries || []);
+        setState(cacheKey, { active: trt, entries: eResp.data.entries || [] });
         sinceRef.current = eResp.data.entries?.length ? eResp.data.entries[eResp.data.entries.length - 1].created_at : trt.created_at;
       } else {
+        setActive(null);
         setEntries([]);
+        setState(cacheKey, { active: null, entries: [] });
         sinceRef.current = null;
       }
+      setError(null);
     } catch (e) {
-      // Silent — polling will retry
+      setError(snapshot ? "Offline or unavailable - showing the cached rig log." : "Rig log unavailable. You can still save local entries below.");
       console.debug("Treatment load failed", e?.response?.status);
     } finally { setLoading(false); }
-  }, [rigId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rigId, cacheKey]);
 
   const pollNew = useCallback(async () => {
     if (!active || !sinceRef.current) return;
@@ -467,10 +516,10 @@ const TreatmentPage = () => {
         withCredentials: true,
       });
       if (data.entries?.length) {
-        setEntries((prev) => [...prev, ...data.entries]);
+        setEntries((prev) => [...prev, ...data.entries.filter((entry) => !prev.some((existing) => existing.entry_id === entry.entry_id))]);
         sinceRef.current = data.entries[data.entries.length - 1].created_at;
       }
-    } catch (e) { console.debug("[Treatment] pollNew transient error", e?.response?.status || e?.message); }
+    } catch (e) { setError("Updates unavailable - showing cached entries."); console.debug("[Treatment] pollNew transient error", e?.response?.status || e?.message); }
     finally { setRefreshing(false); }
   }, [active]);
 
@@ -491,6 +540,37 @@ const TreatmentPage = () => {
     setEntries((prev) => [...prev, entry]);
     sinceRef.current = entry.created_at;
   };
+  useEffect(() => { if (active) setState(cacheKey, { active, entries }); }, [active, entries, cacheKey]);
+  const saveDraft = async (body, status = "local") => {
+    const entry = await addDraft(localKey, body, { rig_id: rigId, treatment_id: active?.treatment_id || null, sync_status: status });
+    setDrafts((previous) => [...previous, entry]);
+    return entry;
+  };
+  const uploadDraft = async (draft) => {
+    if (uploading) return;
+    if (!isCrewOrHigher(user) || draft.sync_status === "uploaded" || (draft.treatment_id && draft.treatment_id !== active?.treatment_id)) { toast.error("This draft cannot be uploaded to the selected treatment."); return; }
+    if (!navigator.onLine || !active) { toast.error("Connect and select an active treatment before uploading."); return; }
+    if (!window.confirm(`Upload this local entry to "${active.name}" on ${rigLabel(rigId)}?${draft.sync_status === "uncertain" ? "\nDelivery was unconfirmed. Verify it is not already in the shared log before retrying." : ""}`)) return;
+    setUploading(true);
+    let uploadedEntry = null;
+    try {
+      setDrafts(await updateDrafts(localKey, (current) => current.map((entry) => entry.entry_id === draft.entry_id ? { ...entry, sync_status: "uncertain" } : entry)));
+      const { text, kind, event_at, operation_code, telemetry_snapshot, npt_category, npt_minutes } = draft;
+      const { data } = await axios.post(`${API}/treatments/${active.treatment_id}/entries`, { text, kind, event_at, operation_code, telemetry_snapshot, npt_category, npt_minutes }, { withCredentials: true });
+      uploadedEntry = data;
+      onEntryAdded(data);
+      setDrafts((current) => current.map((entry) => entry.entry_id === draft.entry_id ? { ...entry, sync_status: "uploaded", server_entry_id: data.entry_id } : entry));
+      setDrafts(await updateDrafts(localKey, (current) => current.filter((entry) => entry.entry_id !== draft.entry_id)));
+      toast.success("Local entry uploaded to the rig log.");
+    } catch (failure) {
+      toast.error(uploadedEntry ? `Server confirmed entry ${uploadedEntry.entry_id}, but device cleanup failed. Do not upload again. Verify the shared log if the draft reappears.` : failure.response?.data?.detail || failure.message || "Upload unconfirmed. Review the shared log before retrying.");
+    } finally { setUploading(false); }
+  };
+  const discardDraft = async (draft) => {
+    if (!window.confirm("Remove this device draft? This never deletes a shared log entry. If delivery was unconfirmed, verify the shared log first.")) return;
+    try { setDrafts(await updateDrafts(localKey, (current) => current.filter((entry) => entry.entry_id !== draft.entry_id))); }
+    catch (failure) { toast.error(`Draft removal failed: ${failure.message}`); }
+  };
 
   const refreshAll = async () => {
     await loadActive();
@@ -499,6 +579,7 @@ const TreatmentPage = () => {
 
   const closeTreatment = async () => {
     if (!active) return;
+    if (!isCrewOrHigher(user) || !navigator.onLine) { toast.error("Closing a shared log requires crew access and connectivity."); return; }
     if (!window.confirm(`Close "${active.name}"? You can still read the log later, but no new entries can be added.`)) return;
     setClosing(true);
     try {
@@ -536,7 +617,7 @@ const TreatmentPage = () => {
   }, [entries]);
 
   return (
-    <div className="min-h-screen bg-[#F3F3F3] flex flex-col print:bg-white">
+    <div className="job-log job-legacy-screen bg-[#F3F3F3] flex flex-col print:bg-white">
       <header className="bg-[#C44A08] text-white h-12 flex items-center px-3 shadow-md flex-shrink-0 safe-x print:hidden">
         <button onClick={() => navigate("/hub")} data-testid="treatment-back" className="flex items-center gap-1.5 text-sm font-semibold tap-44 -ml-2 pl-2 pr-2"><ArrowLeft className="w-4 h-4" /> Back</button>
         <h1 className="text-sm font-semibold ml-2 flex items-center gap-2 min-w-0"><ClipboardList className="w-4 h-4 flex-shrink-0" /> <span className="truncate">Treatment · {rigLabel(rigId)}</span></h1>
@@ -553,7 +634,7 @@ const TreatmentPage = () => {
           </button>
         </div>
       </header>
-      <div className="print:hidden"><RigSelector /></div>
+      {error && <p className="job-card mx-3 mt-3" role="status">{error}</p>}
 
       <div className="flex-1 flex overflow-hidden">
         {/* Left: treatment log (full width or 60%) */}
@@ -564,7 +645,7 @@ const TreatmentPage = () => {
           {loading ? (
             <div className="text-center text-[13px] text-[#595959] py-8"><Loader2 className="w-4 h-4 animate-spin inline mr-1" /> Loading…</div>
           ) : !active ? (
-            <StartCard rigId={rigId} onStarted={(t) => { setActive(t); setEntries([]); sinceRef.current = t.created_at; }} />
+            isCrewOrHigher(user) ? <StartCard rigId={rigId} well={job.well.name} runNumber={job.runNumber} onStarted={(t) => { setActive(t); setEntries([]); sinceRef.current = t.created_at; }} /> : <p>No active rig log. Guest access is read-only.</p>
           ) : (
             <>
               {/* Header card */}
@@ -573,7 +654,7 @@ const TreatmentPage = () => {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-[#DCFCE7] text-[#065F46] px-1.5 py-0.5 rounded-full">
-                        <span className="w-1.5 h-1.5 rounded-full bg-[#065F46] animate-pulse" /> LIVE
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#065F46]" /> OPEN LOG
                       </span>
                       <h2 className="text-base font-bold text-[#C44A08] truncate">{active.name}</h2>
                     </div>
@@ -590,9 +671,9 @@ const TreatmentPage = () => {
                     <button onClick={printLog} data-testid="treatment-print" className="text-[11px] font-bold text-[#C44A08] border border-[#C44A08] px-2 py-1.5 rounded inline-flex items-center gap-1 hover:bg-[#FFF7EF] tap-44">
                       <Printer className="w-3.5 h-3.5" /> <span className="hidden sm:inline">PDF</span>
                     </button>
-                    <button onClick={closeTreatment} disabled={closing} data-testid="treatment-close" className="text-[11px] font-bold text-[#B91C1C] border border-[#B91C1C] px-2 py-1.5 rounded inline-flex items-center gap-1 hover:bg-[#FEF2F2] disabled:opacity-50 tap-44">
+                    {isCrewOrHigher(user) && <button onClick={closeTreatment} disabled={closing} data-testid="treatment-close" className="text-[11px] font-bold text-[#B91C1C] border border-[#B91C1C] px-2 py-1.5 rounded inline-flex items-center gap-1 hover:bg-[#FEF2F2] disabled:opacity-50 tap-44">
                       {closing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Square className="w-3.5 h-3.5" />} <span className="hidden sm:inline">Close</span>
-                    </button>
+                    </button>}
                   </div>
                 </div>
               </div>
@@ -620,7 +701,7 @@ const TreatmentPage = () => {
                               <TreatmentEntryRow
                                 key={e.entry_id}
                                 entry={e}
-                                mine={e.author === user?.email}
+                                mine={isCrewOrHigher(user) && e.author === user?.email}
                                 treatmentId={active.treatment_id}
                                 onPatched={(updated) => setEntries((prev) => prev.map((x) => x.entry_id === updated.entry_id ? updated : x))}
                                 onDeleted={() => setEntries((prev) => prev.filter((x) => x.entry_id !== e.entry_id))}
@@ -634,9 +715,10 @@ const TreatmentPage = () => {
                 )}
               </div>
 
-              <EntryComposer treatmentId={active.treatment_id} onAdded={onEntryAdded} />
             </>
           )}
+          {!loading && isCrewOrHigher(user) && <><LocalLogDrafts drafts={drafts.filter((draft) => draft.rig_id === rigId)} active={active} onUpload={uploadDraft} onDiscard={discardDraft} uploading={uploading} />
+            <LogComposerWithTelemetry treatmentId={active?.treatment_id} onAdded={onEntryAdded} onSaveDraft={saveDraft} /></>}
         </div>
       </div>
         </div>
@@ -650,7 +732,7 @@ const TreatmentPage = () => {
 
       {/* Mobile split: slide-in bottom sheet with the live chart */}
       {splitView && (
-        <div className="lg:hidden fixed inset-x-0 bottom-0 h-[42vh] z-40 shadow-[0_-6px_18px_rgba(0,0,0,0.4)] print:hidden">
+        <div className="lg:hidden fixed inset-x-0 bottom-[calc(5rem+env(safe-area-inset-bottom))] h-[32vh] z-40 shadow-[0_-6px_18px_rgba(0,0,0,0.4)] print:hidden">
           <LiveStripSidebar compact />
         </div>
       )}

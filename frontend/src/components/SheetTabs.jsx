@@ -48,11 +48,13 @@ const SheetTabs = ({ currentSheet, onSelectSheet, freeSheets = [], isPro = false
         const isActive = key === currentSheet;
         const locked = isLocked(key);
         return (
-          <div
+          <button
+            type="button"
+            aria-pressed={isActive}
             key={key}
             ref={isActive ? activeTabRef : null}
             onClick={() => onSelectSheet(key)}
-            className={`px-3 py-2 text-xs font-medium cursor-pointer select-none rounded-t border border-b-0 border-[#CCC] inline-flex items-center gap-1 flex-shrink-0 min-h-[36px] ${
+            className={`px-3 py-2 text-xs font-medium cursor-pointer select-none rounded-t border border-b-0 border-[#CCC] inline-flex items-center gap-1 flex-shrink-0 min-h-[44px] ${
               isActive
                 ? "bg-white text-[#FF6B1A] font-bold border-t-2 border-t-[#FF6B1A] -mb-px"
                 : locked
@@ -62,13 +64,16 @@ const SheetTabs = ({ currentSheet, onSelectSheet, freeSheets = [], isPro = false
           >
             {locked && <Lock className="w-2.5 h-2.5 text-[#856404]" strokeWidth={2.5} />}
             {key}
-          </div>
+          </button>
         );
       })}
-      <div
+      <button
+        type="button"
+        aria-label="Emergency SOPs"
+        aria-pressed={currentSheet === "EMERGENCY"}
         ref={currentSheet === "EMERGENCY" ? activeTabRef : null}
         onClick={() => onSelectSheet("EMERGENCY")}
-        className={`px-3 py-2 text-xs font-bold cursor-pointer select-none rounded-t border border-b-0 border-[#CCC] flex-shrink-0 inline-flex items-center gap-1 min-h-[36px] ${
+        className={`px-3 py-2 text-xs font-bold cursor-pointer select-none rounded-t border border-b-0 border-[#CCC] flex-shrink-0 inline-flex items-center gap-1 min-h-[44px] ${
           currentSheet === "EMERGENCY"
             ? "bg-white text-[#C00000] border-t-2 border-t-[#C00000] -mb-px"
             : "bg-[#FFC7CE] text-[#9C0006]"
@@ -77,7 +82,7 @@ const SheetTabs = ({ currentSheet, onSelectSheet, freeSheets = [], isPro = false
         <AlertTriangle className="w-3 h-3" strokeWidth={2.5} />
         Emergency_SOPs
         {!isPro && currentSheet !== "EMERGENCY" && <Lock className="w-2.5 h-2.5 text-[#9C0006]" strokeWidth={2.5} />}
-      </div>
+      </button>
     </nav>
   );
 };

@@ -5,7 +5,7 @@ const btn = "px-3 py-2 rounded-lg border border-slate-800 bg-slate-900 hover:bor
 const REASON = { manual: "typed", nudge: "nudge", reset: "reset", tag: "tag", target: "move" };
 
 // True depth = counter + offset. All props canonical ft; UI in display units.
-export function DepthCorrelationPanel({ counterFt, offsetFt, moveTarget, plugs, log, u, onOffset, onTarget, shared }) {
+export function DepthCorrelationPanel({ counterFt, offsetFt, moveTarget, plugs, log, u, onOffset, onTarget, shared, source }) {
   const L = u.label("depth");
   const disp = (ft) => u.val(ft, "depth");
   const toFt = (v) => (u.isMetric ? u.to(v, "depth") : v);
@@ -43,10 +43,12 @@ export function DepthCorrelationPanel({ counterFt, offsetFt, moveTarget, plugs, 
         <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl">
           <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Counter</div>
           <div className="text-xl font-black font-mono tabular-nums" data-testid="correlation-counter">{u.show(counterFt, "depth", 1)} <span className="text-xs text-slate-400">{L}</span></div>
+          {source && <p className="job-muted">{source}</p>}
         </div>
         <div className="p-3 bg-slate-950 border border-orange-500/30 rounded-xl">
           <div className="text-[10px] font-bold uppercase tracking-wider text-orange-400">True depth</div>
           <div className="text-xl font-black font-mono tabular-nums" data-testid="correlation-true-depth">{u.show(counterFt + offsetFt, "depth", 1)} <span className="text-xs text-slate-400">{L}</span></div>
+          {source && <p className="job-muted">{source} / correlated</p>}
         </div>
       </div>
 

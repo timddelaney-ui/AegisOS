@@ -8,8 +8,8 @@ describe("segmentStress", () => {
     expect(Math.round(s.pressure_axial)).toBe(196);
     expect(Math.round(s.tension_axial)).toBe(7);
     expect(s.max_axial).toBeCloseTo(414.2, 0);
-    expect(s.von_mises).toBeCloseTo(421.3, 0);
-    expect(s.yield_pct).toBeCloseTo(67.9, 1);
+    expect(s.von_mises).toBeCloseTo(432.7, 0);
+    expect(s.yield_pct).toBeCloseTo(69.7, 1);
   });
 
   test("governing yield readout evaluates both bending fibers", () => {

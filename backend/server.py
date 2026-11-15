@@ -31,6 +31,7 @@ except ImportError:  # self-hosted deployments use GEMINI_API_KEY directly
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
 from liveops_broadcast import liveops_broadcaster  # noqa: E402
+from services.mqtt_liveops import liveops_sample  # noqa: E402
 
 # MongoDB connection
 mongo_url = os.environ["MONGO_URL"]
@@ -5004,8 +5005,7 @@ _mqtt_service = None
 
 async def _mqtt_live_sink(org_id: str, rig_id: str, table: str, docs: list):
     for doc in docs:
-        sample = {k: v for k, v in doc.items() if k != "org_id"}
-        await liveops_broadcaster.publish(org_id, rig_id, {**sample, "kind": table, "source": "mqtt"})
+        await liveops_broadcaster.publish(org_id, rig_id, liveops_sample(table, doc))
 
 
 @app.on_event("startup")

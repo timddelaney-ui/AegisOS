@@ -4,6 +4,7 @@ import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import { AuthProvider } from "./context/AuthContext";
 import { RigProvider } from "./context/RigContext";
+import { ActiveJobProvider } from "./context/ActiveJobContext";
 import "./index.css";
 import { hydrateKv, startFieldSync } from "./lib/fieldStore";
 import { applyStoredTheme } from "./lib/cabinTheme";
@@ -15,9 +16,11 @@ const render = () => root.render(
   <React.StrictMode>
     <BrowserRouter>
       <AuthProvider>
+        <ActiveJobProvider>
         <RigProvider>
           <App />
         </RigProvider>
+        </ActiveJobProvider>
       </AuthProvider>
     </BrowserRouter>
   </React.StrictMode>

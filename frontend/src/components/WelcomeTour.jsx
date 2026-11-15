@@ -245,15 +245,15 @@ export const WelcomeTour = ({ open, onClose }) => {
         </div>
 
         {/* Progress dots */}
-        <div className="relative flex items-center justify-center gap-1.5 pb-2">
+        <div className="relative flex flex-wrap items-center justify-center gap-1.5 pb-2">
           {SLIDES.map((_, i) => (
             <button
               key={`tour-dot-${i}`}
               data-testid={`welcome-tour-dot-${i}`}
               onClick={() => setIdx(i)}
-              className={`h-1.5 rounded-full transition-all ${i === idx ? "bg-[#FF6B1A] w-6" : "bg-white/20 w-1.5"}`}
+              className="w-11 h-11 flex items-center justify-center rounded"
               aria-label={`Go to slide ${i + 1}`}
-            />
+            ><span aria-hidden="true" className={`h-1.5 rounded-full transition-all ${i === idx ? "bg-[#FF6B1A] w-6" : "bg-white/20 w-1.5"}`} /></button>
           ))}
         </div>
 

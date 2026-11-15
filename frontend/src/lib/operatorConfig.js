@@ -141,7 +141,7 @@ export function fromDaqSample(prev, s) {
     encoderWarning: encoderConsensus?.warning ?? false,
     encoderMaxDeltaFt: encoderConsensus?.maxDeltaFt ?? null,
     sampleTimestampMs: Number.isFinite(timestampMs) ? timestampMs : prev.sampleTimestampMs,
-    weight: s.weight_lb ?? prev.weight,
+    weight: s.weight_lb ?? s.pipe_weight_lbs ?? prev.weight,
     internalPress,
     whp,
     annulusPress,

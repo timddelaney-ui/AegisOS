@@ -9,7 +9,8 @@ import ResultsPanel from "./ResultsPanel";
 import AIPanel from "./AIPanel";
 import { computeResults } from "../lib/formulas";
 import { useAuth, API } from "../context/AuthContext";
-import { useRig } from "../context/RigContext";
+import { useActiveJobSelection } from "../context/ActiveJobContext";
+import { prefillSheetValues } from "../lib/jobPrefill";
 
 // Convert current sheet values to normalized Imperial numbers for the watchdog.
 // Returns { rih, tagged, surfp, vann_ftmin } — undefined when not applicable.
@@ -99,7 +100,7 @@ const CLIENT_QUIPS = [
   "That's enough — you're deep in the red. Reset and try again.",
 ];
 
-const SheetContent = ({ sheetKey, unitSystem, onUnitChange, initialValues, hasTeam }) => {
+const SheetContent = ({ sheetKey, unitSystem, onUnitChange, initialValues, hasTeam, jobSeed }) => {
   const data = workbookData[sheetKey];
   const params = unitSystem === "imp" ? data.imp : data.met;
   const [values, setValues] = useState({});
@@ -111,10 +112,11 @@ const SheetContent = ({ sheetKey, unitSystem, onUnitChange, initialValues, hasTe
   const lastFlashRef = useRef({});
   const canvasRef = useRef(null);
   const { user } = useAuth();
-  const { rigId } = useRig();
+  const job = useActiveJobSelection();
+  const rigId = job.rig;
 
   const skipPersist = useRef(false);
-  const snapKey = `sheet_inputs:${sheetKey}`;
+  const snapKey = `${job.jobId}:sheet_inputs:${sheetKey}`;
 
   // Restore order: loaded job → last autosaved entry (converted if the unit system changed) → defaults.
   useEffect(() => {
@@ -125,7 +127,8 @@ const SheetContent = ({ sheetKey, unitSystem, onUnitChange, initialValues, hasTe
     }
     const defaults = {};
     params.forEach((p, i) => { defaults[i] = getDefaultValue(p, unitSystem); });
-    const saved = getStateSync(snapKey, null);
+    if (jobSeed) Object.assign(defaults, prefillSheetValues(params, unitSystem, jobSeed));
+    const saved = getStateSync(snapKey, null) || (job.legacyInputs ? getStateSync(`sheet_inputs:${sheetKey}`, null) : null);
     if (saved?.values) {
       let restored = saved.values;
       if (saved.unitSystem !== unitSystem) {
@@ -333,9 +336,9 @@ const SheetContent = ({ sheetKey, unitSystem, onUnitChange, initialValues, hasTe
       <div className="grid grid-cols-4 gap-2">
         <button
           onClick={runMacro}
-          className="col-span-3 bg-[#FF6B1A] hover:bg-[#C44A08] active:bg-[#C44A08] text-white py-3 rounded text-[13px] font-bold uppercase shadow-md transition-colors flex items-center justify-center gap-2"
+          className="job-primary col-span-3 bg-[#FF6B1A] hover:bg-[#C44A08] active:bg-[#C44A08] text-white py-3 rounded text-[13px] font-bold uppercase shadow-md transition-colors flex items-center justify-center gap-2"
         >
-          <Play className="w-4 h-4 fill-white" strokeWidth={2.5} />
+          <Play className="w-4 h-4 fill-current" strokeWidth={2.5} />
           Execute Macro
         </button>
         <button

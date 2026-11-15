@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { API } from "./AuthContext";
+import { useActiveJobSelection, useJobActions } from "./ActiveJobContext";
 
 const STORAGE_KEY = "ctp_active_rig_v2";
 const LAST_SEEN_KEY = "ctp_rig_last_seen_v1"; // { [rigId]: { chat: iso, checklist: iso } }
@@ -67,10 +68,8 @@ function writeLastSeen(v) {
 }
 
 export const RigProvider = ({ children }) => {
-  const [rigId, setRigIdState] = useState(() => {
-    try { return localStorage.getItem(STORAGE_KEY) || "RIG1"; }
-    catch (e) { console.warn("RigContext: active-rig read failed", e?.message); return "RIG1"; }
-  });
+  const { rig: rigId } = useActiveJobSelection();
+  const { updateJob } = useJobActions();
   const [activity, setActivity] = useState({}); // { [rigId]: { last_chat_at, last_checklist_at } }
   const [lastSeen, setLastSeen] = useState(readLastSeen);
   const [labels, setLabels] = useState({}); // { RIG1: "North Pad Unit", ... }
@@ -82,8 +81,8 @@ export const RigProvider = ({ children }) => {
     catch (e) { console.warn("RigContext: active-rig write failed", e?.message); }
   }, [rigId]);
   const setRigId = useCallback((id) => {
-    if (RIGS.some((r) => r.id === id)) setRigIdState(id);
-  }, []);
+    if (RIGS.some((r) => r.id === id)) updateJob({ rig: id });
+  }, [updateJob]);
 
   const fetchActivity = useCallback(async () => {
     try {
