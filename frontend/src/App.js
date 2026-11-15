@@ -89,7 +89,7 @@ const ProtectedRoute = ({ children, feature }) => {
 const AppRouter = () => {
   const location = useLocation();
   // Detect session_id in URL hash (from OAuth redirect)
-  if (location.hash?.includes("session_id=")) {
+  if (/(session_id|auth_code)=/.test(location.hash || "")) {
     return <AuthCallback />;
   }
   return (

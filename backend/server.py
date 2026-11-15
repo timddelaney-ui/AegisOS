@@ -115,13 +115,10 @@ async def get_current_user(
     session_token: Optional[str] = Cookie(None),
     authorization: Optional[str] = Header(None),
 ) -> Optional[dict]:
-    token = session_token
-    if not token and authorization and authorization.startswith("Bearer "):
-        token = authorization[7:]
-    if not token:
-        return None
-
-    return await _user_from_session_token(token)
+    user = await _user_from_session_token(session_token)
+    if not user and authorization and authorization.startswith("Bearer "):
+        user = await _user_from_session_token(authorization[7:])
+    return user
 
 
 async def _user_from_session_token(token: Optional[str]) -> Optional[dict]:
@@ -588,11 +585,42 @@ async def google_callback(request: Request, code: Optional[str] = None, state: O
     u = info.json() if info.status_code == 200 else {}
     if not u.get("email") or not u.get("email_verified"):
         return RedirectResponse(f"{PUBLIC_APP_URL}/?auth_error=email")
-    redirect = RedirectResponse(f"{PUBLIC_APP_URL}/app")
+    # The API usually lives on another site (e.g. *.onrender.com), where browsers
+    # drop the session cookie as third-party. Hand the app a short-lived one-time
+    # code in the URL fragment; it exchanges it for a Bearer token.
+    session_token = f"sess_{uuid.uuid4().hex}{uuid.uuid4().hex}"
+    handoff = uuid.uuid4().hex + uuid.uuid4().hex
+    redirect = RedirectResponse(f"{PUBLIC_APP_URL}/#auth_code={handoff}")
     await _finish_login(redirect, u["email"], u.get("name") or u["email"].split("@")[0],
-                        u.get("picture"), f"sess_{uuid.uuid4().hex}{uuid.uuid4().hex}")
+                        u.get("picture"), session_token)
+    await db.auth_handoffs.insert_one({
+        "code": handoff, "session_token": session_token,
+        "expires_at": datetime.now(timezone.utc) + timedelta(minutes=2),
+    })
     redirect.delete_cookie("oauth_state", path="/")
     return redirect
+
+
+@api_router.post("/auth/google/exchange")
+async def google_exchange(request: Request, response: Response):
+    code = (await request.json()).get("code")
+    if not code or not isinstance(code, str):
+        raise HTTPException(400, "Missing code")
+    doc = await db.auth_handoffs.find_one_and_delete({"code": code})
+    expires_at = doc and doc["expires_at"]
+    if expires_at and expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if not doc or expires_at < datetime.now(timezone.utc):
+        raise HTTPException(401, "Sign-in link expired. Please try again.")
+    user = await _user_from_session_token(doc["session_token"])
+    if not user:
+        raise HTTPException(401, "Session not found")
+    response.set_cookie(key="session_token", value=doc["session_token"], max_age=7 * 24 * 60 * 60,
+                        httponly=True, secure=True, samesite="none", path="/")
+    data = _serialize(user)
+    if not data.get("role"):
+        data["role"] = "crew"
+    return {**data, "session_token": doc["session_token"]}
 
 
 @api_router.post("/auth/logout")
