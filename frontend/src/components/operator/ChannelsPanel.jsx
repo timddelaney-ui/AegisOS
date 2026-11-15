@@ -37,7 +37,7 @@ const ranked = (list, order) => {
   return [...list].sort((a, b) => (pos.get(idOf(a)) ?? 1e6 + list.indexOf(a)) - (pos.get(idOf(b)) ?? 1e6 + list.indexOf(b)));
 };
 
-export function ChannelsPanel({ channels, groups, activeSets, hidden, telemetry, history, u, sourceLabel, onToggleSet, onHide, onOpenAdd, teamCfg }) {
+export function ChannelsPanel({ channels, groups, activeSets, hidden, telemetry, history, u, sourceLabel, sourceFor, onToggleSet, onHide, onOpenAdd, teamCfg }) {
   const visible = ranked(channels.filter((c) => activeSets.includes(c.group) && !hidden.includes(idOf(c))), teamCfg.order);
   const alarms = visible.filter((c) => c.key && levelOf(telemetry[c.key], c.warn, c.crit) !== "ok").length;
   const sensors = useSensors(
@@ -102,7 +102,7 @@ export function ChannelsPanel({ channels, groups, activeSets, hidden, telemetry,
                         onRename={(name) => teamCfg.rename(id, name)} dragHandle={handle} dragging={dragging} raw={raw}
                         value={u.show(raw, c.dim, c.dim === "n2_vol" ? 0 : undefined)} unit={u.label(c.dim)} tag={c.tag}
                         warn={c.warn} crit={c.crit} warnLabel={c.warn != null ? u.show(c.warn, c.dim) : null} critLabel={c.crit != null ? u.show(c.crit, c.dim) : null}
-                        sourceLabel={c.key ? sourceLabel : "no source tag"} onRemove={() => onHide(id)}
+                        sourceLabel={c.key ? sourceFor?.(c.key) || sourceLabel : "no source tag"} onRemove={() => onHide(id)}
                         spark={<Sparkline values={c.key ? history.slice(-60).map((h) => u.val(h[c.key], c.dim) ?? 0) : []} />} />
                     )}
                   </SortableChannel>

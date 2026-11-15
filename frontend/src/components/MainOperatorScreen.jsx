@@ -4,19 +4,19 @@ import { toast } from "sonner";
 import { Layers, Box, Play, Pause, RotateCcw, Users, Upload } from "lucide-react";
 import { Link } from "react-router-dom";
 import { API } from "../context/AuthContext";
-import { useRig } from "../context/RigContext";
+import { useOperatorTelemetry } from "../context/OperatorTelemetryContext";
 import { UNIT_SYSTEMS } from "../lib/units";
 import {
-  SEED_TELEMETRY, CHANNELS, JOB_SETS, PLUGS, DEFAULT_CREW, DEPTH_MIN_FT, DEPTH_MAX_FT, simTick, fromDaqSample,
+  CHANNELS, JOB_SETS, PLUGS, DEFAULT_CREW,
 } from "../lib/operatorConfig";
-import { stationAt, surveyTD, DLS_WARN, DLS_CRIT } from "../lib/surveyInterp";
+import { stationAt, DLS_WARN, DLS_CRIT } from "../lib/surveyInterp";
 import { DEMO_WELLBORE } from "../lib/wellboreGeometry";
 const SurveyRenderer = lazy(() => import("./operator/SurveyWellbore3D"));
 const SurveyWellbore3D = (props) => <Suspense fallback={<div className="job-loading" role="status">Loading 3D viewer...</div>}><SurveyRenderer {...props} /></Suspense>;
 import { PlugTally } from "./operator/PlugTally";
 import { PlugManagerModal, PLUG_TYPES } from "./operator/PlugManagerModal";
 import { usePlugTestRun } from "./operator/usePlugTestRun";
-import { useDepthCorrelation, useChannelLayout, useTeamChannelConfig } from "./operator/useOperatorSync";
+import { useChannelLayout, useTeamChannelConfig } from "./operator/useOperatorSync";
 import { DepthCorrelationPanel } from "./operator/DepthCorrelationPanel";
 import { ChannelsPanel } from "./operator/ChannelsPanel";
 import { ViewerToolbar, ZoomButtons } from "./operator/ViewerToolbar";
@@ -28,11 +28,7 @@ import { AddChannelModal } from "./operator/AddChannelModal";
 import { FluidTotalizersPanel } from "./operator/FluidTotalizersPanel";
 
 const CREW_KEY = "coilaegis_crew_rates_v1";
-const SIM_TICK_MS = 500;
-const LIVE_POLL_MS = 2000;
-const LIVE_RECONNECT_MS = 5000;
 const CANVAS_DRAW_MS = 500;
-const MAX_HISTORY_SAMPLES = 180;
 
 const loadLS = (k, fallback) => { try { return JSON.parse(localStorage.getItem(k)) || fallback; } catch { return fallback; } };
 const saveLS = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { console.debug("[Operator] save failed", e?.message); } };
@@ -44,20 +40,11 @@ const PEN_ON = {
   blue: "bg-blue-500/20 border-blue-500 text-blue-300", purple: "bg-purple-500/20 border-purple-500 text-purple-300",
 };
 
-const isFresh = (s) => {
-  const ts = s?.created_at || "";
-  const parsed = Date.parse(/Z|[+-]\d\d:??\d\d$/.test(ts) ? ts : `${ts}Z`);
-  return Number.isFinite(parsed) && Date.now() - parsed < 5000;
-};
-
 export default function MainOperatorScreen() {
   const u = useOperatorUnits();
-  const { rigId } = useRig();
+  const { telemetry, setTelemetry, historyRef, feedMode, setFeedMode, playbackSpeed, setPlaybackSpeed,
+    isSimRunning, setIsSimRunning, surveys, surveyId, setSurveyId, survey, minFt, maxFt, corr, live, sourceLabel, sourceFor } = useOperatorTelemetry();
   const [viewStyle, setViewStyle] = useState("3d-live");
-  const [feedMode, setFeedMode] = useState("SIM");
-  const [liveStale, setLiveStale] = useState(false);
-  const [playbackSpeed, setPlaybackSpeed] = useState(1);
-  const [isSimRunning, setIsSimRunning] = useState(true);
   const [colorMode, setColorMode] = useState("DLS");
   const [showManageChannels, setShowManageChannels] = useState(false);
   const [showCrewSetup, setShowCrewSetup] = useState(false);
@@ -76,29 +63,11 @@ export default function MainOperatorScreen() {
   };
   const [selectedPlug, setSelectedPlug] = useState(null);
   const [activePens, setActivePens] = useState(() => Object.fromEntries(PENS.map((p) => [p.key, true])));
-  const [telemetry, setTelemetry] = useState(SEED_TELEMETRY);
   const canvasPenRef = useRef(null);
-  const historyRef = useRef([]);
   const lastCanvasDraw = useRef({ pens: 0 });
-  const [surveys, setSurveys] = useState([]);
-  const [surveyId, setSurveyId] = useState(null);
   const [resizeTick, setResizeTick] = useState(0);
 
-  useEffect(() => {
-    axios.get(`${API}/surveys`, { withCredentials: true })
-      .then((r) => {
-        const list = (r.data?.surveys || []).filter((x) => x.stations?.length > 1);
-        setSurveys(list);
-        const active = list.find((x) => x.survey_id === r.data?.active_survey_id) || list[0];
-        if (active) setSurveyId(active.survey_id);
-      })
-      .catch((e) => console.debug("[Operator] survey load failed", e?.response?.status || e?.message));
-  }, []);
-
-  const survey = surveys.find((x) => x.survey_id === surveyId) || null;
   const displaySurvey = survey || DEMO_WELLBORE;
-  const minFt = survey ? survey.stations[0].md_ft : DEPTH_MIN_FT;
-  const maxFt = survey ? surveyTD(survey) : DEPTH_MAX_FT;
   const [plugRecords, setPlugRecords] = useState([]);
   const [canEditPlugs, setCanEditPlugs] = useState(false);
   const [showPlugManager, setShowPlugManager] = useState(false);
@@ -117,7 +86,6 @@ export default function MainOperatorScreen() {
 
   useEffect(() => { setPlugRecords([]); setCanEditPlugs(false); setShowPlugManager(false); loadPlugs(); }, [loadPlugs]);
 
-  const corr = useDepthCorrelation(surveyId);
   const rawPlugs = useMemo(() => (survey
     ? plugRecords.map((p) => ({ id: p.plug_id, name: p.name, type: PLUG_TYPES[p.plug_type], start: p.top_md_ft, end: p.bottom_md_ft, notes: p.notes }))
     : PLUGS.map((p) => ({ ...p, name: p.id }))), [survey, plugRecords]);
@@ -151,113 +119,14 @@ export default function MainOperatorScreen() {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  const push = (next) => { historyRef.current = [...historyRef.current.slice(-(MAX_HISTORY_SAMPLES - 1)), next]; return next; };
-
   const startTestRun = useCallback(() => {
     setFeedMode("SIM"); setIsSimRunning(true); setPlaybackSpeed(100);
     setTelemetry((p) => ({ ...p, depth: minFt }));
     return minFt;
-  }, [minFt]);
+  }, [minFt, setFeedMode, setIsSimRunning, setPlaybackSpeed, setTelemetry]);
 
-  const endTestRun = useCallback(() => setPlaybackSpeed(1), []);
+  const endTestRun = useCallback(() => setPlaybackSpeed(1), [setPlaybackSpeed]);
   const testRun = usePlugTestRun({ depth: bitFt, plugs, maxFt: maxFt + (moveString ? corr.offsetFt : 0), surveyId: survey?.survey_id, onStart: startTestRun, onEnd: endTestRun });
-
-  useEffect(() => {
-    if (feedMode === "STANDBY" || !isSimRunning) return;
-    if (feedMode === "LIVE" && !liveStale) return;
-    const id = setInterval(() => setTelemetry((prev) => push(simTick(prev, playbackSpeed, minFt, maxFt))), SIM_TICK_MS);
-    return () => clearInterval(id);
-  }, [isSimRunning, feedMode, playbackSpeed, liveStale, minFt, maxFt]);
-
-  useEffect(() => {
-    if (feedMode !== "LIVE") { setLiveStale(false); return; }
-    let cancelled = false;
-    let socket = null;
-    let pollTimer = null;
-    let reconnectTimer = null;
-    let staleTimer = null;
-    let lastReceivedAt = 0;
-    let lastAcceptedTimestampMs = -Infinity;
-    const acceptSample = (sample) => {
-      if (cancelled) return;
-      if (sample && isFresh(sample)) {
-        const timestampMs = Date.parse(sample.event_at ?? sample.ts ?? sample.created_at ?? "");
-        if (Number.isFinite(timestampMs) && timestampMs < lastAcceptedTimestampMs) return;
-        if (Number.isFinite(timestampMs)) lastAcceptedTimestampMs = timestampMs;
-        lastReceivedAt = Date.now();
-        setLiveStale(false);
-        setTelemetry((prev) => push(fromDaqSample(prev, sample)));
-      } else {
-        setLiveStale(true);
-      }
-    };
-    const poll = async () => {
-      try {
-        const r = await axios.get(`${API}/liveops/stream`, { params: { limit: 1, rig_id: rigId }, withCredentials: true });
-        acceptSample(r.data?.samples?.[0]);
-      } catch (e) {
-        if (!cancelled) setLiveStale(true);
-        console.debug("[Operator] live poll failed", e?.response?.status || e?.message);
-      }
-    };
-    const startPolling = () => {
-      if (pollTimer !== null || cancelled) return;
-      poll();
-      pollTimer = setInterval(poll, LIVE_POLL_MS);
-    };
-    const connect = () => {
-      if (cancelled) return;
-      const wsUrl = new URL(`${API}/liveops/ws`);
-      wsUrl.protocol = wsUrl.protocol === "https:" ? "wss:" : "ws:";
-      if (rigId) wsUrl.searchParams.set("rig_id", rigId);
-      try {
-        socket = new WebSocket(wsUrl.toString());
-      } catch (e) {
-        console.debug("[Operator] live WebSocket unavailable", e?.message);
-        startPolling();
-        reconnectTimer = setTimeout(connect, LIVE_RECONNECT_MS);
-        return;
-      }
-      socket.onopen = () => {
-        if (pollTimer !== null) {
-          clearInterval(pollTimer);
-          pollTimer = null;
-        }
-      };
-      socket.onmessage = (event) => {
-        let message;
-        try {
-          message = JSON.parse(event.data);
-        } catch (e) {
-          console.debug("[Operator] invalid live WebSocket message", e?.message);
-          return;
-        }
-        if (message.type === "telemetry") acceptSample(message.sample);
-        if (message.type === "resync_required") {
-          setLiveStale(true);
-          socket?.close();
-        }
-      };
-      socket.onerror = () => socket?.close();
-      socket.onclose = () => {
-        if (cancelled) return;
-        startPolling();
-        reconnectTimer = setTimeout(connect, LIVE_RECONNECT_MS);
-      };
-    };
-    startPolling();
-    connect();
-    staleTimer = setInterval(() => {
-      if (lastReceivedAt && Date.now() - lastReceivedAt > 5000) setLiveStale(true);
-    }, LIVE_POLL_MS);
-    return () => {
-      cancelled = true;
-      if (pollTimer !== null) clearInterval(pollTimer);
-      if (reconnectTimer !== null) clearTimeout(reconnectTimer);
-      if (staleTimer !== null) clearInterval(staleTimer);
-      socket?.close();
-    };
-  }, [feedMode, rigId]);
 
   const bitLabel = `BIT ${u.show(bitFt, "depth", 1)} ${u.label("depth")}`;
   const tickStepFt = useMemo(() => {
@@ -278,10 +147,8 @@ export default function MainOperatorScreen() {
     lastCanvasDraw.current.pens = now;
     const { ctx, w, h } = prepCanvas(canvasPenRef.current);
     drawPens(ctx, w, h, historyRef.current, activePens);
-  }, [telemetry, viewStyle, activePens, resizeTick]);
+  }, [telemetry, viewStyle, activePens, resizeTick, historyRef]);
 
-  const live = feedMode === "LIVE" && !liveStale;
-  const sourceLabel = feedMode === "STANDBY" ? "standby • feed held" : live ? "live DAQ" : feedMode === "LIVE" ? "DAQ stale • sim fallback" : "simulated";
   const P = (v) => u.show(v, "pressure");
 
   const allChannels = useMemo(() => [...CHANNELS, ...layout.custom], [layout.custom]);
@@ -358,11 +225,11 @@ export default function MainOperatorScreen() {
 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
         <MetricCard testId="metric-bit-depth" title="CT Bit Depth" value={u.show(counterFt + corr.offsetFt, "depth", 1)} unit={u.label("depth")}
-          sub={`ctr ${u.show(counterFt, "depth", 1)} • off ${u.show(corr.offsetFt, "depth", 1)} • ${telemetry.direction} ${u.show(telemetry.speedFtPerMin, "speed_ftmin", 1)} ${u.label("speed_ftmin")}${telemetry.encoderWarning ? " • ENCODER MISMATCH" : ""}`} />
-        <MetricCard testId="metric-von-mises" title="Von Mises" value={telemetry.vonMises.toFixed(1)} unit="%SMYS" sub={`${sourceLabel} • 80% alert line`} barVal={telemetry.vonMises} />
-        <MetricCard testId="metric-surface-weight" title="Surface Weight" value={u.show(telemetry.weight, "weight", 0)} unit={u.label("weight")} sub={sourceLabel} />
-        <MetricCard testId="metric-internal-pressure" title="Internal Pressure" value={P(telemetry.internalPress)} unit={u.label("pressure")} sub={sourceLabel} />
-        <MetricCard testId="metric-wellhead-pressure" title="Wellhead Pressure" value={P(telemetry.whp)} unit={u.label("pressure")} sub={`${sourceLabel} • crit ${P(7208)}`} />
+          sub={`${sourceFor("depth")} • ctr ${u.show(counterFt, "depth", 1)} • off ${u.show(corr.offsetFt, "depth", 1)} • ${telemetry.direction} ${u.show(telemetry.speedFtPerMin, "speed_ftmin", 1)} ${u.label("speed_ftmin")}${telemetry.encoderWarning ? " • ENCODER MISMATCH" : ""}`} />
+        <MetricCard testId="metric-von-mises" title="Von Mises" value={telemetry.vonMises.toFixed(1)} unit="%SMYS" sub={`${sourceFor("vonMises")} • 80% alert line`} barVal={telemetry.vonMises} />
+        <MetricCard testId="metric-surface-weight" title="Surface Weight" value={u.show(telemetry.weight, "weight", 0)} unit={u.label("weight")} sub={sourceFor("weight")} />
+        <MetricCard testId="metric-internal-pressure" title="Internal Pressure" value={P(telemetry.internalPress)} unit={u.label("pressure")} sub={sourceFor("internalPress")} />
+        <MetricCard testId="metric-wellhead-pressure" title="Wellhead Pressure" value={P(telemetry.whp)} unit={u.label("pressure")} sub={`${sourceFor("whp")} • crit ${P(7208)}`} />
         <MetricCard testId="metric-net-dp" title="Net ΔP" value={P(telemetry.netDeltaP)} unit={u.label("pressure")} sub="internal − wellhead" />
       </div>
 
@@ -447,12 +314,12 @@ export default function MainOperatorScreen() {
       )}
 
       <DepthCorrelationPanel counterFt={counterFt} offsetFt={corr.offsetFt} moveTarget={corr.moveTarget} plugs={rawPlugs} log={corr.log}
-        u={u} onOffset={corr.setOffset} onTarget={corr.setTarget} shared={!!survey} />
+        u={u} onOffset={corr.setOffset} onTarget={corr.setTarget} shared={!!survey} source={sourceFor("depth")} />
 
-      <FluidTotalizersPanel telemetry={telemetry} />
+      <FluidTotalizersPanel telemetry={telemetry} sourceFor={sourceFor} />
 
       <ChannelsPanel channels={allChannels} groups={groups} activeSets={layout.active_sets} hidden={layout.hidden} telemetry={telemetry}
-        history={historyRef.current} u={u} sourceLabel={sourceLabel} onToggleSet={layout.toggleSet} onHide={layout.hide} onOpenAdd={() => setShowManageChannels(true)} teamCfg={teamCfg} />
+        history={historyRef.current} u={u} sourceLabel={sourceLabel} sourceFor={sourceFor} onToggleSet={layout.toggleSet} onHide={layout.hide} onOpenAdd={() => setShowManageChannels(true)} teamCfg={teamCfg} />
 
       {showPlugManager && survey && (
         <PlugManagerModal plugs={plugRecords} canEdit={canEditPlugs} wellName={survey.well_name || survey.survey_id}

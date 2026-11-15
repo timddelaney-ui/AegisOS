@@ -77,4 +77,14 @@ input[type="number"] {
 .job-today span { font-size: .75rem; color: #b7c5d9; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .job-checklist-item { display: flex; gap: .75rem; align-items: center; min-height: 44px; font-size: .85rem; padding-block: .4rem; }
 .job-checklist-item input { min-width: 24px; accent-color: #ff8a45; }
+.job-live-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; }
+.job-live-grid .job-gauge { min-height: 165px; text-align: left; }
+.job-gauge-select { min-width: 0; border-radius: 1rem; }
+.job-gauge-select[aria-pressed="true"] > div { border-color: #ff9c66; }
+.job-alarm { display: flex; flex-direction: column; gap: .4rem; padding: .75rem; border: 1px solid #64748b; border-radius: .75rem; background: #0d1526; }
+.job-alarm span { font-size: .75rem; color: #cbd5e1; }
+.job-alarm.warning { border-color: #fcd34d; color: #fde68a; }
+.job-alarm.critical { border-color: #fda4af; color: #fecdd3; }
+.job-sparkline { display: block; width: 100%; height: 100px; margin-block: .5rem; }
+.job-page [aria-pressed="true"].job-secondary { border-color: #ff9c66; color: #ff9c66; }
 @media print { .job-shell-header, .job-bottom-nav { display: none; } .job-shell { padding: 0; } }

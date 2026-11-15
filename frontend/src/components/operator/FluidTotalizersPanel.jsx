@@ -26,7 +26,7 @@ function loadChannels() {
 const isReading = (value) => value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value)) && Number(value) >= 0;
 const displayValue = (value) => isReading(value) ? Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 }) : "—";
 
-export function FluidTotalizersPanel({ telemetry = {} }) {
+export function FluidTotalizersPanel({ telemetry = {}, sourceFor }) {
   const [channels, setChannels] = useState(loadChannels);
   const values = useMemo(() => Object.fromEntries(channels.map((channel) => [
     channel.key,
@@ -88,8 +88,8 @@ export function FluidTotalizersPanel({ telemetry = {} }) {
               </label>
             </div>
             <div className="flex justify-between gap-2 text-xs font-mono text-slate-200">
-              <span>{displayValue(telemetry[channel.rateKey])} {channel.rateUnit}</span>
-              <span>{displayValue(telemetry[channel.volumeKey])} {channel.volumeUnit}</span>
+              <span>{displayValue(telemetry[channel.rateKey])} {channel.rateUnit}<small className="block">{sourceFor?.(channel.rateKey)}</small></span>
+              <span>{displayValue(telemetry[channel.volumeKey])} {channel.volumeUnit}<small className="block">{sourceFor?.(channel.volumeKey)}</small></span>
             </div>
           </div>
         ))}

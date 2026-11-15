@@ -4,6 +4,7 @@ import { BriefcaseBusiness, Activity, ClipboardList, Calculator, Menu, AlertOcta
 import { useRig, rigLabel } from "../context/RigContext";
 import { AdvisoryStrip } from "./AdvisoryDisclaimer";
 import { useActiveJob } from "../context/ActiveJobContext";
+import { OperatorTelemetryProvider } from "../context/OperatorTelemetryContext";
 
 const tabs = [
   { to: "/job", label: "Job", Icon: BriefcaseBusiness },
@@ -31,7 +32,7 @@ export default function AppShell() {
         <Link to="/sop" className="job-sop" aria-label="Emergency SOPs"><AlertOctagon size={18} /> SOP</Link>
       </header>
       <AdvisoryStrip />
-      <main className="job-shell-content"><Outlet /></main>
+      <main className="job-shell-content"><OperatorTelemetryProvider><Outlet /></OperatorTelemetryProvider></main>
       <nav className="job-bottom-nav" aria-label="Main navigation">
         {tabs.map(({ to, label, Icon }) => (
           <NavLink key={to} to={to} className={({ isActive }) => isActive || section === to ? "job-tab active" : "job-tab"}>
