@@ -3,6 +3,7 @@ import { NavLink, Outlet, Link, useLocation } from "react-router-dom";
 import { BriefcaseBusiness, Activity, ClipboardList, Calculator, Menu, AlertOctagon } from "lucide-react";
 import { useRig, rigLabel } from "../context/RigContext";
 import { AdvisoryStrip } from "./AdvisoryDisclaimer";
+import { useActiveJob } from "../context/ActiveJobContext";
 
 const tabs = [
   { to: "/job", label: "Job", Icon: BriefcaseBusiness },
@@ -14,6 +15,7 @@ const tabs = [
 
 export default function AppShell() {
   const { rigId } = useRig();
+  const job = useActiveJob();
   const { pathname } = useLocation();
   const section = pathname === "/app" || ["/stress", "/fatigue", "/ctd-calculator", "/wellbore"].includes(pathname)
     ? "/calc" : pathname.startsWith("/live-ops") ? "/live" : pathname === "/treatment" ? "/log" : pathname;
@@ -21,6 +23,10 @@ export default function AppShell() {
     <div className="job-shell" data-testid="app-shell">
       <header className="job-shell-header">
         <Link to="/job" className="job-brand">Aegis OS</Link>
+        <select aria-label="Active job" className="job-switcher" value={job.jobId} onChange={(event) => event.target.value === "new" ? job.createJob() : job.selectJob(event.target.value)}>
+          {job.jobs.map((item, index) => <option key={item.jobId} value={item.jobId}>{item.well.name || `Job ${index + 1}`} / Run {item.runNumber}</option>)}
+          <option value="new">New job</option>
+        </select>
         <span className="job-rig-badge">{rigLabel(rigId)}</span>
         <Link to="/sop" className="job-sop" aria-label="Emergency SOPs"><AlertOctagon size={18} /> SOP</Link>
       </header>

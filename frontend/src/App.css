@@ -45,6 +45,7 @@ input[type="number"] {
 .job-shell-header { display: flex; align-items: center; gap: .5rem; padding: .5rem .75rem; background: var(--job-panel); border-bottom: 1px solid #334155; }
 .job-brand { font-weight: 800; margin-right: auto; }
 .job-rig-badge { font-size: .75rem; padding: .35rem .5rem; border: 1px solid #64748b; border-radius: .5rem; }
+.job-switcher { min-width: 0; max-width: 40%; background: #070c14; color: #f1f5f9; border: 1px solid #64748b; border-radius: .5rem; font-size: .75rem; padding: .25rem; }
 .job-sop { display: inline-flex; align-items: center; gap: .3rem; color: #fda4af; }
 .job-shell button, .job-shell select, .job-shell input:not([type="range"]), .job-shell a, .job-sop { min-height: 44px; }
 .job-shell a { align-content: center; }
