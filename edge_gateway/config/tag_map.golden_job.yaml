@@ -1,0 +1,40 @@
+# Golden Job demo rig tag map (field-test CT unit, well "Aegis Golden 14H").
+# Same schema as tag_map.example.yaml. Encoder 3 is the OPC UA drift encoder used in Act 3.
+adapters:
+  - name: injector-plc
+    protocol: modbus_tcp
+    connection: {host: 192.168.10.20, port: 502, unit_id: 1, timeout_s: 3, max_block_regs: 120}
+    tags:
+      - {channel: injector_speed_ft_per_min, source: {register: 100, kind: holding, type: float32, endianness: CDAB}, unit: ft/min}
+      - {channel: injector_direction,        source: {register: 102, kind: holding, type: int16}}
+      - {channel: encoder_1_depth_ft,        source: {register: 110, kind: input, type: float32, endianness: ABCD}, unit: ft}
+      - {channel: encoder_2_depth_ft,        source: {register: 112, kind: input, type: float32, endianness: ABCD}, unit: ft}
+      - {channel: pipe_weight_lbs,           source: {register: 120, kind: input, type: float32, endianness: ABCD}, unit: lbs}
+  - name: pump-opcua
+    protocol: opcua
+    connection:
+      endpoint: opc.tcp://192.168.10.30:4840
+      security_policy: Basic256Sha256
+      security_mode: SignAndEncrypt
+      client_cert: /etc/aegis/opcua/client.der
+      client_key: /etc/aegis/opcua/client.pem
+      mode: subscribe
+      publish_ms: 250
+    tags:
+      - {channel: encoder_3_depth_ft,        source: {node_id: "ns=2;s=Enc3.Depth"}, unit: ft}
+      - {channel: acid_rate,                 source: {node_id: "ns=2;s=Acid.Rate"}, unit: bbl/min}
+      - {channel: acid_vol,                  source: {node_id: "ns=2;s=Acid.Vol"}, unit: bbl}
+      - {channel: fr_slug_rate,              source: {node_id: "ns=2;s=FRSlug.Rate"}, unit: bbl/min}
+      - {channel: fr_slug_vol,               source: {node_id: "ns=2;s=FRSlug.Vol"}, unit: bbl}
+      - {channel: mmfr_slugs_rate,           source: {node_id: "ns=2;s=MMFR.Rate"}, unit: bbl/min}
+      - {channel: mmfr_slugs_vol,            source: {node_id: "ns=2;s=MMFR.Vol"}, unit: bbl}
+      - {channel: gel_pills_rate,            source: {node_id: "ns=2;s=Gel.Rate"}, unit: bbl/min}
+      - {channel: gel_pills_vol,             source: {node_id: "ns=2;s=Gel.Vol"}, unit: bbl}
+      - {channel: water_flush_rate,          source: {node_id: "ns=2;s=Flush.Rate"}, unit: bbl/min}
+      - {channel: water_flush_vol,           source: {node_id: "ns=2;s=Flush.Vol"}, unit: bbl}
+      - {channel: wellhead_pressure_psi,     source: {node_id: "ns=2;s=WHP"}, unit: psi}
+  - name: dau-wits
+    protocol: wits
+    connection: {host: 192.168.10.40, port: 5000}
+    tags:
+      - {channel: circulating_pressure_psi,  source: {code: "0121", mnemonic: SPPA}, unit: psi}

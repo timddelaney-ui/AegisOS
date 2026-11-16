@@ -252,6 +252,10 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
         p_internal_psi: Optional[float] = Field(None, ge=0, le=30000, allow_inf_nan=False)
         p_external_psi: Optional[float] = Field(None, ge=0, le=30000, allow_inf_nan=False)
         axial_force_lbf: Optional[float] = Field(None, ge=-1e7, le=1e7, allow_inf_nan=False)
+        # Signed quantities: differential pressure, depth/TVD offsets and temperature can legitimately be negative.
+        diff_pressure_psi: Optional[float] = Field(None, ge=-30000, le=30000, allow_inf_nan=False)
+        tvd_offset_ft: Optional[float] = Field(None, ge=-100000, le=100000, allow_inf_nan=False)
+        temperature_f: Optional[float] = Field(None, ge=-100, le=1000, allow_inf_nan=False)
         vm_utilization: Optional[float] = Field(None, ge=0, le=10, allow_inf_nan=False)   # 0..1 Von Mises / 80%-SMYS envelope util
         fatigue_worst: Optional[float] = Field(None, ge=0, le=1, allow_inf_nan=False)    # 0..1 reel worst-node damage snapshot
         source: str = Field("simulated", max_length=32)  # 'simulated' | 'wits' | 'modbus' | 'manual'

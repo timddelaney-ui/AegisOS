@@ -55,7 +55,7 @@ export function DepthCorrelationPanel({ counterFt, offsetFt, moveTarget, plugs, 
       <div className="space-y-2">
         <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Offset {L}</label>
         <div className="flex gap-2">
-          <input type="number" step="0.1" value={offsetText} onChange={(e) => { setOffsetText(e.target.value); setDirty(true); }} onBlur={commitText} onKeyDown={(e) => e.key === "Enter" && commitText()}
+          <input type="text" inputMode="decimal" value={offsetText} onChange={(e) => { setOffsetText(e.target.value); setDirty(true); }} onBlur={commitText} onKeyDown={(e) => e.key === "Enter" && commitText()}
             className="flex-1 min-w-0 bg-slate-950 border border-slate-800 focus:border-orange-500 outline-none rounded-lg px-3 py-2 text-sm font-mono text-slate-100" data-testid="correlation-offset-input" />
           <button onClick={() => onOffset(0, "reset")} className={`${btn} flex items-center gap-1`} data-testid="correlation-reset-btn"><RotateCcw className="w-3.5 h-3.5" /> Reset to 0</button>
         </div>

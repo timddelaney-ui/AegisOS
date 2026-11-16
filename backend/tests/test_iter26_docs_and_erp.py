@@ -50,7 +50,7 @@ def test_doc_upload_bad_extension(auth_headers):
     r = requests.post(f"{BASE_URL}/api/documents", headers=auth_headers,
                       files={"file": ("x.exe", io.BytesIO(b"MZ"), "application/x-msdownload")},
                       data={"name": "x", "category": "sop"})
-    assert r.status_code == 400
+    assert r.status_code == 415
 
 
 def test_doc_full_lifecycle(auth_headers):

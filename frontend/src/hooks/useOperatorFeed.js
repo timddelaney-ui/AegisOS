@@ -56,7 +56,9 @@ export function useOperatorFeed({ rigId, feedMode, minFt, maxFt }) {
         setLiveStale(true);
       }
     };
+    const isOffline = () => typeof navigator !== "undefined" && navigator.onLine === false;
     const poll = async () => {
+      if (isOffline()) { setLiveStale(true); return; }
       try {
         const response = await axios.get(`${API}/liveops/stream`, { params: { limit: 1, rig_id: rigId }, withCredentials: true });
         acceptSample(response.data?.samples?.[0]);
@@ -66,12 +68,13 @@ export function useOperatorFeed({ rigId, feedMode, minFt, maxFt }) {
       }
     };
     const startPolling = () => {
-      if (pollTimer !== null || cancelled) return;
+      if (pollTimer !== null || cancelled || isOffline()) return;
       poll();
       pollTimer = setInterval(poll, LIVE_POLL_MS);
     };
     const connect = () => {
       if (cancelled) return;
+      if (isOffline()) { reconnectTimer = setTimeout(connect, LIVE_RECONNECT_MS); return; }
       const wsUrl = new URL(`${API}/liveops/ws`);
       wsUrl.protocol = wsUrl.protocol === "https:" ? "wss:" : "ws:";
       if (rigId) wsUrl.searchParams.set("rig_id", rigId);
@@ -100,6 +103,19 @@ export function useOperatorFeed({ rigId, feedMode, minFt, maxFt }) {
         reconnectTimer = setTimeout(connect, LIVE_RECONNECT_MS);
       };
     };
+    // Transient drops only pause the feed; auth state is never touched here.
+    const onOffline = () => {
+      if (pollTimer !== null) { clearInterval(pollTimer); pollTimer = null; }
+      setLiveStale(true);
+    };
+    const onOnline = () => {
+      if (cancelled) return;
+      clearTimeout(reconnectTimer);
+      startPolling();
+      if (!socket || socket.readyState > 1) connect();
+    };
+    window.addEventListener("offline", onOffline);
+    window.addEventListener("online", onOnline);
     startPolling();
     connect();
     staleTimer = setInterval(() => {
@@ -107,6 +123,8 @@ export function useOperatorFeed({ rigId, feedMode, minFt, maxFt }) {
     }, LIVE_POLL_MS);
     return () => {
       cancelled = true;
+      window.removeEventListener("offline", onOffline);
+      window.removeEventListener("online", onOnline);
       if (pollTimer !== null) clearInterval(pollTimer);
       if (reconnectTimer !== null) clearTimeout(reconnectTimer);
       if (staleTimer !== null) clearInterval(staleTimer);

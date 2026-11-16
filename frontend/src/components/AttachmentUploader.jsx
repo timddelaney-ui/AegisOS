@@ -4,10 +4,9 @@ import { Paperclip, X, Loader2, FileText, Trash2, Image as ImageIcon, Download }
 import { API, useAuth } from "../context/AuthContext";
 import { useRig } from "../context/RigContext";
 import { requestHitlApproval } from "../lib/hitl";
+import { validateUploadFile } from "../lib/uploadValidation";
 
-const ALLOWED_MIME = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "application/pdf"];
-const ACCEPT_ATTR = ".jpg,.jpeg,.png,.webp,.heic,.heif,.pdf,image/*,application/pdf";
-const MAX_BYTES = 15 * 1024 * 1024;
+const ACCEPT_ATTR = ".jpg,.jpeg,.png,.webp,.heic,.heif,.pdf";
 
 const humanSize = (n) => (n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
 const payloadFingerprint = async (obj) => {
@@ -121,15 +120,7 @@ const AttachmentUploader = ({ context, contextRef, onUploaded, hideList = false,
 
   const pick = () => inputRef.current?.click();
 
-  const validate = (f) => {
-    if (!f) return "Pick a file";
-    if (f.size > MAX_BYTES) return `Too big (${(f.size/1024/1024).toFixed(1)} MB). Max 15 MB.`;
-    const type = f.type || "";
-    const ext = (f.name.split(".").pop() || "").toLowerCase();
-    const okType = ALLOWED_MIME.includes(type) || ["jpg","jpeg","png","webp","heic","heif","pdf"].includes(ext);
-    if (!okType) return "Only JPG, PNG, HEIC, WEBP or PDF.";
-    return null;
-  };
+  const validate = (f) => validateUploadFile(f, { extraExtensions: ["heic", "heif"] });
 
   const upload = async (file) => {
     const bad = validate(file);
@@ -159,7 +150,6 @@ const AttachmentUploader = ({ context, contextRef, onUploaded, hideList = false,
       fd.append("hitl_approval_id", hitlApprovalId);
       const { data } = await axios.post(`${API}/attachments`, fd, {
         withCredentials: true,
-        headers: { "Content-Type": "multipart/form-data" },
       });
       onUploaded && onUploaded(data);
       await loadList();
