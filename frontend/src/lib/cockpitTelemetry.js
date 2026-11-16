@@ -45,7 +45,7 @@ export const signedFixed = (v, digits = 0) => {
   return n.toFixed(digits).replace(/^-0(\.0+)?$/, (m) => m.slice(1));
 };
 
-export const WINDOWS = { "15m": 15 * 60e3, "1h": 3600e3, "4h": 4 * 3600e3, Shift: 12 * 3600e3 };
+export const WINDOWS = { "10m": 10 * 60e3, "1h": 3600e3, "4h": 4 * 3600e3, Shift: 12 * 3600e3 };
 
 export const FATIGUE_SECTIONS = [
   { key: "top", label: "Top", range: "0-33% (reel end)", from: 0, to: 0.33 },

@@ -1,6 +1,7 @@
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import OperatorCockpit from "../OperatorCockpit";
+import { UnitProvider } from "../../context/UnitContext";
 
 jest.mock("react-router-dom", () => ({
   NavLink: ({ to, children, className, ...props }) => (
@@ -17,20 +18,24 @@ jest.mock("../../context/OperatorTelemetryContext", () => {
     feedMode: "SIM", live: false, liveStale: false,
     telemetry: { depth: 9000, internalPress: 5000, whp: 6000, weight: -800, slurryRate: 2, speedFtPerMin: 30, inclination: 85, encoder_1_depth_ft: 9000, encoder_2_depth_ft: 9001, encoder_3_depth_ft: 9004 },
   };
-  return { useOperatorTelemetry: () => value };
+  return { useOperatorTelemetry: () => { value.telemetry.inclination = mockInclination; return value; } };
 });
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-test("cockpit renders widgets without console errors and flags encoder mismatch + compression", async () => {
+let mockInclination = 85;
+
+test.each([0, 85])("cockpit renders finite charts at %s degrees and flags encoder mismatch + compression", async (inclination) => {
+  mockInclination = inclination;
   const err = jest.spyOn(console, "error").mockImplementation(() => {});
   const host = document.createElement("div"); document.body.appendChild(host);
   const root = createRoot(host);
-  await act(async () => { root.render(<OperatorCockpit />); });
+  await act(async () => { root.render(<UnitProvider><OperatorCockpit /></UnitProvider>); });
   expect(host.querySelector('[data-testid="encoder-warning"]')).not.toBeNull();
   expect(host.querySelector('[data-testid="cockpit-title"]').textContent).toContain("WIDE-DECK LAYOUT");
   expect(host.querySelector('[data-testid="cockpit-rail"] a[aria-label="Treatment Log / Notes"]').getAttribute("href")).toBe("/log");
   expect(host.querySelector('[data-testid="strip-chart"]')).not.toBeNull();
+  expect(host.querySelector('[data-testid="envelope-panel"] svg').outerHTML).not.toMatch(/NaN|Infinity/);
   expect(host.querySelector('[data-testid="buckling-status"]').textContent).toContain("COMPRESSION");
   expect(host.querySelectorAll('[data-testid^="fatigue-"]').length).toBeGreaterThanOrEqual(3);
   expect(host.querySelector('[data-testid="role-badge"]').textContent).toBe("Crew");

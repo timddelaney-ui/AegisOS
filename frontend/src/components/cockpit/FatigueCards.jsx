@@ -4,6 +4,7 @@ import { API } from "../../context/AuthContext";
 import { useActiveReel } from "../../context/ActiveReelContext";
 import { FATIGUE_SECTIONS, estimateFatigueSections } from "../../lib/cockpitTelemetry";
 import { intervalAt } from "../../lib/ctPhysics";
+import { useUnits } from "../../context/UnitContext";
 
 const POLL_MS = 30000;
 const normalize = (data) => {
@@ -22,6 +23,7 @@ const normalize = (data) => {
 const color = (p) => (p >= 90 ? "#EF4444" : p >= 60 ? "#F59E0B" : "#22D3EE");
 
 export default function FatigueCards({ signals }) {
+  const units = useUnits();
   const { activeReel } = useActiveReel();
   const [remote, setRemote] = useState(null);
   const length = Number(activeReel?.total_length_ft) || 0;
@@ -69,7 +71,7 @@ export default function FatigueCards({ signals }) {
             <div className="text-[10px] uppercase text-slate-400">{s.label} <span className="normal-case">{s.range}</span></div>
             <div className="font-mono tabular-nums text-2xl font-bold" style={{ color: color(pct) }}>{pct.toFixed(1)}%</div>
             <div className="text-[11px] font-mono text-slate-300">{Number.isFinite(r.cycle_count) ? r.cycle_count : "—"} cycles</div>
-            <div className="text-[11px] font-mono text-slate-300">gov. {Number.isFinite(r.governing_depth_ft) ? `${Math.round(r.governing_depth_ft).toLocaleString()} ft` : "—"}</div>
+            <div className="text-[11px] font-mono text-slate-300">gov. {units.fmt(r.governing_depth_ft, "depth", { digits: 0 })}</div>
             {!remote && <div className="text-[9px] text-amber-400">client estimate</div>}
           </div>
         );

@@ -1,5 +1,6 @@
 import React from "react";
 import { ENCODER_LABELS, ENCODER_THRESHOLD_FT } from "../../lib/cockpitTelemetry";
+import { useUnits } from "../../context/UnitContext";
 
 export function DirectionBadge({ direction }) {
   const glyph = direction === "RIH" ? "▼" : direction === "POOH" ? "▲" : "■";
@@ -12,21 +13,23 @@ export function DirectionBadge({ direction }) {
 }
 
 export function EncoderBanner({ consensus }) {
+  const units = useUnits();
   if (!consensus.mismatch) return null;
   return (
     <div role="alert" className="bg-red-950 border border-red-500 text-red-200 rounded px-3 py-1.5 text-sm font-mono" data-testid="encoder-warning">
-      ENCODER CONSENSUS WARNING: max spread {consensus.maxDeltaFt.toFixed(2)} ft &gt; {ENCODER_THRESHOLD_FT.toFixed(1)} ft — check traction wheel slip / gooseneck / levelwind.
+      ENCODER CONSENSUS WARNING: max spread {units.fmt(consensus.maxDeltaFt, "depth", { digits: 2 })} &gt; {units.fmt(ENCODER_THRESHOLD_FT, "depth", { digits: 2 })} — check traction wheel slip / gooseneck / levelwind.
     </div>
   );
 }
 
 export function EncoderCounters({ encoders, consensus }) {
+  const units = useUnits();
   return (
     <div className="flex flex-wrap gap-2" data-testid="encoder-counters">
       {ENCODER_LABELS.map((label, i) => (
         <div key={label} className={`rounded border px-2 py-1 bg-[#0F172A] ${consensus.mismatch ? "border-red-500" : "border-slate-600"}`}>
           <div className="text-[10px] text-slate-400">{label}</div>
-          <div className="font-mono tabular-nums text-sm text-[#F8FAFC]">{Number.isFinite(encoders[i]) ? `${encoders[i].toFixed(1)} ft` : "—"}</div>
+          <div className="font-mono tabular-nums text-sm text-[#F8FAFC]">{units.fmt(encoders[i], "depth", { digits: 1 })}</div>
         </div>
       ))}
     </div>
