@@ -62,10 +62,10 @@ two CT-segment benchmark assertions, the StringHistoryImport axios mock setup an
 CRA/Jest resolution of `react-router/dom`; no calculation formulas were changed to
 make those failures disappear.
 
-The optional Emergent overlay tarball may be unreachable during dependency
-installation. Validation can use an isolated manifest copy without those optional
-development tools; do not migrate the build system. The main application bundle
-remains large despite the new lazy screens. Cross-device operational-job sync,
+The Emergent visual editor and branded development error overlay are not included;
+standard frontend installation no longer requires their tarballs. Other Emergent
+integrations, including browser scripts, have not been removed. The main application
+bundle remains large despite the new lazy screens. Cross-device operational-job sync,
 server-idempotent log replay and job-ID-specific shared log partitioning require
 separate backend work. Final site acceptance should exercise real DAQ, crew email,
 existing classic consoles and device-specific 3D performance.
