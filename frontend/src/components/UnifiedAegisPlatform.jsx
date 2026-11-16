@@ -191,11 +191,15 @@ export default function UnifiedAegisPlatform() {
           <h2 className="text-lg font-bold">Rig floor</h2>
           <JobGauges />
           <p className="job-muted">Readings show their source and may be simulated or unavailable. Verify current feed status before use.</p>
-          <div className="flex flex-wrap gap-2">
-            {tier.canAccess("live_ops") && <Link className="job-secondary" to="/live">Open operator cockpit</Link>}
-            <Link className="job-secondary" to="/log">Open treatment log</Link>
-            <Link className="job-secondary" to="/job">Open active job</Link>
-          </div>
+          <section className="job-card space-y-3" aria-labelledby="operator-tools-heading">
+            <h3 id="operator-tools-heading" className="font-bold">Open separate tools</h3>
+            <p className="job-muted">These links leave the rig-floor view and open existing tools in this app. They are not features built into this panel.</p>
+            <div className="flex flex-wrap gap-2">
+              {tier.canAccess("live_ops") && <Link className="job-secondary" to="/live">Go to operator cockpit</Link>}
+              <Link className="job-secondary" to="/log">Go to treatment log</Link>
+              <Link className="job-secondary" to="/job">Go to active job</Link>
+            </div>
+          </section>
         </section>
       )}
       {active === "supervisor" && (
