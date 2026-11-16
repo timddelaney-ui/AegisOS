@@ -377,3 +377,18 @@ html[data-theme="sunlight"] button { border-width: 2px; font-weight: 800; }
 @media (prefers-reduced-motion: reduce) { .aegis-cabin .cab-marker { transition: none; } }
 html[data-theme="night"] .aegis-cabin { filter: invert(1) hue-rotate(180deg); }
 html[data-theme="sunlight"] .aegis-cabin { color: #FFFFFF; }
+
+/* High-contrast form controls (field readability in sunlight / dark cabins) */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not([type="button"]):not([type="submit"]),
+textarea,
+select {
+  color: #F8FAFC;
+  background-color: #0F172A;
+  border: 1px solid #475569;
+}
+input::placeholder,
+textarea::placeholder {
+  color: #94A3B8;
+  opacity: 1;
+}
+select option { color: #F8FAFC; background-color: #0F172A; }

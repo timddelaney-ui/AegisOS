@@ -7,7 +7,7 @@ import { walAppend } from "../lib/fieldStore";
  * fallback with a manual retry. Resets whenever `resetKey` changes (e.g. route).
  */
 export default class ErrorBoundary extends React.Component {
-  state = { error: null, retries: 0 };
+  state = { error: null, retries: 0, reloadKey: 0 };
 
   static getDerivedStateFromError(error) {
     return { error };
@@ -32,21 +32,26 @@ export default class ErrorBoundary extends React.Component {
 
   componentWillUnmount() { clearTimeout(this.timer); }
 
-  reset = () => this.setState({ error: null, retries: 0 });
+  reset = () => this.setState((s) => ({ error: null, retries: 0, reloadKey: s.reloadKey + 1 }));
 
   render() {
-    const { error, retries } = this.state;
-    if (!error) return this.props.children;
+    const { error, retries, reloadKey } = this.state;
+    if (!error) return <React.Fragment key={reloadKey}>{this.props.children}</React.Fragment>;
     if (retries < 1) return null; // silent first retry
     if (this.props.fallback) return this.props.fallback(error, this.reset);
     return (
       <div role="alert" data-testid="error-boundary-fallback" className="m-4 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-slate-900">
         <p className="font-bold">This panel hit a problem and was isolated.</p>
         <p className="mt-1 text-slate-600">Your saved field data is unaffected.</p>
-        <button type="button" onClick={this.reset} className="mt-3 rounded-md bg-[#FF6B1A] px-3 py-1.5 font-semibold text-white">
-          Retry
+        <button type="button" onClick={this.reset} data-testid="error-boundary-reload" className="mt-3 rounded-md bg-[#FF6B1A] px-3 py-1.5 font-semibold text-white">
+          Reload Panel
         </button>
       </div>
     );
   }
+}
+
+/** Convenience wrapper for cockpit widgets: one failing widget never takes down its neighbours. */
+export function WidgetBoundary({ name, children, fallback }) {
+  return <ErrorBoundary name={`widget:${name || "unnamed"}`} fallback={fallback}>{children}</ErrorBoundary>;
 }

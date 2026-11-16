@@ -13,6 +13,13 @@ describe("parseNumericInput", () => {
 describe("plausibility", () => {
   test("negative pressure", () => expect(plausibilityError("Treating P (psi)", -5)).toMatch(/negative/));
   test("impossible pump rate", () => expect(plausibilityError("Pump Rate (BPM)", 450)).toMatch(/Implausible/));
+  test.each(["Hook Weight (lbs)", "Differential Pressure (psi)", "TVD Offset (ft)", "Inclination Delta (deg)", "Azimuth (deg)", "Temp (deg C)"])("%s may be negative", (label) => {
+    expect(plausibilityError(label, -50)).toBeNull();
+  });
+  test("plain depth and pressure still reject negatives", () => {
+    expect(plausibilityError("Depth (ft)", -5)).toMatch(/negative/);
+    expect(plausibilityError("Treating P (psi)", -5)).toMatch(/negative/);
+  });
   test("temperature may be negative", () => expect(plausibilityError("Temp (deg C)", -20)).toBeNull());
 });
 

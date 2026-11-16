@@ -1164,6 +1164,7 @@ async def delete_ctd_scenario(scenario_id: str, user: dict = Depends(require_use
 DOC_CATEGORIES = {"sop", "maintenance", "daily_checklist", "pre_job_checklist",
                   "reference", "regulation", "other"}
 DOC_ALLOWED_EXT = {"pdf", "png", "jpg", "jpeg", "webp"}
+from routes import documents as _doc_routes  # noqa: E402
 
 
 class CompanyDocUpdate(BaseModel):
@@ -1190,14 +1191,8 @@ async def upload_company_doc(
     if category not in DOC_CATEGORIES:
         raise HTTPException(400, f"category must be one of {sorted(DOC_CATEGORIES)}")
     raw_name = (file.filename or "upload.bin").strip()
-    ext = raw_name.rsplit(".", 1)[-1].lower() if "." in raw_name else "bin"
-    if ext not in DOC_ALLOWED_EXT:
-        raise HTTPException(400, f"Unsupported file type .{ext}. Allowed: {sorted(DOC_ALLOWED_EXT)}")
     data = await file.read()
-    if len(data) > MAX_UPLOAD_BYTES:
-        raise HTTPException(413, f"File too large ({len(data)/1024/1024:.1f} MB). Max 15 MB.")
-    if len(data) == 0:
-        raise HTTPException(400, "Empty file.")
+    ext = _doc_routes.validate_upload(raw_name, len(data))  # 415 unsupported type / 413 > 25 MB / 400 empty
     mime = _mime_for_ext(ext)
     fingerprint = _hitl_payload_fingerprint({
         "category": category,
@@ -1218,11 +1213,14 @@ async def upload_company_doc(
     storage_path = f"{STORAGE_APP_NAME}/team/{team_id}/documents/{doc_id}.{ext}"
     try:
         result = _put_object(storage_path, data, mime)
-    except HTTPException:
-        raise
     except Exception as e:
-        logger.error("Doc upload failed: %s", e)
-        raise HTTPException(500, "Upload failed — try again.")
+        # Object storage down/unconfigured: keep the upload working on local disk (backend/uploads/{org_id}/).
+        logger.warning("Doc object storage unavailable (%s); using local disk.", e)
+        try:
+            result = _doc_routes.save_local(org_id_of(user), doc_id, ext, data)
+        except OSError as oe:
+            logger.error("Doc upload failed: %s", oe)
+            raise HTTPException(500, "Upload failed — try again.")
 
     tag_list = [t.strip() for t in (tags or "").split(",") if t.strip()][:10]
     now = datetime.now(timezone.utc)
@@ -4782,6 +4780,8 @@ def _put_object(path: str, data: bytes, content_type: str) -> dict:
 
 
 def _get_object(path: str, backend: str = "emergent") -> tuple:
+    if backend == "local":
+        return _doc_routes.read_local(path)
     if backend == "r2":
         from services import r2_storage
         from botocore.exceptions import ClientError
@@ -5033,9 +5033,19 @@ _security_router = _build_security_router(
 )
 api_router.include_router(_security_router)
 api_router.include_router(_build_org_router(require_user=require_user, db=db, chain_audit=_chain_audit))
+from routes.approvals import build_approvals_router as _build_approvals_router  # noqa: E402
+api_router.include_router(_build_approvals_router(require_user=require_user, db=db, chain_audit=_chain_audit))
 
 from plugs_module import build_router as _build_plugs_router  # noqa: E402
 api_router.include_router(_build_plugs_router(require_user=require_user, db=db))
+
+import sys as _sys  # noqa: E402
+from routes import handovers as _handover_routes, fatigue as _fatigue_routes  # noqa: E402
+api_router.include_router(_handover_routes.build_router(require_user=require_user, db=db, chain_audit=_chain_audit, srv=_sys.modules[__name__]))
+api_router.include_router(_fatigue_routes.build_router(require_user=require_user))
+from routes import demo as _demo_routes  # noqa: E402
+api_router.include_router(_demo_routes.build_router(require_user=require_user, db=db, chain_audit=_chain_audit))
+api_router.include_router(_doc_routes.build_router(db=db, get_current_user=get_current_user, get_object=_get_object, is_admin=_is_admin))
 
 
 # ============ APP CONFIG ============

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useMemo, useState, useCallback, useEffect } from "react";
 import axios from "axios";
+import { api, configureRefresh } from "../api/client";
 
 const DEFAULT_BACKEND_ORIGIN = "http://localhost:8000";
 
@@ -36,6 +37,8 @@ const BACKEND_URL = normalizeBackendUrl(process.env.REACT_APP_BACKEND_URL);
 const API = `${BACKEND_URL}/api`;
 
 axios.defaults.withCredentials = true;
+// No refresh endpoint exists yet; set REACT_APP_REFRESH_PATH (e.g. /auth/refresh) to enable silent refresh.
+if (process.env.REACT_APP_REFRESH_PATH) configureRefresh(`${API}${process.env.REACT_APP_REFRESH_PATH}`);
 
 // The API is often on a different site than the app, so the session cookie can be
 // blocked as third-party. Keep the token from the Google hand-off and send it as
@@ -50,7 +53,7 @@ export const setSessionToken = (token) => {
     else localStorage.removeItem(SESSION_TOKEN_KEY);
   } catch (error) { console.warn("[Auth] session token storage unavailable", error?.message); }
 };
-axios.interceptors?.request.use((config) => {
+[...new Set([api, axios])].forEach((inst) => inst.interceptors?.request.use((config) => {
   const token = getSessionToken();
   if (token && typeof config.url === "string" && config.url.startsWith(API)) {
     config.headers = config.headers || {};
@@ -58,7 +61,7 @@ axios.interceptors?.request.use((config) => {
     else config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
-});
+}));
 
 const AuthContext = createContext(null);
 const OFFLINE_SESSION_KEY = "aegis_offline_workspace_v1";
@@ -87,13 +90,13 @@ export const AuthProvider = ({ children }) => {
 
   const checkAuth = useCallback(async () => {
     try {
-      const { data } = await axios.get(`${API}/auth/me`, { withCredentials: true });
+      const { data } = await api.get(`${API}/auth/me`, { withCredentials: true });
       setUser(data || null);
     } catch (e) {
       const saved = !e.response ? cachedWorkspace() : null;
       updateUser(saved);
       setOfflineWorkspace(!!saved);
-      if ([401, 403].includes(e.response?.status)) {
+      if (e.response?.status === 401) { // 403 keeps the session; only a confirmed 401 drops it
         setSessionToken(null);
         try { localStorage.removeItem(OFFLINE_SESSION_KEY); } catch (error) { console.warn("[Auth] cache removal failed", error?.message); }
       }
@@ -116,7 +119,7 @@ export const AuthProvider = ({ children }) => {
 
   const logout = useCallback(async () => {
     try {
-      await axios.post(`${API}/auth/logout`, {}, { withCredentials: true });
+      await api.post(`${API}/auth/logout`, {}, { withCredentials: true });
     } catch (e) {
       console.warn("Logout call failed (session may already be gone):", e?.message);
     }

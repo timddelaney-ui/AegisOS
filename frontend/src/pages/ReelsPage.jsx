@@ -100,7 +100,7 @@ export default function ReelsPage() {
     const fd = new FormData();
     fd.append("file", file); fd.append("name", uploadName);
     try {
-      await axios.post(`${API}/reels/upload`, fd, { withCredentials: true, headers: { "Content-Type": "multipart/form-data" } });
+      await axios.post(`${API}/reels/upload`, fd, { withCredentials: true });
       toast.success("Reel uploaded"); setFile(null); setUploadName(""); refresh();
     } catch (e) {
       toast.error(e.response?.data?.detail || "Upload failed");

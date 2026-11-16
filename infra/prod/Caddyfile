@@ -1,0 +1,37 @@
+# Aegis OS single-host production edge. Caddy provisions/renews Let's Encrypt certs automatically.
+{
+	email {$ACME_EMAIL}
+}
+
+www.mycoiltubingpocketsupports.tech {
+	redir https://mycoiltubingpocketsupports.tech{uri} 308
+}
+
+mycoiltubingpocketsupports.tech {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' wss://mycoiltubingpocketsupports.tech https://accounts.google.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://accounts.google.com"
+		-Server
+	}
+
+	# Caddy proxies WebSocket upgrades (e.g. /api/liveops/ws) transparently.
+	handle /api/* {
+		reverse_proxy backend:8000 {
+			health_uri /api/
+			health_interval 15s
+		}
+	}
+
+	handle {
+		root * /srv/frontend
+		try_files {path} /index.html
+		@sw path /service-worker.js /index.html
+		header @sw Cache-Control "no-cache"
+		file_server
+	}
+}

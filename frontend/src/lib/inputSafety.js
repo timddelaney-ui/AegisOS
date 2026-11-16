@@ -27,7 +27,8 @@ const unitToken = (label) => {
   return m ? m[1].trim().toLowerCase() : "";
 };
 
-const SIGNED = /temp|deg [cf]|dls|incl|angle|offset|dip|azimuth|correction/i;
+// Fields that are legitimately signed: temperature, weight (pipe-light), differential pressure, TVD/depth offsets and angle deltas.
+const SIGNED = /temp|deg [cf]|dls|incl|angle|offset|dip|azimuth|correction|weight|differential|delta|\u0394|\bdp\b|net p/i;
 
 // Plausible physical ceilings per unit token (anything above is almost certainly a decimal slip).
 const MAX_BY_UNIT = {

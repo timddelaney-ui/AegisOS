@@ -3,12 +3,12 @@ import axios from "axios";
 import { toast } from "sonner";
 import { Phase1PageHeader } from "../components/Phase1Header";
 import { useAuth, API } from "../context/AuthContext";
-import { isSupervisorOrHigher } from "../lib/roles";
+import { isSupervisorOrHigher, canView } from "../lib/roles";
 import { Plus, Check, Trash2, ClipboardList } from "lucide-react";
 
 export default function TasksPage() {
   const { user } = useAuth();
-  const canEdit = isSupervisorOrHigher(user);
+  const canEdit = canView(user, "task_assign");
   const [tasks, setTasks] = useState([]);
   const [members, setMembers] = useState([]);
   const [title, setTitle] = useState("");
@@ -31,7 +31,9 @@ export default function TasksPage() {
     if (!canEdit) return;
     if (!title.trim()) return toast.error("Title required");
     try {
-      await axios.post(`${API}/tasks`, { title, detail: detail || undefined, assignee_user_id: assignee || undefined }, { withCredentials: true });
+      // /tasks is supervisor-only on the server; lead operators create through the gated approvals task endpoint.
+      if (isSupervisorOrHigher(user)) await axios.post(`${API}/tasks`, { title, detail: detail || undefined, assignee_user_id: assignee || undefined }, { withCredentials: true });
+      else await axios.post(`${API}/approvals/tasks`, { title, description: detail || undefined, assignee_user_id: assignee || undefined }, { withCredentials: true });
       setTitle(""); setDetail(""); setAssignee(""); refresh();
     } catch (e) { toast.error(e.response?.data?.detail || "Failed"); }
   };
@@ -44,7 +46,7 @@ export default function TasksPage() {
   };
 
   const del = async (id) => {
-    if (!canEdit) return;
+    if (!isSupervisorOrHigher(user)) return;
     try { await axios.delete(`${API}/tasks/${id}`, { withCredentials: true }); refresh(); }
     catch (e) { toast.error(e.response?.data?.detail || "Failed"); }
   };
@@ -89,7 +91,7 @@ export default function TasksPage() {
                 {t.detail && <p className="text-[11px] text-[#595959]">{t.detail}</p>}
                 <p className="text-[10px] text-[#595959]">Assigned: {memberName(t.assignee_user_id)}</p>
               </div>
-              {canEdit && (
+              {isSupervisorOrHigher(user) && (
                 <button data-testid={`task-delete-${t.task_id}`} onClick={() => del(t.task_id)} className="text-[#C00000] p-1 hover:bg-[#F8D7DA] rounded"><Trash2 className="w-3.5 h-3.5" /></button>
               )}
             </div>

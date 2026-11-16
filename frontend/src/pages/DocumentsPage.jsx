@@ -7,8 +7,10 @@ import {
   CalendarCheck, BookOpen, Shield, Search, Pencil, X, File as FileIcon,
 } from "lucide-react";
 import { API, useAuth } from "../context/AuthContext";
+import { canView } from "../lib/roles";
 import ExcelHeader from "../components/ExcelHeader";
 import { requestHitlApproval } from "../lib/hitl";
+import { validateUploadFile, UPLOAD_ACCEPT } from "../lib/uploadValidation";
 
 const CATEGORIES = [
   { id: "sop", label: "SOPs", Icon: Shield, tint: "bg-[#DBEAFE] text-[#0056B3]" },
@@ -67,9 +69,13 @@ const DocumentsPage = () => {
 
   useEffect(() => { refresh(); }, []);
 
+  const [preview, setPreview] = useState(null);
+
   const onPick = (e) => {
     const f = e.target.files?.[0];
     if (!f) return;
+    const bad = validateUploadFile(f);
+    if (bad) { toast.error(bad); e.target.value = ""; setUpFile(null); return; }
     if (!upName) setUpName(f.name.replace(/\.[^/.]+$/, ""));
     setUpFile(f);
   };
@@ -103,7 +109,6 @@ const DocumentsPage = () => {
       form.append("hitl_approval_id", hitlApprovalId);
       await axios.post(`${API}/documents`, form, {
         withCredentials: true,
-        headers: { "Content-Type": "multipart/form-data" },
       });
       toast.success(`Uploaded · ${upName.trim()}`);
       setUploadOpen(false);
@@ -144,17 +149,26 @@ const DocumentsPage = () => {
     } catch (e) { toast.error(e.response?.data?.detail || "Delete failed"); }
   };
 
+  const closePreview = () => {
+    if (preview?.url) URL.revokeObjectURL(preview.url);
+    setPreview(null);
+  };
+
+  // Inline preview from GET /documents/{id}/file; older servers fall back to /download in a new tab.
   const openDoc = async (d) => {
-    // Fetch as blob so Authorization cookies apply, then open in new tab
     try {
-      const resp = await axios.get(`${API}/documents/${d.doc_id}/download`, {
-        withCredentials: true, responseType: "blob",
-      });
-      const blobUrl = URL.createObjectURL(resp.data);
-      window.open(blobUrl, "_blank");
-      // Browser retains it; release after a bit
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
-    } catch { toast.error("Open failed"); }
+      const resp = await axios.get(`${API}/documents/${d.doc_id}/file`, { withCredentials: true, responseType: "blob" });
+      const type = resp.data?.type || (/\.pdf$/i.test(d.filename || "") ? "application/pdf" : "");
+      if (preview?.url) URL.revokeObjectURL(preview.url);
+      setPreview({ url: URL.createObjectURL(resp.data), type, name: d.name });
+    } catch {
+      try {
+        const resp = await axios.get(`${API}/documents/${d.doc_id}/download`, { withCredentials: true, responseType: "blob" });
+        const blobUrl = URL.createObjectURL(resp.data);
+        window.open(blobUrl, "_blank");
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+      } catch { toast.error("Open failed"); }
+    }
   };
 
   const filtered = docs
@@ -172,6 +186,17 @@ const DocumentsPage = () => {
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#F3F3F3] to-[#E8ECEF] flex flex-col">
       <ExcelHeader />
+      {preview && (
+        <div role="dialog" aria-label={`Preview ${preview.name}`} data-testid="docs-preview" className="fixed inset-0 z-50 flex flex-col bg-black/70 p-4">
+          <div className="mb-2 flex items-center justify-between text-white">
+            <span className="text-sm font-bold">{preview.name}</span>
+            <button type="button" onClick={closePreview} className="rounded bg-white/20 px-2 py-1 text-xs font-semibold">Close</button>
+          </div>
+          {preview.type.startsWith("image/")
+            ? <img src={preview.url} alt={preview.name} className="mx-auto max-h-full max-w-full object-contain" />
+            : <iframe title={preview.name} src={preview.url} className="h-full w-full rounded bg-white" />}
+        </div>
+      )}
 
       <div className="bg-white border-b border-[#D4D4D4] px-3 py-2 flex items-center gap-2 sticky top-0 z-10">
         <button
@@ -186,7 +211,7 @@ const DocumentsPage = () => {
           Company Document Library
           <span className="hidden sm:inline text-[#595959] font-normal"> — SOPs · Checklists · References</span>
         </h1>
-        {hasTeam && (
+        {hasTeam && canView(user, "company_docs_upload") && (
           <button
             data-testid="docs-upload-btn"
             onClick={() => setUploadOpen(true)}
@@ -338,12 +363,12 @@ const DocumentsPage = () => {
             </div>
             <div className="space-y-2.5">
               <label className="block">
-                <span className="text-[11px] font-semibold text-[#333]">File (PDF or image, max 15 MB)</span>
+                <span className="text-[11px] font-semibold text-[#333]">File (PDF or image, max 25 MB)</span>
                 <input
                   ref={fileRef}
                   data-testid="docs-upload-file"
                   type="file"
-                  accept=".pdf,.png,.jpg,.jpeg,.webp"
+                  accept={UPLOAD_ACCEPT}
                   onChange={onPick}
                   className="w-full text-[12px] mt-1 file:mr-2 file:py-1 file:px-2 file:rounded file:border file:border-[#D4D4D4] file:bg-[#FFF7EF] file:text-[#C44A08] file:font-bold file:text-[11px]"
                 />

@@ -29,13 +29,16 @@ import TasksPage from "./pages/TasksPage";
 import PartsOrdersPage from "./pages/PartsOrdersPage";
 import TimecardsPage from "./pages/TimecardsPage";
 import RbacAdminPage from "./pages/RbacAdminPage";
-import LiveOpsPage from "./pages/LiveOpsPage";
 import OperatorPage from "./pages/OperatorPage";
 import DaqConfigPage from "./pages/DaqConfigPage";
 import SecurityCompliancePage from "./pages/SecurityCompliancePage";
 import ShareRedeemPage from "./pages/ShareRedeemPage";
 import ShadowVerificationPage from "./pages/ShadowVerificationPage";
 import ExecutiveDashboard from "./pages/ExecutiveDashboard";
+import OperatorCockpit from "./pages/OperatorCockpit";
+import ClassicMode from "./pages/ClassicMode";
+import ApprovalsPage from "./pages/ApprovalsPage";
+import AuditLedgerPage from "./pages/AuditLedgerPage";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ActiveReelProvider } from "./context/ActiveReelContext";
 import { UnitProvider } from "./context/UnitContext";
@@ -48,7 +51,6 @@ import ManagerGreeting from "./components/ManagerGreeting";
 import RedeemDialog from "./components/RedeemDialog";
 import NotificationCenter from "./components/NotificationCenter";
 import TrainingModeBanner from "./components/TrainingModeBanner";
-import BetaFeedbackDrawer from "./components/BetaFeedbackDrawer";
 import TermsPage from "./pages/TermsPage";
 import { AdvisoryFooter, AdvisoryModal } from "./components/AdvisoryDisclaimer";
 import { Toaster } from "./components/ui/sonner";
@@ -58,14 +60,15 @@ import { Loader2 } from "lucide-react";
 import FieldToolsBar from "./components/FieldToolsBar";
 import "./App.css";
 import { toolForPath } from "./config/toolRegistry";
-import { planRole } from "./lib/roles";
+import { planRole, canView, useRoleView } from "./lib/roles";
 
 const Workbook = lazy(() => import("./pages/WorkbookPage"));
 const WellborePage = lazy(() => import("./pages/WellborePage"));
 const ScreenLoading = () => <div className="job-loading" role="status"><Loader2 className="animate-spin" /> Loading screen...</div>;
 
-const ProtectedRoute = ({ children, feature }) => {
+const ProtectedRoute = ({ children, feature, view }) => {
   const { user, loading } = useAuth();
+  useRoleView();
   const location = useLocation();
   if (loading) {
     return (
@@ -75,6 +78,7 @@ const ProtectedRoute = ({ children, feature }) => {
     );
   }
   if (!user) return <Navigate to="/login" replace />;
+  if (view && !canView(user, view)) return <Navigate to="/job" replace />;
   const tool = toolForPath(location.pathname);
   if (tool && !tool.roles.includes(planRole(user))) return <Navigate to="/job" replace />;
   if (tool?.fleetOnly && !isFleetUser(user)) return <Navigate to="/" replace />;
@@ -97,7 +101,6 @@ const AppRouter = () => {
     <>
       {["/login", "/terms", "/pricing", "/payment/success", "/payment/cancel"].includes(location.pathname) && <FieldToolsBar />}
       <TrainingModeBanner />
-      <BetaFeedbackDrawer />
       <Suspense fallback={<ScreenLoading />}><Routes>
         <Route path="/share/:token" element={<ShareRedeemPage />} />
         <Route path="/" element={<LandingRedirect />} />
@@ -138,11 +141,15 @@ const AppRouter = () => {
         <Route path="/timecards" element={<ProtectedRoute feature="timecards"><TimecardsPage /></ProtectedRoute>} />
         <Route path="/crew-admin" element={<ProtectedRoute feature="rbac_admin"><RbacAdminPage /></ProtectedRoute>} />
         <Route path="/live-ops" element={<ProtectedRoute feature="live_ops"><OperatorPage /></ProtectedRoute>} />
-        <Route path="/live-ops/classic" element={<ProtectedRoute feature="live_ops"><LiveOpsPage /></ProtectedRoute>} />
+        <Route path="/live-ops/classic" element={<ProtectedRoute feature="live_ops"><ClassicMode /></ProtectedRoute>} />
+        <Route path="/cockpit" element={<ProtectedRoute feature="live_ops"><OperatorCockpit /></ProtectedRoute>} />
+        <Route path="/classic" element={<ProtectedRoute feature="live_ops"><ClassicMode /></ProtectedRoute>} />
         <Route path="/daq" element={<ProtectedRoute feature="daq_ingest"><DaqConfigPage /></ProtectedRoute>} />
         <Route path="/security" element={<ProtectedRoute feature="security_compliance"><SecurityCompliancePage /></ProtectedRoute>} />
         <Route path="/shadow" element={<ProtectedRoute feature="shadow_mode"><ShadowVerificationPage /></ProtectedRoute>} />
         <Route path="/executive" element={<ProtectedRoute feature="exec_dashboard"><ExecutiveDashboard /></ProtectedRoute>} />
+        <Route path="/approvals" element={<ProtectedRoute view="parts"><ApprovalsPage /></ProtectedRoute>} />
+        <Route path="/audit" element={<ProtectedRoute view="audit_ledger"><AuditLedgerPage /></ProtectedRoute>} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes></Suspense>
