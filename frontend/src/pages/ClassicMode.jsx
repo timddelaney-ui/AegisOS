@@ -7,6 +7,8 @@ import { STATUS_COLOR, signedFixed, statusFor } from "../lib/cockpitTelemetry";
 import { CHANNELS } from "../lib/operatorConfig";
 import { DirectionBadge, EncoderBanner, EncoderCounters } from "../components/cockpit/Indicators";
 import { enqueue } from "../utils/offlineQueue";
+import { useUnits } from "../context/UnitContext";
+import UnitSystemSwitcher from "../components/cockpit/UnitSystemSwitcher";
 
 const limits = (key) => { const c = CHANNELS.find((x) => x.key === key); return { warn: c?.warn, crit: c?.crit }; };
 
@@ -24,6 +26,7 @@ function Tile({ label, unit, value, status = "normal", testId, children }) {
 
 export default function ClassicMode() {
   const s = useCockpitSignals();
+  const units = useUnits();
   const [log, setLog] = useState([]);
   const note = (label) => setLog((l) => [`${new Date().toLocaleTimeString()} ${label}`, ...l].slice(0, 5));
   const snapshot = () => ({ time: new Date().toISOString(), depth: s.depth, coil: s.pInt, wh: s.pWh, diff: s.dp, weight: s.weight, pump: s.pump });
@@ -33,7 +36,7 @@ export default function ClassicMode() {
   const [dialog, setDialog] = useState(null);
   const [text, setText] = useState("");
   const act = (type) => {
-    if (type === "mark_depth") return run("MARK DEPTH", () => enqueue("job_log", { ...snapshot(), notes: `DEPTH MARK ${signedFixed(s.depth, 1)} ft` }));
+    if (type === "mark_depth") return run("MARK DEPTH", () => enqueue("job_log", { ...snapshot(), notes: `DEPTH MARK ${units.fmt(s.depth, "depth", { digits: 1 })}` }));
     if (type === "complete_task") {
       return run("COMPLETE TASK", async () => {
         const r = await axios.get(`${API}/tasks`, { params: { status: "open" }, withCredentials: true });
@@ -63,18 +66,19 @@ export default function ClassicMode() {
       <header className="flex flex-wrap items-center gap-4">
         <h1 className="text-lg font-black tracking-widest">PRESSURE CONSOLE</h1>
         <span className="text-xs font-mono text-slate-400">{s.connection}</span>
+        <UnitSystemSwitcher />
         <div className="flex items-center gap-2 ml-auto"><DirectionBadge direction={s.direction} /><EncoderCounters encoders={s.encoders} consensus={s.consensus} /></div>
       </header>
       <EncoderBanner consensus={s.consensus} />
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 flex-1" data-testid="tile-grid">
-        <Tile testId="tile-coil" label="Coil Pressure" unit="psi" value={signedFixed(s.pInt)} status={statusFor(s.pInt, limits("internalPress"))} />
-        <Tile testId="tile-wh" label="Wellhead Pressure" unit="psi" value={signedFixed(s.pWh)} status={statusFor(s.pWh, limits("whp"))} />
-        <Tile testId="tile-diff" label="Differential Pressure" unit="psi" value={signedFixed(s.dp)} status={statusFor(s.dp, { warn: 4000, crit: 6000 })} />
-        <Tile testId="tile-weight" label="Weight" unit="lbf" value={signedFixed(w)} status={compression ? "warning" : statusFor(w, limits("dhTension"))}>
+        <Tile testId="tile-coil" label="Coil Pressure" unit={units.label("pressure")} value={signedFixed(units.from(s.pInt, "pressure"), units.isMetric ? 1 : 0)} status={statusFor(s.pInt, limits("internalPress"))} />
+        <Tile testId="tile-wh" label="Wellhead Pressure" unit={units.label("pressure")} value={signedFixed(units.from(s.pWh, "pressure"), units.isMetric ? 1 : 0)} status={statusFor(s.pWh, limits("whp"))} />
+        <Tile testId="tile-diff" label="Differential Pressure" unit={units.label("pressure")} value={signedFixed(units.from(s.dp, "pressure"), units.isMetric ? 1 : 0)} status={statusFor(s.dp, { warn: 4000, crit: 6000 })} />
+        <Tile testId="tile-weight" label="Weight" unit={units.label("weight")} value={signedFixed(units.from(w, "weight"), units.isMetric ? 1 : 0)} status={compression ? "warning" : statusFor(w, limits("dhTension"))}>
           {compression && <div className="text-xs text-amber-300 font-bold">COMPRESSION / SNUBBING</div>}
         </Tile>
-        <Tile testId="tile-depth" label="Depth" unit="ft" value={signedFixed(s.depth, 1)} />
-        <Tile testId="tile-pump" label="Pump Rate" unit="bpm" value={signedFixed(s.pump, 1)} status={statusFor(s.pump, limits("slurryRate"))} />
+        <Tile testId="tile-depth" label="Depth" unit={units.label("depth")} value={signedFixed(units.from(s.depth, "depth"), 1)} />
+        <Tile testId="tile-pump" label="Pump Rate" unit={units.label("flow_bpm")} value={signedFixed(units.from(s.pump, "flow_bpm"), 1)} status={statusFor(s.pump, limits("slurryRate"))} />
       </div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3" role="toolbar" aria-label="Quick actions">
         {actions.map(([type, label]) => (

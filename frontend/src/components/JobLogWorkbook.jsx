@@ -5,17 +5,18 @@ import { API, useAuth } from "../context/AuthContext";
 import { FluidTotalizersPanel } from "./operator/FluidTotalizersPanel";
 import { enqueue } from "../utils/offlineQueue";
 import { diffPressure } from "../lib/cockpitTelemetry";
+import { useUnits } from "../context/UnitContext";
 
 const TABS = ["Operations Log", "Tasks & Assignments", "Parts & Consumables", "Fluids & Totals", "Shift Handover"];
 const ROWS_KEY = "aegis_joblog_rows_v1";
 export const COLUMNS = [
   { key: "time", label: "Time" },
-  { key: "depth", label: "Depth", numeric: true },
-  { key: "coil", label: "Coil Press", numeric: true },
-  { key: "wh", label: "WH Press", numeric: true },
-  { key: "diff", label: "Diff Press", numeric: true },
-  { key: "weight", label: "Weight", numeric: true },
-  { key: "pump", label: "Pump Rate", numeric: true },
+  { key: "depth", label: "Depth", numeric: true, dim: "depth" },
+  { key: "coil", label: "Coil Press", numeric: true, dim: "pressure" },
+  { key: "wh", label: "WH Press", numeric: true, dim: "pressure" },
+  { key: "diff", label: "Diff Press", numeric: true, dim: "pressure" },
+  { key: "weight", label: "Weight", numeric: true, dim: "weight" },
+  { key: "pump", label: "Pump Rate", numeric: true, dim: "flow_bpm" },
   { key: "notes", label: "Activity / Notes", wide: true },
   { key: "by", label: "Logged By" },
   { key: "status", label: "Status" },
@@ -29,6 +30,32 @@ const nowStr = () => new Date().toLocaleTimeString([], { hour12: false });
 const rid = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 const blankRow = (by = "") => ({ id: rid(), time: nowStr(), depth: "", coil: "", wh: "", diff: "", weight: "", pump: "", notes: "", by, status: "Draft", synced: false });
 const r0 = (v) => (Number.isFinite(Number(v)) && v !== null && v !== undefined ? String(Math.round(Number(v) * 10) / 10) : "");
+
+function WorkbookCell({ column, value, rowIndex, columnIndex, onChange, onCommit, onKeyDown }) {
+  const units = useUnits();
+  const [draft, setDraft] = useState(null);
+  useEffect(() => { setDraft(null); }, [units.system]);
+  const display = column.numeric && value !== "" && Number.isFinite(Number(value))
+    ? String(Number(units.from(Number(value), column.dim).toPrecision(10))) : value;
+  return (
+    <input className={cellCls} value={draft ?? display} data-cell={`${rowIndex}-${columnIndex}`}
+      aria-label={`${column.label} row ${rowIndex + 1}`} inputMode={column.numeric ? "decimal" : undefined}
+      onFocus={() => setDraft(display)}
+      onChange={(e) => {
+        const next = e.target.value;
+        if (column.numeric && !NUMERIC_RE.test(next)) return;
+        setDraft(next);
+        if (!column.numeric || next === "") onChange(next);
+        else if (Number.isFinite(Number(next))) onChange(String(units.to(Number(next), column.dim)));
+      }}
+      onBlur={() => {
+        if (column.numeric && draft && !Number.isFinite(Number(draft))) toast.error("Enter a complete number before saving");
+        else onCommit();
+        setDraft(null);
+      }}
+      onKeyDown={onKeyDown} />
+  );
+}
 
 function loadRows() {
   try { const v = JSON.parse(localStorage.getItem(ROWS_KEY)); if (Array.isArray(v)) return v; } catch { /* fresh log */ }
@@ -53,6 +80,7 @@ async function persistRow(row) {
 
 function OperationsLog({ signals }) {
   const { user } = useAuth();
+  const units = useUnits();
   const by = user?.name || "";
   const [rows, setRows] = useState(loadRows);
   const [state, setState] = useState({});
@@ -99,17 +127,16 @@ function OperationsLog({ signals }) {
       <div className="overflow-auto max-h-[360px] border border-[#475569] rounded" ref={gridRef}>
         <table className="min-w-full border-collapse" data-testid="ops-log-grid">
           <thead>
-            <tr>{COLUMNS.map((c) => <th key={c.key} className="sticky top-0 z-10 bg-[#1E293B] text-slate-200 text-xs text-left px-2 py-1.5 border border-[#475569]">{c.label}</th>)}<th className="sticky top-0 z-10 bg-[#1E293B] text-xs px-2 border border-[#475569]">Sync</th></tr>
+            <tr>{COLUMNS.map((c) => <th key={c.key} className="sticky top-0 z-10 bg-[#1E293B] text-slate-200 text-xs text-left px-2 py-1.5 border border-[#475569]">{c.label}{c.dim ? ` (${units.label(c.dim)})` : ""}</th>)}<th className="sticky top-0 z-10 bg-[#1E293B] text-xs px-2 border border-[#475569]">Sync</th></tr>
           </thead>
           <tbody>
             {rows.map((row, r) => (
               <tr key={row.id}>
                 {COLUMNS.map((c, ci) => (
                   <td key={c.key} className={`p-0 ${c.wide ? "min-w-[240px]" : "min-w-[90px]"}`}>
-                    <input className={cellCls} value={row[c.key]} data-cell={`${r}-${ci}`} aria-label={`${c.label} row ${r + 1}`}
-                      inputMode={c.numeric ? "decimal" : undefined}
-                      onChange={(e) => { if (!c.numeric || NUMERIC_RE.test(e.target.value)) update(row.id, c.key, e.target.value); }}
-                      onBlur={() => { if (!row.synced && state[row.id] !== "sent") { commit(row); setRows((rs) => rs.map((x) => (x.id === row.id ? { ...x, synced: true } : x))); } }}
+                    <WorkbookCell column={c} value={row[c.key]} rowIndex={r} columnIndex={ci}
+                      onChange={(value) => update(row.id, c.key, value)}
+                      onCommit={() => { if (!row.synced && state[row.id] !== "sent") { commit(row); setRows((rs) => rs.map((x) => (x.id === row.id ? { ...x, synced: true } : x))); } }}
                       onKeyDown={(e) => onKeyDown(e, r, ci)} />
                   </td>
                 ))}

@@ -1,93 +1,156 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { WINDOWS } from "../../lib/cockpitTelemetry";
+import { PENS, chartDomains, nearestSample, traceSegments, windowSamples } from "../../lib/stripChart";
+import { useUnits } from "../../context/UnitContext";
 
-export const PENS = [
-  { key: "pInt", label: "Coil Pressure", unit: "psi", color: "#22D3EE" },
-  { key: "pWh", label: "Wellhead Pressure", unit: "psi", color: "#F59E0B" },
-  { key: "dp", label: "Differential Pressure", unit: "psi", color: "#A78BFA" },
-  { key: "weight", label: "Weight / Hookload", unit: "lbf", color: "#34D399" },
-];
-
-const fmt = (v) => (Number.isFinite(v) ? Math.round(v).toLocaleString() : "—");
+export { PENS } from "../../lib/stripChart";
+const MARGIN = { left: 72, right: 80, top: 26, bottom: 32 };
+const tick = (value) => value.toLocaleString(undefined, { maximumFractionDigits: 1 });
+const timeLabel = (time) => new Date(time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
 
 export default function StripChart({ samples, version, current }) {
+  const units = useUnits();
   const canvasRef = useRef(null);
+  const containerRef = useRef(null);
+  const [size, setSize] = useState({ width: 1000, height: 340 });
   const [visible, setVisible] = useState({ pInt: true, pWh: true, dp: true, weight: true });
-  const [win, setWin] = useState("15m");
-  const [hover, setHover] = useState(null);
+  const [win, setWin] = useState("10m");
+  const [hoverTime, setHoverTime] = useState(null);
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  const { start, end, points, domains } = useMemo(() => {
+    const end = now;
+    const start = end - WINDOWS[win];
+    return { start, end, points: windowSamples(samples, start, end), domains: chartDomains(samples) };
+    // Samples are held in a telemetry ref; version signals new samples.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [samples, version, win, now]);
+  const hover = hoverTime === null ? null : nearestSample(points, hoverTime);
+
+  useEffect(() => {
+    const node = containerRef.current;
+    if (!node) return undefined;
+    const resize = () => {
+      const width = Math.max(280, Math.round(node.getBoundingClientRect().width) || 1000);
+      setSize({ width, height: width < 600 ? 280 : 340 });
+    };
+    resize();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(resize);
+    observer?.observe(node);
+    window.addEventListener("resize", resize);
+    return () => { observer?.disconnect(); window.removeEventListener("resize", resize); };
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext?.("2d");
     if (!ctx) return;
-    const { width: W, height: H } = canvas;
-    ctx.fillStyle = "#0F172A"; ctx.fillRect(0, 0, W, H);
-    ctx.strokeStyle = "#1E293B"; ctx.lineWidth = 1;
-    for (let i = 1; i < 10; i++) { ctx.beginPath(); ctx.moveTo((W * i) / 10, 0); ctx.lineTo((W * i) / 10, H); ctx.stroke(); }
-    for (let i = 1; i < 5; i++) { ctx.beginPath(); ctx.moveTo(0, (H * i) / 5); ctx.lineTo(W, (H * i) / 5); ctx.stroke(); }
-    const now = Date.now();
-    const span = WINDOWS[win];
-    const pts = samples.filter((s) => now - s.ts <= span);
-    PENS.filter((p) => visible[p.key]).forEach((pen) => {
-      const vals = pts.map((s) => s[pen.key]).filter(Number.isFinite);
-      if (!vals.length) return;
-      let lo = Math.min(...vals); let hi = Math.max(...vals);
-      if (hi - lo < 1) { lo -= 1; hi += 1; }
-      const pad = (hi - lo) * 0.1; lo -= pad; hi += pad;
-      if (lo < 0 && hi > 0) { // zero line for pens that cross negative
-        ctx.strokeStyle = pen.color + "55"; ctx.setLineDash([4, 4]);
-        const zy = H - ((0 - lo) / (hi - lo)) * H;
-        ctx.beginPath(); ctx.moveTo(0, zy); ctx.lineTo(W, zy); ctx.stroke(); ctx.setLineDash([]);
+    const { width, height } = size;
+    const ratio = window.devicePixelRatio || 1;
+    canvas.width = Math.round(width * ratio);
+    canvas.height = Math.round(height * ratio);
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    const plotWidth = width - MARGIN.left - MARGIN.right;
+    const plotHeight = height - MARGIN.top - MARGIN.bottom;
+    ctx.fillStyle = "#080E19";
+    ctx.fillRect(0, 0, width, height);
+    ctx.font = "11px monospace";
+    ctx.textBaseline = "middle";
+    for (let i = 0; i <= 5; i++) {
+      const y = MARGIN.top + plotHeight * i / 5;
+      ctx.strokeStyle = "#263244";
+      ctx.beginPath(); ctx.moveTo(MARGIN.left, y); ctx.lineTo(width - MARGIN.right, y); ctx.stroke();
+      for (const [dim, x, align, color] of [
+        ["pressure", MARGIN.left - 8, "right", "#CBD5E1"],
+        ["weight", width - MARGIN.right + 8, "left", "#4ADE80"],
+      ]) {
+        const [lo, hi] = domains[dim];
+        ctx.fillStyle = color; ctx.textAlign = align;
+        ctx.fillText(tick(units.from(hi - (hi - lo) * i / 5, dim)), x, y);
       }
-      ctx.strokeStyle = pen.color; ctx.lineWidth = 1.6; ctx.beginPath();
-      let started = false;
-      pts.forEach((s) => {
-        const v = s[pen.key]; if (!Number.isFinite(v)) return;
-        const x = W - ((now - s.ts) / span) * W; const y = H - ((v - lo) / (hi - lo)) * H;
-        if (started) ctx.lineTo(x, y); else { ctx.moveTo(x, y); started = true; }
-      });
-      ctx.stroke();
-    });
-    if (hover) {
-      ctx.strokeStyle = "#F8FAFC"; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(hover.x * (W / hover.cw), 0); ctx.lineTo(hover.x * (W / hover.cw), H); ctx.stroke();
     }
-  }, [samples, version, win, visible, hover]);
+    const timeTicks = width < 600 ? 2 : 5;
+    for (let i = 0; i <= timeTicks; i++) {
+      const x = MARGIN.left + plotWidth * i / timeTicks;
+      ctx.strokeStyle = "#263244";
+      ctx.beginPath(); ctx.moveTo(x, MARGIN.top); ctx.lineTo(x, height - MARGIN.bottom); ctx.stroke();
+      ctx.textAlign = i === 0 ? "left" : i === timeTicks ? "right" : "center";
+      ctx.fillStyle = "#94A3B8";
+      ctx.fillText(timeLabel(start + (end - start) * i / timeTicks), x, height - 12);
+    }
+    ctx.textAlign = "left"; ctx.fillStyle = "#CBD5E1";
+    ctx.fillText(`Pressure (${units.label("pressure")})`, MARGIN.left, 12);
+    ctx.textAlign = "right"; ctx.fillStyle = "#4ADE80";
+    ctx.fillText(`Weight (${units.label("weight")})`, width - MARGIN.right, 12);
+    ctx.save();
+    ctx.beginPath(); ctx.rect(MARGIN.left, MARGIN.top, plotWidth, plotHeight); ctx.clip();
+    ctx.translate(MARGIN.left, MARGIN.top);
+    if (domains.pressure[0] < 0) {
+      const [lo, hi] = domains.pressure;
+      const y = plotHeight - (0 - lo) / (hi - lo) * plotHeight;
+      ctx.strokeStyle = "#94A3B8"; ctx.setLineDash([4, 4]);
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(plotWidth, y); ctx.stroke(); ctx.setLineDash([]);
+    }
+    for (const pen of PENS.filter((p) => visible[p.key])) {
+      ctx.strokeStyle = pen.color; ctx.fillStyle = pen.color; ctx.lineWidth = 1.8;
+      for (const segment of traceSegments(points, pen.key, start, end, domains[pen.dim], plotWidth, plotHeight)) {
+        if (segment.length === 1) {
+          ctx.beginPath(); ctx.arc(segment[0].x, segment[0].y, 2, 0, Math.PI * 2); ctx.fill();
+        } else {
+          ctx.beginPath();
+          segment.forEach((point, i) => i ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y));
+          ctx.stroke();
+        }
+      }
+    }
+    if (hover) {
+      const x = (hover.ts - start) / (end - start) * plotWidth;
+      ctx.strokeStyle = "#F8FAFC"; ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, plotHeight); ctx.stroke();
+    }
+    ctx.restore();
+  }, [points, domains, start, end, size, visible, hover, units]);
 
   const onMove = (e) => {
-    const r = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - r.left;
-    const t = Date.now() - (1 - x / r.width) * WINDOWS[win];
-    let best = null;
-    for (const s of samples) if (!best || Math.abs(s.ts - t) < Math.abs(best.ts - t)) best = s;
-    setHover(best ? { x, cw: r.width, sample: best } : null);
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = (e.clientX - rect.left) * size.width / rect.width;
+    const fraction = (x - MARGIN.left) / (size.width - MARGIN.left - MARGIN.right);
+    setHoverTime(fraction < 0 || fraction > 1 ? null : start + fraction * (end - start));
   };
 
   return (
-    <div className="flex flex-col gap-2 h-full" data-testid="strip-chart">
+    <div className="flex flex-col gap-2 h-full min-w-0" data-testid="strip-chart">
+      <h2 className="text-xs font-bold tracking-wide text-slate-300">REAL-TIME TELEMETRY STRIP CHART</h2>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-        {PENS.map((p) => {
-          const v = hover?.sample ? hover.sample[p.key] : current[p.key];
+        {PENS.map((pen) => {
+          const value = hover ? hover[pen.key] : current[pen.key];
           return (
-            <button key={p.key} type="button" aria-pressed={visible[p.key]} data-testid={`pen-toggle-${p.key}`}
-              onClick={() => setVisible((s) => ({ ...s, [p.key]: !s[p.key] }))}
-              className="text-left rounded-lg border px-3 py-2 bg-[#0F172A]"
-              style={{ borderColor: visible[p.key] ? p.color : "#334155", opacity: visible[p.key] ? 1 : 0.45 }}>
-              <div className="text-[10px] uppercase tracking-wide" style={{ color: p.color }}>{p.label}</div>
-              <div className="font-mono tabular-nums text-2xl font-bold text-[#F8FAFC]">{fmt(v)} <span className="text-xs text-slate-400">{p.unit}</span></div>
+            <button key={pen.key} type="button" aria-pressed={visible[pen.key]} data-testid={`pen-toggle-${pen.key}`}
+              onClick={() => setVisible((s) => ({ ...s, [pen.key]: !s[pen.key] }))}
+              className="min-w-0 text-left rounded-lg border px-2 py-2 bg-[#0F172A]"
+              style={{ borderColor: visible[pen.key] ? pen.color : "#334155", opacity: visible[pen.key] ? 1 : 0.45 }}>
+              <div className="text-[10px] uppercase tracking-wide" style={{ color: pen.color }}>{pen.label}</div>
+              <div className="font-mono tabular-nums text-xl font-bold text-[#F8FAFC]">{units.fmt(value, pen.dim, { digits: units.isMetric ? 1 : 0, suffix: false })} <span className="text-xs text-slate-400">{units.label(pen.dim)}</span></div>
             </button>
           );
         })}
       </div>
-      <div className="flex gap-1 text-xs" role="group" aria-label="Time window">
+      <div className="flex flex-wrap items-center gap-1 text-xs" role="group" aria-label="Time window">
         {Object.keys(WINDOWS).map((w) => (
-          <button key={w} type="button" onClick={() => setWin(w)} aria-pressed={win === w}
+          <button key={w} type="button" onClick={() => { setWin(w); setHoverTime(null); }} aria-pressed={win === w}
             className={`px-3 py-1 rounded border ${win === w ? "bg-cyan-500 text-slate-950 border-cyan-400" : "border-slate-600 text-slate-300"}`}>{w}</button>
         ))}
-        {hover?.sample && <span className="ml-auto font-mono text-slate-300">{new Date(hover.sample.ts).toLocaleTimeString()} · depth {fmt(hover.sample.depth)} ft</span>}
+        {hover && <span className="ml-auto font-mono text-slate-300">{new Date(hover.ts).toLocaleTimeString()} · depth {units.fmt(hover.depth, "depth")}</span>}
       </div>
-      <canvas ref={canvasRef} width={1000} height={320} onMouseMove={onMove} onMouseLeave={() => setHover(null)}
-        className="w-full flex-1 min-h-[240px] rounded-lg border border-slate-700 cursor-crosshair" aria-label="Real-time strip chart" />
+      <div ref={containerRef} className="min-w-0 w-full">
+        <canvas ref={canvasRef} onPointerMove={onMove} onPointerLeave={() => setHoverTime(null)}
+          style={{ width: "100%", height: size.height }} className="block rounded-lg border border-slate-700 cursor-crosshair"
+          role="img" aria-label={`Real-time strip chart: pressure in ${units.label("pressure")}, weight in ${units.label("weight")}, ${win} window`} />
+      </div>
+      <p className="text-[10px] text-slate-400">Shared pressure scale · weight on right axis · gaps over 30 seconds shown as breaks · no smoothing</p>
     </div>
   );
 }

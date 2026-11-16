@@ -36,6 +36,23 @@ Shared treatment creation and email require connectivity. Handover previews the
 selected rig/time-window log; unsent drafts are explicitly excluded. Existing crew
 contacts, confirmations and human-in-the-loop approval govern email.
 
+### Wide-deck cockpit
+
+The cockpit (`/cockpit`, also opened by Live) uses a **10-minute** default chart
+window, with 1-hour, 4-hour and shift options. Coil, wellhead and differential
+pressure share the left axis; weight uses the right axis. Engineering-scale bands
+include zero and expand for negative or overrange values rather than rescaling
+each pen to its latest fluctuations. Traces are not smoothed; missing readings and
+gaps over 30 seconds break the line.
+
+Use **Display units** in the cockpit or Classic Mode to switch between Imperial
+(psi, lbs, ft, ft/min, bpm) and Metric (MPa, daN, m, m/min, L/min), following the
+existing field-unit conventions. Chart axes, readouts, encoders, fatigue depths,
+buckling labels and workbook numeric cells follow this preference. Workbook edits
+convert back to canonical Imperial storage; switching units does not change
+telemetry, alarm thresholds or physics calculations. Fluid channel mappings retain
+their configured DAQ units.
+
 ### Validation and known risks
 
 Use `CI=true npm run build` and `CI=true npm test -- --watchAll=false --runInBand`.

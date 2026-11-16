@@ -1,6 +1,9 @@
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import JobLogWorkbook from "../JobLogWorkbook";
+import { UnitProvider } from "../../context/UnitContext";
+import UnitSystemSwitcher from "../cockpit/UnitSystemSwitcher";
+import { fromImp } from "../../lib/units";
 
 jest.mock("axios", () => ({ post: jest.fn(() => Promise.reject({ response: { status: 404 } })), get: jest.fn(() => Promise.resolve({ data: {} })) }));
 jest.mock("sonner", () => ({ toast: { info: jest.fn(), success: jest.fn(), error: jest.fn() } }));
@@ -15,7 +18,7 @@ beforeEach(async () => {
   localStorage.clear();
   host = document.createElement("div"); document.body.appendChild(host);
   root = createRoot(host);
-  await act(async () => { root.render(<JobLogWorkbook signals={signals} />); });
+  await act(async () => { root.render(<UnitProvider><UnitSystemSwitcher /><JobLogWorkbook signals={signals} /></UnitProvider>); });
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); });
 
@@ -41,9 +44,29 @@ test("numeric cells reject letters, accept negatives; Enter/Arrow navigate", asy
   expect(w.value).toBe("-12.5");
   await setValue(w, "abc");
   expect(w.value).toBe("-12.5");
-  w.focus();
+  await act(async () => w.focus());
   await key(w, "Enter");
   expect(document.activeElement).toBe(cell("Weight row 2"));
   await key(document.activeElement, "ArrowUp");
   expect(document.activeElement).toBe(w);
+});
+
+test("metric workbook values convert back to imperial storage and survive unit switches", async () => {
+  await click("Stamp Live Telemetry");
+  const units = host.querySelector('select[aria-label="Display units"]');
+  const switchUnits = async (system) => {
+    await act(async () => { units.value = system; units.dispatchEvent(new Event("change", { bubbles: true })); });
+  };
+  await switchUnits("metric");
+  expect(Number(cell("Depth row 1").value)).toBeCloseTo(304.8);
+  expect(Number(cell("Diff Press row 1").value)).toBeCloseTo(fromImp(-400, "pressure", "metric"));
+  const w = cell("Weight row 1");
+  await setValue(w, "-100.5");
+  const stored = JSON.parse(localStorage.getItem("aegis_joblog_rows_v1"))[0];
+  expect(Number(stored.weight)).toBeCloseTo(-225.93299, 3);
+  await switchUnits("imperial");
+  expect(Number(cell("Weight row 1").value)).toBeCloseTo(Number(stored.weight));
+  await switchUnits("metric");
+  expect(Number(cell("Weight row 1").value)).toBeCloseTo(-100.5);
+  expect(host.querySelector("thead").textContent).toContain("Coil Press (MPa)");
 });

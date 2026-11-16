@@ -10,6 +10,8 @@ import EnvelopePanel from "../components/cockpit/EnvelopePanel";
 import FatigueCards from "../components/cockpit/FatigueCards";
 import { DirectionBadge, EncoderBanner, EncoderCounters } from "../components/cockpit/Indicators";
 import JobLogWorkbook from "../components/JobLogWorkbook";
+import UnitSystemSwitcher from "../components/cockpit/UnitSystemSwitcher";
+import { useUnits } from "../context/UnitContext";
 
 const Boundary = Boundaries.WidgetBoundary || Boundaries.default;
 const RIG_KEY = "aegis_cockpit_rig_id";
@@ -45,6 +47,7 @@ function CockpitTitle() {
 
 function CommandBar({ signals }) {
   const { user } = useAuth();
+  const units = useUnits();
   const [rig, setRig] = useState(() => { try { return localStorage.getItem(RIG_KEY) || "CT-UNIT-04"; } catch { return "CT-UNIT-04"; } });
   const role = planRole(user);
   const online = signals.connection === "CONNECTED · LIVE";
@@ -62,11 +65,12 @@ function CommandBar({ signals }) {
         </span>
         <div className="flex items-center gap-2">
           <span className="text-[10px] text-slate-400">INJECTOR v_inj</span>
-          <span className="font-mono tabular-nums text-xl font-bold text-[#F8FAFC]" data-testid="v-inj">{speed === null ? "—" : `${speed > 0 ? "+" : ""}${speed.toFixed(1)}`}</span>
-          <span className="text-xs text-slate-400">ft/min</span>
+          <span className="font-mono tabular-nums text-xl font-bold text-[#F8FAFC]" data-testid="v-inj">{speed === null ? "—" : `${speed > 0 ? "+" : ""}${units.fmt(speed, "speed_ftmin", { digits: 1, suffix: false })}`}</span>
+          <span className="text-xs text-slate-400">{units.label("speed_ftmin")}</span>
           <DirectionBadge direction={signals.direction} />
         </div>
         <EncoderCounters encoders={signals.encoders} consensus={signals.consensus} />
+        <UnitSystemSwitcher />
         <span className="ml-auto px-2 py-0.5 rounded bg-cyan-500/15 border border-cyan-500 text-cyan-300 text-xs font-bold" data-testid="role-badge">{ROLE_LABEL[role] || role}</span>
       </div>
       <EncoderBanner consensus={signals.consensus} />
