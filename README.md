@@ -36,6 +36,8 @@ The frontend uses `REACT_APP_BACKEND_URL` to reach the backend; the example poin
 
 Google sign-in uses the same backend URL and requires `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` on the backend. Connection or configuration failures stay on the login page with an error; they do not redirect to the legacy Emergent provider. On Vercel, set `REACT_APP_BACKEND_URL` as a browser-visible Config variable and redeploy after changing it.
 
+The Unified Aegis Platform is available to Aegis Fleet crew under All tools. It links to the existing operational screens and displays the current job's feed mode and source. Management can assign an existing team member as lead for a job rig; assignments are stored on the server and use the existing best-effort audit chain. Assigning a lead does not change rig status. Fleet billing and invoice generation are not implemented in this screen.
+
 The Hub groups existing tools into expandable Rig operations, Engineering & calculations, Crew & planning, and Documents, safety & support sections. Rig operations opens by default. Search finds tools across sections; All tools shows the full grid with your saved tile order. Customize home still controls visibility and order (within sections in grouped view). Recent jobs, crew details, and Quick AI Moves expand on tap; Workbook, Live Ops, AI, and Emergency SOPs remain directly accessible.
 
 ### Optional messaging configuration

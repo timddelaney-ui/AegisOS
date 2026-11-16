@@ -57,6 +57,7 @@ import InstallAppPrompt, { registerServiceWorker } from "./components/InstallApp
 import { useAuth, isFleetUser } from "./context/AuthContext";
 import { Loader2 } from "lucide-react";
 import FieldToolsBar from "./components/FieldToolsBar";
+import UnifiedAegisPlatform from "./components/UnifiedAegisPlatform";
 import "./App.css";
 import { toolForPath } from "./config/toolRegistry";
 import { planRole, canView, useRoleView } from "./lib/roles";
@@ -148,6 +149,7 @@ const AppRouter = () => {
         <Route path="/security" element={<ProtectedRoute feature="security_compliance"><SecurityCompliancePage /></ProtectedRoute>} />
         <Route path="/shadow" element={<ProtectedRoute feature="shadow_mode"><ShadowVerificationPage /></ProtectedRoute>} />
         <Route path="/executive" element={<ProtectedRoute feature="exec_dashboard"><ExecutiveDashboard /></ProtectedRoute>} />
+        <Route path="/unified-platform" element={<ProtectedRoute><UnifiedAegisPlatform /></ProtectedRoute>} />
         <Route path="/approvals" element={<ProtectedRoute view="parts"><ApprovalsPage /></ProtectedRoute>} />
         <Route path="/audit" element={<ProtectedRoute view="audit_ledger"><AuditLedgerPage /></ProtectedRoute>} />
         </Route>

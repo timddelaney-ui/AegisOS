@@ -19,7 +19,9 @@ USERS = {
     "a_fleet": {"user_id": "a_fleet", "email": "f@a", "team_id": "orgA", "role": "ops_manager"},
     "a_op": {"user_id": "a_op", "email": "o@a", "team_id": "orgA", "role": "crew"},
     "a_cm": {"user_id": "a_cm", "email": "c@a", "team_id": "orgA", "org_role": "company_man"},
+    "a_supervisor": {"user_id": "a_supervisor", "email": "s@a", "team_id": "orgA", "role": "field_manager"},
     "b_fleet": {"user_id": "b_fleet", "email": "f@b", "team_id": "orgB", "org_role": "fleet_manager"},
+    "b_management": {"user_id": "b_management", "email": "m@b", "team_id": "orgB", "role": "ops_manager"},
 }
 
 
@@ -89,6 +91,29 @@ def test_cross_tenant_isolation(env):
     # B cannot see A's audit entries
     acts = [e["action"] for e in c.get("/api/audit-logs", headers=h("b_fleet")).json()["items"]]
     assert acts == ["rig.provision"]
+
+
+def test_job_rig_lead_assignments_are_team_scoped_and_management_only(env):
+    c, db = env
+    run(db.users.insert_many([
+        {"user_id": "a_op", "team_id": "orgA"},
+        {"user_id": "b_fleet", "team_id": "orgB"},
+    ]))
+    path = "/api/rigs/RIG1/lead-assignment"
+    assert c.get("/api/rigs/lead-assignments", headers=h("a_op")).status_code == 403
+    assert c.put(path, json={"user_id": "a_op"}, headers=h("a_op")).status_code == 403
+    assert c.put(path, json={"user_id": "a_op"}, headers=h("a_supervisor")).status_code == 403
+    assert c.put(path, json={}, headers=h("a_fleet")).status_code == 422
+    assert c.put(path, json={"user_id": "b_fleet"}, headers=h("a_fleet")).status_code == 404
+    assert c.put("/api/rigs/RIG26/lead-assignment", json={"user_id": "a_op"}, headers=h("a_fleet")).status_code == 404
+    assert c.put(path, json={"user_id": "a_op"}, headers=h("a_fleet")).json() == {"rig_id": "RIG1", "user_id": "a_op"}
+    assert c.get("/api/rigs/lead-assignments", headers=h("b_management")).json()["assignments"] == []
+    assert c.get("/api/rigs/lead-assignments", headers=h("a_fleet")).json()["assignments"] == [
+        {"team_id": "orgA", "rig_id": "RIG1", "user_id": "a_op"}
+    ]
+    assert c.put(path, json={"user_id": None}, headers=h("a_fleet")).json()["user_id"] is None
+    entries = c.get("/api/audit-logs", headers=h("a_fleet")).json()["items"]
+    assert [entry["action"] for entry in entries] == ["rig.lead_assignment", "rig.lead_assignment"]
 
 
 def test_tenantdb_injects_org_and_blocks_guessed_id():

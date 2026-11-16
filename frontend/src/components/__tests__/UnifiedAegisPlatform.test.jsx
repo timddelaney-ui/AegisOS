@@ -1,0 +1,80 @@
+import React, { act } from "react";
+import { createRoot } from "react-dom/client";
+import axios from "axios";
+import { api } from "../../api/client";
+import UnifiedAegisPlatform from "../UnifiedAegisPlatform";
+
+jest.mock("react-router-dom", () => ({ Link: ({ to, children, ...props }) => <a href={to} {...props}>{children}</a> }));
+jest.mock("axios", () => ({ get: jest.fn() }));
+jest.mock("../../api/client", () => ({ api: { get: jest.fn(), put: jest.fn() } }));
+jest.mock("../../context/AuthContext", () => ({ API: "/api", useAuth: () => ({ user: { role: mockRole } }) }));
+jest.mock("../../context/ActiveJobContext", () => ({ useActiveJob: () => ({ rig: "RIG1", well: { name: "" }, mode: "LIVE" }) }));
+jest.mock("../../context/RigContext", () => ({
+  RIGS: [{ id: "RIG1", label: "Rig 1" }],
+  useRig: () => ({ labels: {}, statuses: {} }),
+}));
+jest.mock("../../context/TierContext", () => ({ useTier: () => ({ canAccess: () => true }) }));
+jest.mock("../JobGauges", () => () => <div>Feed readings</div>);
+
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+let mockRole = "ops_manager";
+
+beforeEach(() => {
+  mockRole = "ops_manager";
+  api.get.mockReset();
+  api.get.mockImplementation((url) => Promise.resolve({ data: url.endsWith("/rbac/members")
+    ? { members: [{ user_id: "u1", name: "Engineer" }] }
+    : { assignments: [] } }));
+  api.put.mockReset();
+  axios.get.mockImplementation((url) => Promise.resolve({
+    data: url.endsWith("/treatments/active")
+      ? { treatment: { treatment_id: "trt_1", name: "Well 12" } }
+      : { entries: [{ entry_id: "e1", text: "Tagged plug", kind: "event", operation_code: 13, event_at: "2026-11-16T12:00:00Z", telemetry_snapshot: { depth_ft: 12000 } }] },
+  }));
+});
+
+test("saves a team member assignment through the server and surfaces errors", async () => {
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  await act(async () => root.render(<UnifiedAegisPlatform />));
+  const select = host.querySelector('[aria-label="Lead engineer for RIG1"]');
+  api.put.mockResolvedValueOnce({ data: { rig_id: "RIG1", user_id: "u1" } });
+  await act(async () => { select.value = "u1"; select.dispatchEvent(new Event("change", { bubbles: true })); });
+  expect(api.put).toHaveBeenCalledWith("/api/rigs/RIG1/lead-assignment", { user_id: "u1" });
+  expect(select.value).toBe("u1");
+
+  api.put.mockRejectedValueOnce(new Error("offline"));
+  await act(async () => { select.value = ""; select.dispatchEvent(new Event("change", { bubbles: true })); });
+  expect(host.querySelector('[role="alert"]').textContent).toContain("Unable to save");
+  expect(select.value).toBe("u1");
+  await act(async () => root.unmount());
+  host.remove();
+});
+
+test("operator cannot select management or supervisor environment", async () => {
+  mockRole = "crew";
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  await act(async () => root.render(<UnifiedAegisPlatform />));
+  expect(host.textContent).toContain("Rig floor");
+  expect(host.textContent).not.toContain("Fleet dispatch");
+  expect(api.get).not.toHaveBeenCalled();
+  await act(async () => root.unmount());
+  host.remove();
+});
+
+test("supervisor timeline shows actual treatment events", async () => {
+  mockRole = "field_manager";
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  await act(async () => root.render(<UnifiedAegisPlatform />));
+  expect(host.querySelector("#job-timeline-heading")).not.toBeNull();
+  expect(host.textContent).toContain("Tag Fill / Top of Fish");
+  expect(host.textContent).toContain("Tagged plug");
+  expect(host.textContent).toContain("12,000 ft");
+  await act(async () => root.unmount());
+  host.remove();
+});

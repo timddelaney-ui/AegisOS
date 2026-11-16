@@ -39,6 +39,7 @@ export const TOOL_REGISTRY = [
   tool("security", "Security & Compliance", "/security", "resources", ShieldCheck, { feature: "security_compliance", roles: crewRoles }),
   tool("manager", "Manager Dashboard", "/manager", "crew", LayoutDashboard, { roles: leaders, legacyHub: false, fleetOnly: true }),
   tool("executive", "Executive Dashboard", "/executive", "operations", LayoutDashboard, { feature: "exec_dashboard", roles: leaders, legacyHub: false, fleetOnly: true }),
+  tool("unified-platform", "Unified Aegis Platform", "/unified-platform", "operations", LayoutDashboard, { roles: crewRoles, legacyHub: false, fleetOnly: true }),
   tool("shadow", "Shadow Mode Verification", "/shadow", "engineering", ScanEye, { feature: "shadow_mode", roles: crewRoles, legacyHub: false }),
   tool("handover", "Shift-end Handover", "/job?handover=1", "operations", Mail, { roles: crewRoles, phases: ["handover"], legacyHub: false }),
   tool("training", "Training Mode", "#training", "resources", GraduationCap),

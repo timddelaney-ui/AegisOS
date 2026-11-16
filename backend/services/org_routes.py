@@ -2,19 +2,21 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import io
 from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import PlainTextResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from middleware.tenant import (
     PLAN_FEATURES, ROLES, TenantDB, beta_features, has_entitlement, org_id_of,
     org_plan, permissions_for, require_permission, role_of,
 )
 from services import audit_chain
+from phase1_modules import require_management
 
 
 class RoleChange(BaseModel):
@@ -24,6 +26,10 @@ class RoleChange(BaseModel):
 class RigCreate(BaseModel):
     rig_id: str
     name: Optional[str] = None
+
+
+class LeadAssignment(BaseModel):
+    user_id: Optional[str] = Field(...)
 
 
 def build_router(*, require_user, db, chain_audit) -> APIRouter:
@@ -69,6 +75,36 @@ def build_router(*, require_user, db, chain_audit) -> APIRouter:
     async def list_rigs(user: dict = Depends(require_user)):
         tdb = TenantDB(db, org_id_of(user))
         return [d async for d in tdb.rigs.find({}, {"_id": 0})]
+
+    @r.get("/rigs/lead-assignments")
+    async def list_lead_assignments(user: dict = Depends(require_user)):
+        require_management(user)
+        team_id = user.get("team_id")
+        if not team_id:
+            raise HTTPException(400, "Join a team before managing assignments.")
+        rows = await db.rig_lead_assignments.find({"team_id": team_id}, {"_id": 0}).to_list(26)
+        return {"assignments": rows}
+
+    @r.put("/rigs/{rig_id}/lead-assignment")
+    async def assign_lead(rig_id: str, body: LeadAssignment, user: dict = Depends(require_user)):
+        require_management(user)
+        team_id = user.get("team_id")
+        if not team_id:
+            raise HTTPException(400, "Join a team before managing assignments.")
+        if rig_id not in {f"RIG{i}" for i in range(1, 26)} | {"YARD"}:
+            raise HTTPException(404, "Rig not found.")
+        if body.user_id is not None:
+            member = await db.users.find_one({"team_id": team_id, "user_id": body.user_id}, {"_id": 0, "user_id": 1})
+            if not member:
+                raise HTTPException(404, "User not found in your team.")
+        assignment_id = hashlib.sha256(f"{team_id}\0{rig_id}".encode()).hexdigest()
+        await db.rig_lead_assignments.update_one(
+            {"_id": assignment_id, "team_id": team_id},
+            {"$set": {"team_id": team_id, "rig_id": rig_id, "user_id": body.user_id}},
+            upsert=True,
+        )
+        await chain_audit(user, "rig.lead_assignment", rig_id=rig_id, target=body.user_id)
+        return {"rig_id": rig_id, "user_id": body.user_id}
 
     @r.get("/audit-logs")
     async def list_audit(
