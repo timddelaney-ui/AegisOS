@@ -61,6 +61,7 @@ import FieldToolsBar from "./components/FieldToolsBar";
 import "./App.css";
 import { toolForPath } from "./config/toolRegistry";
 import { planRole, canView, useRoleView } from "./lib/roles";
+import { Analytics } from "@vercel/analytics/react";
 
 const Workbook = lazy(() => import("./pages/WorkbookPage"));
 const WellborePage = lazy(() => import("./pages/WellborePage"));
@@ -221,6 +222,7 @@ function App() {
           </TierProvider>
         </ActiveReelProvider>
       </UnitProvider>
+      <Analytics />
     </ErrorBoundary>
   );
 }
