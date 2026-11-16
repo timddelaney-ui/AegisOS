@@ -40,7 +40,7 @@ export default function AppShell() {
   const role = tierRole(user);
   const links = navLinks.filter((l) => canView(user, l.view));
   const section = pathname === "/app" || ["/stress", "/fatigue", "/ctd-calculator", "/wellbore"].includes(pathname)
-    ? "/calc" : pathname.startsWith("/live-ops") ? "/live" : pathname === "/treatment" ? "/log" : pathname;
+    ? "/calc" : pathname.startsWith("/live-ops") || ["/cockpit", "/classic"].includes(pathname) ? "/live" : pathname === "/treatment" ? "/log" : pathname;
   return (
     <div className="job-shell" data-testid="app-shell">
       <header className="job-shell-header">

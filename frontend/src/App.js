@@ -2,7 +2,6 @@ import React, { lazy, Suspense, useEffect, useState } from "react";
 import { Routes, Route, useLocation, Navigate } from "react-router-dom";
 import AppShell from "./components/AppShell";
 import JobPage from "./pages/JobPage";
-import LivePage from "./pages/LivePage";
 import MorePage from "./pages/MorePage";
 import CalcPage from "./pages/CalcPage";
 import Login from "./pages/Login";
@@ -111,7 +110,7 @@ const AppRouter = () => {
         <Route path="/payment/cancel" element={<PaymentCancel />} />
         <Route element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
         <Route path="/job" element={<JobPage />} />
-        <Route path="/live" element={<ProtectedRoute feature="live_ops"><LivePage /></ProtectedRoute>} />
+        <Route path="/live" element={<ProtectedRoute feature="live_ops" view="cockpit"><OperatorCockpit /></ProtectedRoute>} />
         <Route path="/log" element={<ProtectedRoute view="treatment_log"><TreatmentPage /></ProtectedRoute>} />
         <Route path="/calc" element={<CalcPage />} />
         <Route path="/more" element={<MorePage />} />
