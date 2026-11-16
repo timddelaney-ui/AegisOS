@@ -60,6 +60,14 @@ test("operator cannot select management or supervisor environment", async () => 
   await act(async () => root.render(<UnifiedAegisPlatform />));
   expect(host.textContent).toContain("Rig floor");
   expect(host.textContent).not.toContain("Fleet dispatch");
+  const tools = host.querySelector('[aria-labelledby="operator-tools-heading"]');
+  expect(tools.textContent).toContain("Open separate tools");
+  expect(tools.textContent).toContain("They are not features built into this panel.");
+  expect([...tools.querySelectorAll("a")].map((link) => [link.textContent, link.getAttribute("href")])).toEqual([
+    ["Go to operator cockpit", "/live"],
+    ["Go to treatment log", "/log"],
+    ["Go to active job", "/job"],
+  ]);
   expect(api.get).not.toHaveBeenCalled();
   await act(async () => root.unmount());
   host.remove();
