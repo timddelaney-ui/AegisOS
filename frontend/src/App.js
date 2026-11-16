@@ -112,7 +112,7 @@ const AppRouter = () => {
         <Route element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
         <Route path="/job" element={<JobPage />} />
         <Route path="/live" element={<ProtectedRoute feature="live_ops"><LivePage /></ProtectedRoute>} />
-        <Route path="/log" element={<ProtectedRoute feature="treatment_log"><TreatmentPage /></ProtectedRoute>} />
+        <Route path="/log" element={<ProtectedRoute view="treatment_log"><TreatmentPage /></ProtectedRoute>} />
         <Route path="/calc" element={<CalcPage />} />
         <Route path="/more" element={<MorePage />} />
         <Route path="/sop" element={<ProtectedRoute feature="workbooks"><Workbook /></ProtectedRoute>} />
@@ -125,7 +125,7 @@ const AppRouter = () => {
         <Route path="/manager" element={<ProtectedRoute><ManagerDashboard /></ProtectedRoute>} />
         <Route path="/equipment" element={<ProtectedRoute feature="equipment_assets"><EquipmentPage /></ProtectedRoute>} />
         <Route path="/schedule" element={<ProtectedRoute feature="crew_schedule"><CrewSchedulePage /></ProtectedRoute>} />
-        <Route path="/treatment" element={<ProtectedRoute feature="treatment_log"><TreatmentPage /></ProtectedRoute>} />
+        <Route path="/treatment" element={<ProtectedRoute view="treatment_log"><TreatmentPage /></ProtectedRoute>} />
         <Route path="/ctd-calculator" element={<ProtectedRoute feature="ct_drill_calc"><CTDrillingCalculator /></ProtectedRoute>} />
         <Route path="/documents" element={<ProtectedRoute feature="documents"><DocumentsPage /></ProtectedRoute>} />
         <Route path="/erp-template" element={<ProtectedRoute feature="erp_templates"><ErpTemplatePage /></ProtectedRoute>} />
@@ -141,9 +141,9 @@ const AppRouter = () => {
         <Route path="/timecards" element={<ProtectedRoute feature="timecards"><TimecardsPage /></ProtectedRoute>} />
         <Route path="/crew-admin" element={<ProtectedRoute feature="rbac_admin"><RbacAdminPage /></ProtectedRoute>} />
         <Route path="/live-ops" element={<ProtectedRoute feature="live_ops"><OperatorPage /></ProtectedRoute>} />
-        <Route path="/live-ops/classic" element={<ProtectedRoute feature="live_ops"><ClassicMode /></ProtectedRoute>} />
-        <Route path="/cockpit" element={<ProtectedRoute feature="live_ops"><OperatorCockpit /></ProtectedRoute>} />
-        <Route path="/classic" element={<ProtectedRoute feature="live_ops"><ClassicMode /></ProtectedRoute>} />
+        <Route path="/live-ops/classic" element={<ProtectedRoute view="classic"><ClassicMode /></ProtectedRoute>} />
+        <Route path="/cockpit" element={<ProtectedRoute view="cockpit"><OperatorCockpit /></ProtectedRoute>} />
+        <Route path="/classic" element={<ProtectedRoute view="classic"><ClassicMode /></ProtectedRoute>} />
         <Route path="/daq" element={<ProtectedRoute feature="daq_ingest"><DaqConfigPage /></ProtectedRoute>} />
         <Route path="/security" element={<ProtectedRoute feature="security_compliance"><SecurityCompliancePage /></ProtectedRoute>} />
         <Route path="/shadow" element={<ProtectedRoute feature="shadow_mode"><ShadowVerificationPage /></ProtectedRoute>} />

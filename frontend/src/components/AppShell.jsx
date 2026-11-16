@@ -23,6 +23,7 @@ const tabs = [
 const navLinks = [
   { to: "/cockpit", label: "Operator Cockpit", view: "cockpit" },
   { to: "/classic", label: "Classic Mode", view: "classic" },
+  { to: "/log", label: "Treatment Log / Notes", view: "treatment_log" },
   { to: "/wellbore", label: "3D Wellbore", view: "calculators" },
   { to: "/sop", label: "17 CT Calculators & SOPs", view: "sop" },
   { to: "/approvals", label: "Approvals & Docs", view: "parts" },

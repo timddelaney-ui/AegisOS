@@ -55,7 +55,7 @@ export function planRole(user) {
   return LEGACY_TO_PLAN[raw] || "crew";
 }
 
-const OPERATOR_VIEWS = ["cockpit", "classic", "tasks", "parts", "calculators", "sop"];
+const OPERATOR_VIEWS = ["cockpit", "classic", "treatment_log", "tasks", "parts", "calculators", "sop"];
 const LEAD_VIEWS = [...OPERATOR_VIEWS, "task_assign", "company_docs_upload"];
 const SUPERVISOR_VIEWS = [...LEAD_VIEWS, "job_setup", "job_log_admin", "approval_queue"];
 const MANAGEMENT_VIEWS = [...SUPERVISOR_VIEWS, "management", "po_signoff", "audit_ledger"];
