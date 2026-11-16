@@ -2,6 +2,11 @@ import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import OperatorCockpit from "../OperatorCockpit";
 
+jest.mock("react-router-dom", () => ({
+  NavLink: ({ to, children, className, ...props }) => (
+    <a href={to} className={typeof className === "function" ? className({ isActive: to === "/cockpit" }) : className} {...props}>{children}</a>
+  ),
+}));
 jest.mock("axios", () => ({ post: jest.fn(() => Promise.reject({ response: { status: 500 } })), get: jest.fn(() => Promise.resolve({ data: {} })) }));
 jest.mock("sonner", () => ({ toast: { info: jest.fn(), success: jest.fn(), error: jest.fn() } }));
 jest.mock("../../context/AuthContext", () => ({ API: "/api", useAuth: () => ({ user: { name: "Op", role: "crew", team_id: "org1" } }) }));
@@ -23,6 +28,8 @@ test("cockpit renders widgets without console errors and flags encoder mismatch 
   const root = createRoot(host);
   await act(async () => { root.render(<OperatorCockpit />); });
   expect(host.querySelector('[data-testid="encoder-warning"]')).not.toBeNull();
+  expect(host.querySelector('[data-testid="cockpit-title"]').textContent).toContain("WIDE-DECK LAYOUT");
+  expect(host.querySelector('[data-testid="cockpit-rail"] a[aria-label="Treatment Log / Notes"]').getAttribute("href")).toBe("/log");
   expect(host.querySelector('[data-testid="strip-chart"]')).not.toBeNull();
   expect(host.querySelector('[data-testid="buckling-status"]').textContent).toContain("COMPRESSION");
   expect(host.querySelectorAll('[data-testid^="fatigue-"]').length).toBeGreaterThanOrEqual(3);

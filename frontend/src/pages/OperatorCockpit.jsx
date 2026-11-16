@@ -1,4 +1,6 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import { NavLink } from "react-router-dom";
+import { Activity, AlertOctagon, BriefcaseBusiness, ClipboardList, Gauge } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { planRole, ROLE_LABEL } from "../lib/roles";
 import { useCockpitSignals } from "../hooks/useCockpitSignals";
@@ -11,12 +13,33 @@ import JobLogWorkbook from "../components/JobLogWorkbook";
 
 const Boundary = Boundaries.WidgetBoundary || Boundaries.default;
 const RIG_KEY = "aegis_cockpit_rig_id";
+const railLinks = [
+  { to: "/cockpit", label: "Operator Cockpit", Icon: Gauge },
+  { to: "/classic", label: "Classic Mode", Icon: Activity },
+  { to: "/job", label: "Job", Icon: BriefcaseBusiness },
+  { to: "/log", label: "Treatment Log / Notes", Icon: ClipboardList },
+  { to: "/sop", label: "Emergency SOPs", Icon: AlertOctagon },
+];
 
 function Widget({ name, children, className = "" }) {
   return (
     <section className={`bg-[#0F172A] border border-slate-700 rounded-xl p-3 ${className}`} aria-label={name}>
       <Boundary name={name}>{children}</Boundary>
     </section>
+  );
+}
+
+function CockpitTitle() {
+  const [time, setTime] = useState(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  return (
+    <header className="flex items-center justify-between gap-3 px-1" data-testid="cockpit-title">
+      <h1 className="text-sm font-bold tracking-wide text-slate-200">AEGIS OS <span className="mx-2 text-slate-600">|</span><span className="text-slate-400">OPERATOR COCKPIT · WIDE-DECK LAYOUT</span></h1>
+      <span className="shrink-0 text-[11px] font-mono text-slate-400">CLOCK: {time.toLocaleTimeString()}</span>
+    </header>
   );
 }
 
@@ -54,18 +77,29 @@ function CommandBar({ signals }) {
 export default function OperatorCockpit() {
   const signals = useCockpitSignals();
   return (
-    <div className="min-h-screen bg-[#0B1120] text-[#F8FAFC] p-3 flex flex-col gap-3" data-testid="operator-cockpit">
-      <Widget name="Telemetry & Command Bar"><CommandBar signals={signals} /></Widget>
-      <div className="grid grid-cols-1 lg:grid-cols-10 gap-3">
-        <Widget name="Strip Chart" className="lg:col-span-7">
-          <StripChart samples={signals.samples} version={signals.version} current={signals} />
-        </Widget>
-        <div className="lg:col-span-3 flex flex-col gap-3">
-          <Widget name="Von Mises Envelope"><EnvelopePanel signals={signals} /></Widget>
-          <Widget name="Fatigue"><FatigueCards signals={signals} /></Widget>
+    <div className="min-h-screen bg-[#0B1120] text-[#F8FAFC] p-2 sm:p-3 flex flex-col sm:flex-row gap-3" data-testid="operator-cockpit">
+      <aside aria-label="Cockpit navigation" data-testid="cockpit-rail" className="flex flex-row sm:flex-col gap-1 sm:w-12 sm:shrink-0 sm:border-r sm:border-slate-800 sm:pr-2">
+        {railLinks.map(({ to, label, Icon }) => (
+          <NavLink key={to} to={to} title={label} aria-label={label}
+            className={({ isActive }) => `flex min-h-11 min-w-11 items-center justify-center rounded-lg border ${isActive ? "border-cyan-500 bg-cyan-500/10 text-cyan-300" : "border-transparent text-slate-400 hover:border-slate-700 hover:text-slate-100"}`}>
+            <Icon size={18} aria-hidden="true" />
+          </NavLink>
+        ))}
+      </aside>
+      <main className="min-w-0 flex-1 flex flex-col gap-3">
+        <CockpitTitle />
+        <Widget name="Telemetry & Command Bar"><CommandBar signals={signals} /></Widget>
+        <div className="grid grid-cols-1 lg:grid-cols-10 gap-3">
+          <Widget name="Strip Chart" className="lg:col-span-7">
+            <StripChart samples={signals.samples} version={signals.version} current={signals} />
+          </Widget>
+          <div className="lg:col-span-3 flex flex-col gap-3">
+            <Widget name="Von Mises Envelope"><EnvelopePanel signals={signals} /></Widget>
+            <Widget name="Fatigue"><FatigueCards signals={signals} /></Widget>
+          </div>
         </div>
-      </div>
-      <Widget name="Job Log Workbook"><JobLogWorkbook signals={signals} /></Widget>
+        <Widget name="Job Log Workbook"><JobLogWorkbook signals={signals} /></Widget>
+      </main>
     </div>
   );
 }
