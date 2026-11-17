@@ -130,7 +130,7 @@ const Login = () => {
 
               <div className="mt-6 bg-[#FF6B1A]/10 border border-[#FF6B1A]/30 rounded-lg p-3 text-xs">
                 <p className="font-bold text-[#FF6B1A] mb-1">Free Basic · Upgrade when you need more</p>
-                <p className="text-white/70">Start with 17 offline calculators and emergency SOPs. CT Field Workbook Pro adds collaboration and sync for <span className="font-semibold text-white">$69 CAD / user / month</span>.</p>
+                <p className="text-white/70">Start with 17 offline calculators and emergency SOPs. CT Field Workbook Pro adds collaboration and sync for <span className="font-semibold text-white">$9.99 USD / user / month</span>.</p>
               </div>
             </div>
           </div>

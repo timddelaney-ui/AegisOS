@@ -16,7 +16,7 @@ const PLANS = [
   {
     key: "ct_pro_monthly",
     name: "CT Field Workbook Pro",
-    price: "$69 CAD",
+    price: "$9.99 USD",
     period: "/ user / month",
     description: "For individual engineers, consultants, and advanced supervisors.",
     features: ["Everything in Free", "Advanced offline notes and personal field logs", "Multi-device sync", "Team and crew collaboration"],

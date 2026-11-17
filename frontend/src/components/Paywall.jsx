@@ -25,7 +25,7 @@ const Paywall = ({ sheetTitle }) => {
             <Sparkles className="w-4 h-4 text-[#FF6B1A]" strokeWidth={2.5} />
             <span className="text-xs font-bold text-[#856404] uppercase">Rollout Pricing</span>
           </div>
-          <p className="text-2xl font-bold text-[#FF6B1A]">$69 CAD</p>
+          <p className="text-2xl font-bold text-[#FF6B1A]">$9.99 USD</p>
           <p className="text-[10px] text-[#595959]">/ user / month</p>
           <ul className="mt-4 space-y-1.5">
             {["Advanced offline notes and personal logs", "Multi-device sync", "Team and crew collaboration"].map((f) => (

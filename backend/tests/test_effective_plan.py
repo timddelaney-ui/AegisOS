@@ -3,6 +3,8 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import pytest
+
 os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
 os.environ.setdefault("DB_NAME", "test")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -87,3 +89,61 @@ def test_paypal_sync_activates_workbook_pro(monkeypatch):
     assert fields["subscription_status"] == "active"
     assert fields["subscription_plan"] == "workbook_pro"
     assert fields["paypal_subscription_id"] == "I-1"
+
+
+@pytest.mark.parametrize("amount,currency,interval,setup_fee,trial,allowed", [
+    ("9.99", "USD", "MONTH", "0", False, True),
+    ("69.00", "CAD", "MONTH", "0", False, False),
+    ("69.00", "USD", "MONTH", "0", False, False),
+    ("9.99", "CAD", "MONTH", "0", False, False),
+    ("9.99", "USD", "YEAR", "0", False, False),
+    ("9.99", "USD", "MONTH", "5", False, False),
+    ("9.99", "USD", "MONTH", "0", True, False),
+    ("invalid", "USD", "MONTH", "0", False, False),
+])
+def test_checkout_requires_matching_usd_monthly_plan(
+    monkeypatch, amount, currency, interval, setup_fee, trial, allowed,
+):
+    import asyncio
+
+    calls = []
+    records = []
+    cycle = {
+        "tenure_type": "REGULAR", "total_cycles": 0,
+        "frequency": {"interval_unit": interval, "interval_count": 1},
+        "pricing_scheme": {"fixed_price": {"currency_code": currency, "value": amount}},
+    }
+
+    async def fake_paypal(method, path, **kwargs):
+        calls.append((method, path))
+        if method == "GET":
+            return {
+                "status": "ACTIVE",
+                "billing_cycles": [cycle, {**cycle, "tenure_type": "TRIAL"}] if trial else [cycle],
+                "payment_preferences": {"setup_fee": {"currency_code": currency, "value": setup_fee}},
+            }
+        return {"id": "I-new", "links": [{"rel": "approve", "href": "https://www.paypal.com/approve"}]}
+
+    class Transactions:
+        async def insert_one(self, record):
+            records.append(record)
+
+    class FakeDb:
+        payment_transactions = Transactions()
+
+    monkeypatch.setattr(server, "_paypal", fake_paypal)
+    monkeypatch.setattr(server, "db", FakeDb())
+    monkeypatch.setitem(server.PAYPAL_PLAN_IDS, "ct_pro_monthly", "P-new")
+    request = server.CheckoutRequest(lookup_key="ct_pro_monthly", origin_url=server.PUBLIC_APP_URL)
+    checkout = server.create_checkout(request, {"user_id": "u1", "email": "buyer@example.com"})
+    if allowed:
+        result = asyncio.run(checkout)
+        assert result["session_id"] == "I-new"
+        assert records[0]["currency"] == "USD"
+        assert calls[-1] == ("POST", "/v1/billing/subscriptions")
+    else:
+        with pytest.raises(server.HTTPException) as exc:
+            asyncio.run(checkout)
+        assert exc.value.status_code == 503
+        assert calls == [("GET", "/v1/billing/plans/P-new")]
+        assert not records

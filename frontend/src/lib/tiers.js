@@ -34,7 +34,7 @@ export const TIER_SPECS = {
     id: TIER_PRO,
     label: "CT Field Workbook Pro",
     tagline: "Individual field engineer",
-    price_monthly_cad: 69,
+    price_monthly_usd: 9.99,
     seats: "Per user",
     highlights: ["Everything in Free", "Advanced offline notes and personal field logs", "Multi-device sync", "Team and crew collaboration"],
     accent: "#F59E0B",

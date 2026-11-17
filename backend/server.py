@@ -22,6 +22,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone, timedelta
+from decimal import Decimal, InvalidOperation
 try:
     from emergentintegrations.llm.chat import LlmChat, UserMessage
 except ImportError:  # self-hosted deployments use GEMINI_API_KEY directly
@@ -39,7 +40,7 @@ db = client[os.environ["DB_NAME"]]
 
 IS_PRODUCTION = os.environ.get("APP_ENV", "").lower() == "production"
 
-# PayPal Subscriptions (CAD). Plans are created once by scripts_paypal_setup.py.
+# Pro subscriptions use a USD monthly plan provisioned in PayPal.
 PAYPAL_ENV = os.environ.get("PAYPAL_ENV", "live" if IS_PRODUCTION else "sandbox").lower()
 PAYPAL_BASE = "https://api-m.paypal.com" if PAYPAL_ENV == "live" else "https://api-m.sandbox.paypal.com"
 PAYPAL_CLIENT_ID = os.environ.get("PAYPAL_CLIENT_ID", "").strip()
@@ -881,6 +882,30 @@ async def _sync_paypal_subscription(sub_id: str, user_id: Optional[str] = None) 
     return status
 
 
+def _validate_pro_paypal_plan(plan: dict) -> None:
+    cycles = plan.get("billing_cycles") or []
+    cycle = cycles[0] if len(cycles) == 1 else {}
+    price = (cycle.get("pricing_scheme") or {}).get("fixed_price") or {}
+    setup_fee = (plan.get("payment_preferences") or {}).get("setup_fee") or {}
+    try:
+        valid_amounts = (
+            Decimal(str(price.get("value"))) == Decimal("9.99")
+            and Decimal(str(setup_fee.get("value", "0"))) == 0
+        )
+    except InvalidOperation:
+        valid_amounts = False
+    if not (
+        plan.get("status") == "ACTIVE"
+        and cycle.get("tenure_type") == "REGULAR"
+        and cycle.get("frequency") == {"interval_unit": "MONTH", "interval_count": 1}
+        and cycle.get("total_cycles") == 0
+        and price.get("currency_code") == "USD"
+        and valid_amounts
+    ):
+        logger.error("Configured PayPal Pro plan does not match USD 9.99 monthly pricing")
+        raise HTTPException(503, "Pro checkout requires a $9.99 USD monthly PayPal plan without a trial or setup fee.")
+
+
 @api_router.post("/payments/checkout")
 async def create_checkout(req: CheckoutRequest, user: dict = Depends(require_user)):
     plan_id = PAYPAL_PLAN_IDS.get(req.lookup_key)
@@ -890,6 +915,8 @@ async def create_checkout(req: CheckoutRequest, user: dict = Depends(require_use
     if origin != PUBLIC_APP_URL and origin not in _cors_origins:
         origin = PUBLIC_APP_URL
     try:
+        plan = await _paypal("GET", f"/v1/billing/plans/{plan_id}")
+        _validate_pro_paypal_plan(plan)
         # No tax is added: the business is a CRA small supplier.
         sub = await _paypal("POST", "/v1/billing/subscriptions", json={
             "plan_id": plan_id,
@@ -914,7 +941,7 @@ async def create_checkout(req: CheckoutRequest, user: dict = Depends(require_use
         "session_id": sub["id"],
         "user_id": user["user_id"],
         "lookup_key": req.lookup_key,
-        "currency": "CAD",
+        "currency": "USD",
         "status": "initiated",
         "payment_status": "pending",
         "created_at": datetime.now(timezone.utc),
