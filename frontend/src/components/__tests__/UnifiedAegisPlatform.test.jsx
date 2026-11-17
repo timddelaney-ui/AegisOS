@@ -7,7 +7,7 @@ import UnifiedAegisPlatform from "../UnifiedAegisPlatform";
 jest.mock("react-router-dom", () => ({ Link: ({ to, children, ...props }) => <a href={to} {...props}>{children}</a> }));
 jest.mock("axios", () => ({ get: jest.fn() }));
 jest.mock("../../api/client", () => ({ api: { get: jest.fn(), put: jest.fn() } }));
-jest.mock("../../context/AuthContext", () => ({ API: "/api", useAuth: () => ({ user: { role: mockRole } }) }));
+jest.mock("../../context/AuthContext", () => ({ API: "/api", useAuth: () => ({ user: { user_id: "u1", role: mockRole } }) }));
 jest.mock("../../context/ActiveJobContext", () => ({ useActiveJob: () => ({ rig: "RIG1", well: { name: "" }, mode: "LIVE" }) }));
 jest.mock("../../context/RigContext", () => ({
   RIGS: [{ id: "RIG1", label: "Rig 1" }],
@@ -20,6 +20,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 let mockRole = "ops_manager";
 
 beforeEach(() => {
+  localStorage.clear();
   mockRole = "ops_manager";
   api.get.mockReset();
   api.get.mockImplementation((url) => Promise.resolve({ data: url.endsWith("/rbac/members")
@@ -33,6 +34,24 @@ beforeEach(() => {
       ? { treatment: { treatment_id: "trt_1", name: "Well 12" } }
       : { entries: [{ entry_id: "e1", text: "Tagged plug", kind: "event", operation_code: 13, event_at: "2026-11-16T12:00:00Z", telemetry_snapshot: { depth_ft: 12000 } }] },
   }));
+});
+
+test("restores the selected environment for this user", async () => {
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  await act(async () => root.render(<UnifiedAegisPlatform />));
+  const supervisor = [...host.querySelectorAll("nav button")].find((button) => button.textContent.includes("Supervisor"));
+  await act(async () => supervisor.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+  expect(localStorage.getItem("aegis_environment:u1")).toBe("supervisor");
+  await act(async () => root.unmount());
+
+  const secondRoot = createRoot(host);
+  await act(async () => secondRoot.render(<UnifiedAegisPlatform />));
+  const restoredSupervisor = [...host.querySelectorAll("nav button")].find((button) => button.textContent.includes("Supervisor"));
+  expect(restoredSupervisor.getAttribute("aria-pressed")).toBe("true");
+  await act(async () => secondRoot.unmount());
+  host.remove();
 });
 
 test("saves a team member assignment through the server and surfaces errors", async () => {

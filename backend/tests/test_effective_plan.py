@@ -46,6 +46,14 @@ def test_legacy_trial_timestamp_does_not_unlock_paid_services():
     assert server._user_is_pro({"subscription_status": "active", "subscription_plan": "workbook_pro"})
 
 
+def test_admin_email_allowlist_grants_fleet_access_case_insensitively(monkeypatch):
+    monkeypatch.setattr(server, "ADMIN_EMAILS", ["owner@example.com"])
+    owner = server._apply_admin_unlock({"email": " Owner@Example.com "})
+    assert owner["admin_unlocked"] is True
+    assert owner["role"] == "ops_manager"
+    assert server.get_effective_plan(owner) == "aegis_fleet"
+
+
 def test_plan_path_groups():
     for p in ("/api/rbac/promote", "/api/job-packages/1/acknowledge",
               "/api/timecards/approve-payroll", "/api/rigs/lead-assignment",

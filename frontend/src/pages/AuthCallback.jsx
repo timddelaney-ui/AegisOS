@@ -34,8 +34,8 @@ const AuthCallback = () => {
         window.history.replaceState(null, "", window.location.pathname);
         navigate("/hub", { replace: true, state: { user: profile } });
       } catch (e) {
+        console.error("Authentication callback failed:", e?.response?.status || e?.message || e);
         setError("Sign-in failed. Please try again.");
-        setTimeout(() => navigate("/login"), 2000);
       }
     })();
     // eslint-disable-next-line
@@ -46,7 +46,13 @@ const AuthCallback = () => {
       <div className="bg-white p-8 rounded shadow border border-[#D4D4D4] flex flex-col items-center gap-3 max-w-sm">
         <FileSpreadsheet className="w-10 h-10 text-[#FF6B1A]" strokeWidth={2} />
         {error ? (
-          <p className="text-sm text-[#C00000] font-medium">{error}</p>
+          <>
+            <p role="alert" className="text-sm text-[#C00000] font-medium">{error}</p>
+            <p className="text-sm text-[#444]">Your sign-in could not be verified. Check the backend deployment and Google sign-in configuration, then try again.</p>
+            <button type="button" className="text-sm font-semibold text-[#C44A08] underline" onClick={() => navigate("/login")}>
+              Return to sign in
+            </button>
+          </>
         ) : (
           <>
             <Loader2 className="w-6 h-6 text-[#FF6B1A] animate-spin" />

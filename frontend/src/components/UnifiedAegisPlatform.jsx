@@ -197,7 +197,29 @@ export default function UnifiedAegisPlatform() {
   const role = planRole(user);
   const available = ENVIRONMENTS.filter((item) => item.id === "operator" || role === "management" || (item.id === "supervisor" && role === "supervisor"));
   const defaultEnvironment = role === "management" ? "management" : role === "supervisor" ? "supervisor" : "operator";
+  const environmentStorageKey = user?.user_id ? `aegis_environment:${user.user_id}` : null;
+  const availableIds = available.map((item) => item.id).join(",");
   const [selected, setSelected] = useState(defaultEnvironment);
+  useEffect(() => {
+    let restored = defaultEnvironment;
+    try {
+      const saved = environmentStorageKey && window.localStorage.getItem(environmentStorageKey);
+      if (saved && availableIds.split(",").includes(saved)) restored = saved;
+    } catch (error) {
+      console.warn("Could not restore the last Aegis environment:", error?.message);
+    }
+    setSelected(restored);
+  }, [environmentStorageKey, defaultEnvironment, availableIds]);
+
+  const selectEnvironment = (environmentId) => {
+    setSelected(environmentId);
+    if (!environmentStorageKey) return;
+    try {
+      window.localStorage.setItem(environmentStorageKey, environmentId);
+    } catch (error) {
+      console.warn("Could not save the selected Aegis environment:", error?.message);
+    }
+  };
   const active = available.some((item) => item.id === selected) ? selected : defaultEnvironment;
 
   return (
@@ -208,7 +230,7 @@ export default function UnifiedAegisPlatform() {
       </header>
       <nav aria-label="Available environments" className="flex flex-wrap gap-2">
         {available.map((item) => (
-          <button key={item.id} type="button" className="job-secondary" aria-pressed={active === item.id} onClick={() => setSelected(item.id)}>
+          <button key={item.id} type="button" className="job-secondary" aria-pressed={active === item.id} onClick={() => selectEnvironment(item.id)}>
             {item.label} · {item.description}
           </button>
         ))}

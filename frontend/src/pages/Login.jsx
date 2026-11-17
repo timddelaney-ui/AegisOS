@@ -6,6 +6,12 @@ import { API } from "../context/AuthContext";
 const Login = () => {
   const [loginError, setLoginError] = useState(null);
   const [signingIn, setSigningIn] = useState(false);
+  const authError = new URLSearchParams(window.location.search || "").get("auth_error");
+  const callbackError = {
+    state: "Google sign-in could not validate the OAuth security state. Check that the Render API URL and Google authorized redirect URI match, then retry.",
+    token: "Google rejected the sign-in token exchange. Check the Google OAuth client credentials and authorized redirect URI configured for the backend.",
+    email: "Google did not return a verified email address for this account.",
+  }[authError] || null;
 
   const handleGoogleLogin = async () => {
     setLoginError(null);
@@ -116,9 +122,9 @@ const Login = () => {
                 <span>{signingIn ? "Connecting to Google..." : "Sign in with Google"}</span>
               </button>
 
-              {loginError && (
+              {(loginError || callbackError) && (
                 <p role="alert" className="mt-3 text-sm text-red-300">
-                  {loginError}
+                  {loginError || callbackError}
                 </p>
               )}
 

@@ -595,18 +595,21 @@ async def google_callback(request: Request, code: Optional[str] = None, state: O
                           oauth_state: Optional[str] = Cookie(None)):
     if not GOOGLE_CLIENT_ID or not code or not state or not oauth_state \
             or not hmac.compare_digest(state, _oauth_state(oauth_state)):
-        return RedirectResponse(f"{PUBLIC_APP_URL}/?auth_error=state")
+        logger.warning("Google OAuth callback rejected during state validation or configuration checks")
+        return RedirectResponse(f"{PUBLIC_APP_URL}/login?auth_error=state")
     async with httpx.AsyncClient(timeout=10) as http:
         tok = await http.post("https://oauth2.googleapis.com/token", data={
             "code": code, "client_id": GOOGLE_CLIENT_ID, "client_secret": GOOGLE_CLIENT_SECRET,
             "redirect_uri": f"{PUBLIC_API_URL}/api/auth/google/callback", "grant_type": "authorization_code"})
         if tok.status_code != 200:
-            return RedirectResponse(f"{PUBLIC_APP_URL}/?auth_error=token")
+                logger.warning("Google OAuth token exchange failed with HTTP %s", tok.status_code)
+                return RedirectResponse(f"{PUBLIC_APP_URL}/login?auth_error=token")
         info = await http.get("https://openidconnect.googleapis.com/v1/userinfo",
                               headers={"Authorization": f"Bearer {tok.json()['access_token']}"})
     u = info.json() if info.status_code == 200 else {}
     if not u.get("email") or not u.get("email_verified"):
-        return RedirectResponse(f"{PUBLIC_APP_URL}/?auth_error=email")
+        logger.warning("Google OAuth userinfo did not return a verified email address")
+        return RedirectResponse(f"{PUBLIC_APP_URL}/login?auth_error=email")
     # The API usually lives on another site (e.g. *.onrender.com), where browsers
     # drop the session cookie as third-party. Hand the app a short-lived one-time
     # code in the URL fragment; it exchanges it for a Bearer token.
@@ -1940,7 +1943,8 @@ ADMIN_EMAILS = [e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "").sp
 def _is_admin(user: dict) -> bool:
     if not user:
         return False
-    return user.get("email", "").lower() in ADMIN_EMAILS or user.get("is_admin") is True
+    email = str(user.get("email") or "").strip().lower()
+    return email in ADMIN_EMAILS or user.get("is_admin") is True
 
 
 @api_router.post("/feedback")

@@ -16,7 +16,7 @@ describe("Google sign-in", () => {
     document.body.appendChild(container);
     root = createRoot(container);
     delete window.location;
-    window.location = { href: "https://app.example.com/login" };
+    window.location = { href: "https://app.example.com/login", search: "" };
     global.fetch = jest.fn();
     jest.spyOn(console, "error").mockImplementation(() => {});
     act(() => root.render(<Login />));
@@ -56,5 +56,15 @@ describe("Google sign-in", () => {
     expect(container.querySelector("[role='alert']").textContent).toContain(message);
     expect(window.location.href).toBe("https://app.example.com/login");
     expect(container.querySelector("[data-testid='google-signin-btn']").disabled).toBe(false);
+  });
+
+  test.each([
+    ["state", "OAuth security state"],
+    ["token", "token exchange"],
+    ["email", "verified email"],
+  ])("explains the Google callback %s failure", async (code, message) => {
+    window.location.search = `?auth_error=${code}`;
+    await act(async () => root.render(<Login />));
+    expect(container.querySelector("[role='alert']").textContent).toContain(message);
   });
 });
