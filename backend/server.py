@@ -954,9 +954,9 @@ async def create_checkout(req: CheckoutRequest, user: dict = Depends(require_use
 
 
 @api_router.get("/payments/status/{session_id}")
-async def get_payment_status(session_id: str):
+async def get_payment_status(session_id: str, user: dict = Depends(require_user)):
     record = await db.payment_transactions.find_one({"session_id": session_id}, {"_id": 0})
-    if not record:
+    if not record or record.get("user_id") != user["user_id"]:
         raise HTTPException(404, "Transaction not found")
 
     if record.get("payment_status") != "paid":
