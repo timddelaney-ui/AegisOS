@@ -39,6 +39,8 @@ client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ["DB_NAME"]]
 
 IS_PRODUCTION = os.environ.get("APP_ENV", "").lower() == "production"
+IS_STAGING = os.environ.get("APP_ENV", "").strip().lower() in {"staging", "preview"}
+ALLOW_RIG_CONNECTIONS = not IS_STAGING
 
 # Pro subscriptions use a USD monthly plan provisioned in PayPal.
 PAYPAL_ENV = os.environ.get("PAYPAL_ENV", "live" if IS_PRODUCTION else "sandbox").lower()
@@ -5113,6 +5115,7 @@ async def _broadcast_liveops(team_id: str, rig_id: Optional[str], sample: dict):
 register_phase1(
     api_router, db, require_user, get_current_user, _is_admin, _broadcast_liveops,
     require_pilot_rig=_require_pilot_rig,
+    allow_rig_connections=ALLOW_RIG_CONNECTIONS,
 )
 
 
@@ -5266,6 +5269,9 @@ async def _store_daq_sample(team_id: str, rig_id: str | None, sample: dict):
 @app.on_event("startup")
 async def _start_daq_orchestrator():
     global _daq_orchestrator
+    if not ALLOW_RIG_CONNECTIONS:
+        logger.info("DAQ listener startup disabled in staging")
+        return
     try:
         from daq_listeners import DaqOrchestrator
         _daq_orchestrator = DaqOrchestrator(db, _store_daq_sample)
@@ -5298,6 +5304,9 @@ async def _mqtt_live_sink(org_id: str, rig_id: str, table: str, docs: list):
 @app.on_event("startup")
 async def _start_mqtt_consumer():
     global _mqtt_service
+    if not ALLOW_RIG_CONNECTIONS:
+        logger.info("MQTT consumer startup disabled in staging")
+        return
     from services.mqtt_consumer import MqttConsumerService, MqttSettings, TelemetryIngestor
     settings = MqttSettings.from_env()
     if not settings.enabled:

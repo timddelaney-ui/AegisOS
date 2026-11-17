@@ -1,3 +1,4 @@
+import asyncio
 import os
 import sys
 from datetime import datetime, timedelta, timezone
@@ -97,6 +98,18 @@ def test_paypal_sync_activates_workbook_pro(monkeypatch):
     assert fields["subscription_status"] == "active"
     assert fields["subscription_plan"] == "workbook_pro"
     assert fields["paypal_subscription_id"] == "I-1"
+
+
+def test_staging_startup_skips_daq_and_mqtt_consumers(monkeypatch):
+    monkeypatch.setattr(server, "ALLOW_RIG_CONNECTIONS", False)
+    monkeypatch.setattr(server, "_daq_orchestrator", None)
+    monkeypatch.setattr(server, "_mqtt_service", None)
+
+    asyncio.run(server._start_daq_orchestrator())
+    asyncio.run(server._start_mqtt_consumer())
+
+    assert server._daq_orchestrator is None
+    assert server._mqtt_service is None
 
 
 @pytest.mark.parametrize("amount,currency,interval,setup_fee,trial,allowed", [

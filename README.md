@@ -74,6 +74,12 @@ cd backend
 STAGING_BASE_URL="https://<staging-host>" python scripts/staging_connectivity_check.py
 ```
 
+### Isolated staging environment
+
+The `staging` Git branch is intended for a separate Render API and Vercel frontend. Configure the Render service as `aegis-api-staging` using Docker, branch `staging`, root directory `backend`, and the same Oregon region as production. Set `APP_ENV=staging`, `DB_NAME=aegis_staging`, and `MONGO_URL` to a dedicated staging MongoDB database with separate credentials; never reuse production database credentials. Set `MQTT_ENABLED=false` and `PAYPAL_ENV=sandbox`, and do not add production DAQ, MQTT, or PayPal credentials.
+
+Staging disables DAQ listeners, MQTT ingestion, DAQ connection tests, and DAQ creation or enabling at the API. Configure Google OAuth with a staging-specific client and callback URLs, and set `PUBLIC_APP_URL`, `PUBLIC_API_URL`, and `CORS_ORIGINS` to the staging domains. Configure the Vercel staging project to deploy the `staging` branch with `REACT_APP_BACKEND_URL` pointing to the staging API. The production Render service and production Vercel deployment must remain on `main`.
+
 ## Telemetry channel model
 The live operations layer tracks the following channels:
 

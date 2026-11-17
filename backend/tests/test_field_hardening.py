@@ -131,6 +131,33 @@ def test_liveops_simulated_on_real_reel_blocked(client):
     assert r.status_code == 400
 
 
+def test_staging_disables_external_rig_connections():
+    db = AsyncMongoMockClient()["staging"]
+    router = APIRouter(prefix="/api")
+
+    async def require_user():
+        return USER
+
+    p1.register_phase1(
+        router, db, require_user, require_user, lambda u: True,
+        allow_rig_connections=False,
+    )
+    app = FastAPI()
+    app.include_router(router)
+    with TestClient(app) as staging_client:
+        assert staging_client.post("/api/daq/configs", json={
+            "name": "staging probe", "protocol": "modbus_tcp", "host": "127.0.0.1",
+            "port": 502, "enabled": False,
+        }).status_code == 503
+        assert staging_client.patch("/api/daq/configs/not-found", json={"enabled": True}).status_code == 503
+        assert staging_client.post("/api/daq/test", json={
+            "protocol": "modbus_tcp", "host": "127.0.0.1", "port": 502,
+        }).status_code == 503
+        assert staging_client.post("/api/daq/configs/not-found/status", json={
+            "status": "connected",
+        }).status_code == 503
+
+
 def _import(client, rid, damage, **kw):
     return client.post("/api/fatigue/import", json={"reel_id": rid, "damage": damage, **kw})
 
