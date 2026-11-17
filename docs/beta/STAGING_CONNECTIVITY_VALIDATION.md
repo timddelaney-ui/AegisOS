@@ -18,7 +18,8 @@ cp frontend/.env.example frontend/.env
 
 Populate required secrets/values for staging:
 - Mongo (`MONGO_URL`, `DB_NAME`)
-- Stripe (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`)
+- PayPal sandbox (`PAYPAL_ENV=sandbox`, `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_WEBHOOK_ID`, `PAYPAL_PLAN_MONTHLY`)
+- Rig bridge (`ENABLE_RIG_DAQ_BRIDGE=false`)
 - AI/storage (`EMERGENT_LLM_KEY`, `INTEGRATION_PROXY_URL`)
 - Email (`RESEND_API_KEY`, `RESEND_FROM_EMAIL`)
 - SMS (`SMS_PROVIDER`, `SMS_FROM_NUMBER`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`)

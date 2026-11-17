@@ -136,13 +136,17 @@ def parse_event_at(raw: Optional[str], now: Optional[datetime] = None) -> dateti
 
 def register_phase1(
     api_router: APIRouter, db, require_user, get_current_user, _is_admin,
-    liveops_notifier=None, require_pilot_rig=None,
+    liveops_notifier=None, require_pilot_rig=None, allow_rig_connections=True,
 ):
     """Attach all Phase 1 endpoints to the main api_router."""
 
     def check_pilot_rig(user, rig_id):
         if require_pilot_rig:
             require_pilot_rig(user, rig_id)
+
+    def require_rig_connections():
+        if not allow_rig_connections:
+            raise HTTPException(503, "Rig connections are disabled in this environment.")
 
     # -----------------------------------------------------------------
     # RBAC admin endpoints
@@ -1919,6 +1923,7 @@ def register_phase1(
     @api_router.post("/daq/configs")
     async def create_daq_config(body: DaqConfig, user: dict = Depends(require_user)):
         require_supervisor(user)
+        require_rig_connections()
         check_pilot_rig(user, body.rig_id)
         team_id = user.get("team_id")
         if not team_id:
@@ -1955,6 +1960,8 @@ def register_phase1(
     @api_router.patch("/daq/configs/{config_id}")
     async def patch_daq_config(config_id: str, body: DaqConfigPatch, user: dict = Depends(require_user)):
         require_supervisor(user)
+        if body.enabled is True:
+            require_rig_connections()
         cfg = await db.daq_configs.find_one({"config_id": config_id, "team_id": user.get("team_id")}, {"_id": 0})
         if not cfg:
             raise HTTPException(404, "Config not found.")
@@ -1998,6 +2005,7 @@ def register_phase1(
     @api_router.post("/daq/test")
     async def test_daq_connection(body: DaqTestBody, user: dict = Depends(require_user)):
         require_supervisor(user)
+        require_rig_connections()
         check_pilot_rig(user, body.rig_id)
         from daq_listeners import connection_probe
         cfg = body.model_dump()
@@ -2018,6 +2026,8 @@ def register_phase1(
     @api_router.post("/daq/configs/{config_id}/status")
     async def set_daq_status(config_id: str, body: DaqStatusPatch, user: dict = Depends(require_user)):
         require_supervisor(user)
+        if body.status in ("connecting", "connected"):
+            require_rig_connections()
         cfg = await db.daq_configs.find_one({"config_id": config_id, "team_id": user.get("team_id")}, {"_id": 0})
         if not cfg:
             raise HTTPException(404, "Not found.")

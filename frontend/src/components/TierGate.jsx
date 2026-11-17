@@ -54,13 +54,18 @@ export function FeatureGate({ feature, children, strict = false, fallback = null
 
 /** Route-level gate — redirect lower-tier users to /pricing with a hint. */
 export function TierProtectedRoute({ feature, children }) {
-  const { canAccess, loaded, featureLabel } = useTier();
+  const { canAccess, loaded, featureLabel, promptUpgrade } = useTier();
   const navigate = useNavigate();
   React.useEffect(() => {
     if (!loaded) return;
     if (canAccess(feature)) return;
+    if (feature === "live_ops" || feature === "daq_ingest") {
+      promptUpgrade(feature);
+      navigate("/hub", { replace: true });
+      return;
+    }
     navigate(`/pricing?highlight=${encodeURIComponent(minTierFor(feature))}&from=${encodeURIComponent(featureLabel(feature))}`, { replace: true });
-  }, [feature, canAccess, loaded, featureLabel, navigate]);
+  }, [feature, canAccess, loaded, featureLabel, navigate, promptUpgrade]);
   if (!loaded || !canAccess(feature)) return null;
   return children;
 }
@@ -72,6 +77,7 @@ export function UpgradeModal() {
   if (!upgradeFor) return null;
   const minT = minTierFor(upgradeFor);
   const spec = TIER_SPECS[minT];
+  const rigSalesFeature = upgradeFor === "live_ops" || upgradeFor === "daq_ingest";
   return (
     <div
       data-testid="upgrade-modal"
@@ -92,6 +98,12 @@ export function UpgradeModal() {
         <div className="p-5 space-y-3">
           <div className="text-xs text-slate-400 uppercase tracking-wider font-bold">Feature</div>
           <div className="text-lg font-bold">{featureLabel(upgradeFor)}</div>
+          {rigSalesFeature && (
+            <div className="rounded-lg border border-amber-400/40 bg-amber-400/10 p-3 text-sm text-amber-200" role="status">
+              <strong>Enterprise Fleet Feature — Contact Sales</strong>
+              <p className="mt-1 text-xs text-slate-300">Live rig telemetry is not included in Pro. Field Pilot and Fleet access require sales provisioning.</p>
+            </div>
+          )}
           <div className="text-[11px] text-slate-500 pt-1 flex items-center gap-1.5">
             <Sparkles className="w-3 h-3" style={{ color: spec?.accent }} />
             Included in <b style={{ color: spec?.accent }}>{spec?.label}</b> and above.
@@ -127,7 +139,7 @@ export function UpgradeModal() {
               className="flex-1 px-3 py-1.5 rounded text-xs font-bold text-black hover:brightness-110"
               style={{ background: spec?.accent }}
             >
-              View {spec?.label}
+              {rigSalesFeature ? "View pilot and Fleet options" : `View ${spec?.label}`}
             </button>
           </div>
         </div>

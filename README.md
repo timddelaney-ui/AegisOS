@@ -16,6 +16,10 @@ Field Pilot access must be explicitly provisioned with `subscription_plan=field_
 
 Self-serve checkout accepts only `ct_pro_monthly`. Configure `PAYPAL_PLAN_MONTHLY` to an active PayPal subscription plan priced at **$9.99 USD per user per month**, continuing until cancelled, without a trial or setup fee. Checkout verifies the configured plan before redirecting the customer; an old CAD $69 plan will be rejected. Updating the app does not change existing PayPal plans or subscriptions: create the new USD plan in PayPal and update the Render environment variable. Pilot pricing remains **$2,150 CAD active / $715 CAD standby per month**; Pilot and Fleet Enterprise are provisioned through sales rather than self-serve checkout. Fleet invoice generation is not yet implemented in the portal.
 
+Rig bridges are opt-in at deployment: `ENABLE_RIG_DAQ_BRIDGE` defaults to `false`. When disabled, the backend does not start DAQ or MQTT consumers and rejects DAQ connection setup and tests. Enabling this switch does not grant a user access; existing Field Pilot/Fleet server-side entitlements and rig scopes still apply. Keep it disabled for Pro-only or staging deployments.
+
+The installable web PWA caches its app shell and static bundles for offline launch. Field writes use IndexedDB transaction queues with a local-storage fallback and sync when connectivity returns; web browsers do not use SQLite here. Native App Store / Google Play wrappers and native-store billing are not configured. Pro checkout remains PayPal-only.
+
 ## Local startup
 The backend ASGI application is `backend/server.py` (`server:app` when run from the `backend/` directory). Configure `backend/.env` with at least `MONGO_URL` and `DB_NAME`, and ensure the MongoDB instance is reachable.
 
