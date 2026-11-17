@@ -113,7 +113,7 @@ const AppRouter = () => {
         <Route element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
         <Route path="/job" element={<JobPage />} />
         <Route path="/live" element={<ProtectedRoute feature="live_ops" view="cockpit"><OperatorCockpit /></ProtectedRoute>} />
-        <Route path="/log" element={<ProtectedRoute view="treatment_log"><TreatmentPage /></ProtectedRoute>} />
+        <Route path="/log" element={<ProtectedRoute feature="treatment_log" view="treatment_log"><TreatmentPage /></ProtectedRoute>} />
         <Route path="/calc" element={<CalcPage />} />
         <Route path="/more" element={<MorePage />} />
         <Route path="/sop" element={<ProtectedRoute feature="workbooks"><Workbook /></ProtectedRoute>} />
@@ -123,7 +123,7 @@ const AppRouter = () => {
         <Route path="/jobs" element={<ProtectedRoute feature="jobs_ledger"><JobsPage /></ProtectedRoute>} />
         <Route path="/admin/feedback" element={<ProtectedRoute><AdminFeedback /></ProtectedRoute>} />
         <Route path="/admin/invites" element={<ProtectedRoute><AdminInvites /></ProtectedRoute>} />
-        <Route path="/manager" element={<ProtectedRoute><ManagerDashboard /></ProtectedRoute>} />
+        <Route path="/manager" element={<ProtectedRoute feature="manager_dashboard"><ManagerDashboard /></ProtectedRoute>} />
         <Route path="/equipment" element={<ProtectedRoute feature="equipment_assets"><EquipmentPage /></ProtectedRoute>} />
         <Route path="/schedule" element={<ProtectedRoute feature="crew_schedule"><CrewSchedulePage /></ProtectedRoute>} />
         <Route path="/treatment" element={<ProtectedRoute view="treatment_log"><TreatmentPage /></ProtectedRoute>} />
@@ -142,16 +142,16 @@ const AppRouter = () => {
         <Route path="/timecards" element={<ProtectedRoute feature="timecards"><TimecardsPage /></ProtectedRoute>} />
         <Route path="/crew-admin" element={<ProtectedRoute feature="rbac_admin"><RbacAdminPage /></ProtectedRoute>} />
         <Route path="/live-ops" element={<ProtectedRoute feature="live_ops"><OperatorPage /></ProtectedRoute>} />
-        <Route path="/live-ops/classic" element={<ProtectedRoute view="classic"><ClassicMode /></ProtectedRoute>} />
-        <Route path="/cockpit" element={<ProtectedRoute view="cockpit"><OperatorCockpit /></ProtectedRoute>} />
-        <Route path="/classic" element={<ProtectedRoute view="classic"><ClassicMode /></ProtectedRoute>} />
+        <Route path="/live-ops/classic" element={<ProtectedRoute feature="live_ops" view="classic"><ClassicMode /></ProtectedRoute>} />
+        <Route path="/cockpit" element={<ProtectedRoute feature="live_ops" view="cockpit"><OperatorCockpit /></ProtectedRoute>} />
+        <Route path="/classic" element={<ProtectedRoute feature="live_ops" view="classic"><ClassicMode /></ProtectedRoute>} />
         <Route path="/daq" element={<ProtectedRoute feature="daq_ingest"><DaqConfigPage /></ProtectedRoute>} />
         <Route path="/security" element={<ProtectedRoute feature="security_compliance"><SecurityCompliancePage /></ProtectedRoute>} />
         <Route path="/shadow" element={<ProtectedRoute feature="shadow_mode"><ShadowVerificationPage /></ProtectedRoute>} />
         <Route path="/executive" element={<ProtectedRoute feature="exec_dashboard"><ExecutiveDashboard /></ProtectedRoute>} />
-        <Route path="/unified-platform" element={<ProtectedRoute><UnifiedAegisPlatform /></ProtectedRoute>} />
-        <Route path="/approvals" element={<ProtectedRoute view="parts"><ApprovalsPage /></ProtectedRoute>} />
-        <Route path="/audit" element={<ProtectedRoute view="audit_ledger"><AuditLedgerPage /></ProtectedRoute>} />
+        <Route path="/unified-platform" element={<ProtectedRoute feature="fleet_assignments"><UnifiedAegisPlatform /></ProtectedRoute>} />
+        <Route path="/approvals" element={<ProtectedRoute feature="manager_dashboard" view="parts"><ApprovalsPage /></ProtectedRoute>} />
+        <Route path="/audit" element={<ProtectedRoute feature="security_compliance" view="audit_ledger"><AuditLedgerPage /></ProtectedRoute>} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes></Suspense>

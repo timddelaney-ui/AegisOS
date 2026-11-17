@@ -10,6 +10,11 @@ const LAST_SEEN_KEY = "ctp_rig_last_seen_v1"; // { [rigId]: { chat: iso, checkli
 // so each rig looks distinct at a glance.
 const PALETTE = ["#FF6B1A", "#0056B3", "#C36600", "#7C3AED", "#DB2777", "#059669", "#B91C1C", "#0891B2", "#4338CA", "#CA8A04"];
 export const RIGS = [
+  ...Array.from({ length: 4 }, (_, i) => ({
+    id: `CT-UNIT-${String(i + 1).padStart(2, "0")}`,
+    label: `CT Unit ${String(i + 1).padStart(2, "0")}`,
+    accent: PALETTE[i % PALETTE.length],
+  })),
   ...Array.from({ length: 25 }, (_, i) => ({
     id: `RIG${i + 1}`,
     label: `Rig ${i + 1}`,

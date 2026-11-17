@@ -17,22 +17,49 @@ def plan(**kw):
 
 
 def test_plan_resolution():
-    assert plan(trial_expires_at=NOW + timedelta(days=3)) == "trial"
+    assert plan(trial_expires_at=NOW + timedelta(days=3)) == "free"
     assert plan(trial_expires_at=NOW - timedelta(days=1)) == "free"
     assert plan(subscription_status="active", subscription_plan="workbook_pro") == "workbook_pro"
     assert plan(subscription_status="active", subscription_expires_at=NOW - timedelta(days=1)) == "free"
     assert plan(subscription_status="active", subscription_plan="aegis_fleet") == "aegis_fleet"
+    assert plan(subscription_status="active", subscription_plan="field_pilot",
+                pilot_expires_at=NOW + timedelta(days=60)) == "field_pilot"
+    assert plan(subscription_status="active", subscription_plan="field_pilot",
+                pilot_expires_at=NOW - timedelta(days=1)) == "free"
+    assert plan(organization_plan="field_pilot",
+                organization_pilot_expires_at=NOW + timedelta(days=60)) == "field_pilot"
+    assert plan(organization_plan="field_pilot",
+                organization_pilot_expires_at=NOW - timedelta(days=1)) == "free"
+    assert plan(subscription_status="active", subscription_plan="invite",
+                subscription_expires_at=NOW + timedelta(days=1)) == "workbook_pro"
+    assert plan(subscription_status="active") == "free"
     assert plan(subscription_status="canceled") == "free"
     assert plan(admin_unlocked=True) == "aegis_fleet"
 
 
-def test_fleet_paths():
-    for p in ("/api/reels", "/api/reels/x", "/api/fatigue/state", "/api/rbac/promote",
-              "/api/job-packages/1/acknowledge", "/api/timecards/approve-payroll",
-              "/api/rigs/status", "/api/liveops/stream", "/api/daq/configs"):
+def test_legacy_trial_timestamp_does_not_unlock_paid_services():
+    legacy_trial = {"trial_expires_at": NOW + timedelta(days=30)}
+    assert not server._user_is_pro(legacy_trial)
+    assert not server._user_has_ai_access(legacy_trial)
+    assert server._user_is_pro({"subscription_status": "active", "subscription_plan": "workbook_pro"})
+
+
+def test_plan_path_groups():
+    for p in ("/api/rbac/promote", "/api/job-packages/1/acknowledge",
+              "/api/timecards/approve-payroll", "/api/rigs/lead-assignment",
+              "/api/org/rigs", "/api/approvals"):
         assert server._is_fleet_only_path(p), p
-    for p in ("/api/ai/chat", "/api/jobs", "/api/teams", "/api/surveys/x", "/api/plugs", "/api/timecards"):
-        assert not server._is_fleet_only_path(p), p
+    for p in ("/api/reels", "/api/reels/x", "/api/fatigue/state",
+              "/api/rigs/status", "/api/liveops/stream", "/api/daq/configs",
+              "/api/surveys/x"):
+        assert server._is_pilot_only_path(p), p
+    for p in ("/api/jobs", "/api/teams", "/api/team/items", "/api/crew/chat",
+              "/api/share-links"):
+        assert server._is_pro_only_path(p), p
+    for p in ("/api/ai/chat",):
+        assert not server._is_fleet_only_path(p)
+        assert not server._is_pilot_only_path(p)
+        assert not server._is_pro_only_path(p)
 
 
 def test_paypal_sync_activates_workbook_pro(monkeypatch):
@@ -53,7 +80,7 @@ def test_paypal_sync_activates_workbook_pro(monkeypatch):
 
     monkeypatch.setattr(server, "db", FakeDb())
     monkeypatch.setattr(server, "_paypal", fake_paypal)
-    monkeypatch.setitem(server.PAYPAL_PLAN_IDS, "ct_pro_yearly", "P-Y")
+    monkeypatch.setitem(server.PAYPAL_PLAN_IDS, "ct_pro_monthly", "P-Y")
     assert asyncio.run(server._sync_paypal_subscription("I-1")) == "ACTIVE"
     query, fields = updates[0]
     assert query == {"user_id": "u1"}

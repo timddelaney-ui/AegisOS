@@ -81,7 +81,6 @@ const SheetTabs = ({ currentSheet, onSelectSheet, freeSheets = [], isPro = false
       >
         <AlertTriangle className="w-3 h-3" strokeWidth={2.5} />
         Emergency_SOPs
-        {!isPro && currentSheet !== "EMERGENCY" && <Lock className="w-2.5 h-2.5 text-[#9C0006]" strokeWidth={2.5} />}
       </button>
     </nav>
   );

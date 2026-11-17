@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import { API, useAuth } from "../context/AuthContext";
 import { useActiveJob } from "../context/ActiveJobContext";
-import { RIGS, useRig } from "../context/RigContext";
+import { useRig } from "../context/RigContext";
 import { useTier } from "../context/TierContext";
 import { planRole } from "../lib/roles";
 import { OPERATION_CODE_BY_NUM } from "../lib/operationCodes";
@@ -15,11 +15,16 @@ const ENVIRONMENTS = [
   { id: "supervisor", label: "Supervisor", description: "Mission control" },
   { id: "management", label: "Management", description: "Fleet dispatch" },
 ];
+const MANAGEMENT_RIGS = Array.from({ length: 4 }, (_, index) => {
+  const number = String(index + 1).padStart(2, "0");
+  return { id: `CT-UNIT-${number}`, label: `CT Unit ${number}` };
+});
 
 function FleetAssignments() {
   const { labels, statuses } = useRig();
   const [members, setMembers] = useState([]);
   const [assignments, setAssignments] = useState({});
+  const [provisionedRigs, setProvisionedRigs] = useState(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [savingRig, setSavingRig] = useState(null);
@@ -29,12 +34,14 @@ function FleetAssignments() {
     setLoading(true);
     setError("");
     try {
-      const [memberResponse, assignmentResponse] = await Promise.all([
+      const [memberResponse, assignmentResponse, rigResponse] = await Promise.all([
         api.get(`${API}/rbac/members`),
         api.get(`${API}/rigs/lead-assignments`),
+        api.get(`${API}/org/rigs`),
       ]);
       setMembers(memberResponse.data.members);
       setAssignments(Object.fromEntries(assignmentResponse.data.assignments.map((item) => [item.rig_id, item.user_id])));
+      setProvisionedRigs(new Set(rigResponse.data.map((rig) => rig.rig_id)));
     } catch (err) {
       setError(err.response?.data?.detail || "Unable to load engineer assignments.");
     } finally {
@@ -59,6 +66,21 @@ function FleetAssignments() {
     }
   };
 
+  const provision = async (rig) => {
+    setSavingRig(rig.id);
+    setError("");
+    setNotice("");
+    try {
+      await api.post(`${API}/org/rigs`, { rig_id: rig.id, name: rig.label });
+      setProvisionedRigs((current) => new Set([...current, rig.id]));
+      setNotice(`${rig.label} provisioned.`);
+    } catch (err) {
+      setError(err.response?.data?.detail || "Unable to provision rig unit.");
+    } finally {
+      setSavingRig(null);
+    }
+  };
+
   return (
     <section className="job-card" aria-labelledby="fleet-heading">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -75,20 +97,26 @@ function FleetAssignments() {
           <table className="w-full min-w-[460px] text-left text-sm">
             <thead><tr className="border-b border-slate-700 text-slate-300"><th className="p-2">Rig</th><th className="p-2">Status</th><th className="p-2">Lead engineer</th></tr></thead>
             <tbody>
-              {RIGS.map((rig) => {
+              {MANAGEMENT_RIGS.map((rig) => {
                 const assigned = assignments[rig.id] || "";
                 const formerMember = assigned && !members.some((member) => member.user_id === assigned);
                 return (
                   <tr key={rig.id} className="border-b border-slate-800">
                     <td className="p-2">{labels[rig.id] || rig.label}</td>
-                    <td className="p-2 capitalize">{statuses[rig.id]?.status || "Not set"}</td>
+                    <td className="p-2 capitalize">{provisionedRigs.has(rig.id) ? statuses[rig.id]?.status || "Provisioned" : "Not provisioned"}</td>
                     <td className="p-2">
-                      <select aria-label={`Lead engineer for ${rig.id}`} className="job-input w-full" value={assigned} disabled={savingRig !== null}
-                        onChange={(event) => assign(rig.id, event.target.value)}>
-                        <option value="">Unassigned</option>
-                        {formerMember && <option value={assigned}>Former team member</option>}
-                        {members.map((member) => <option key={member.user_id} value={member.user_id}>{member.name || member.email || member.user_id}</option>)}
-                      </select>
+                      {provisionedRigs.has(rig.id) ? (
+                        <select aria-label={`Lead engineer for ${rig.id}`} className="job-input w-full" value={assigned} disabled={savingRig !== null}
+                          onChange={(event) => assign(rig.id, event.target.value)}>
+                          <option value="">Unassigned</option>
+                          {formerMember && <option value={assigned}>Former team member</option>}
+                          {members.map((member) => <option key={member.user_id} value={member.user_id}>{member.name || member.email || member.user_id}</option>)}
+                        </select>
+                      ) : (
+                        <button type="button" className="job-secondary w-full" disabled={savingRig !== null} onClick={() => provision(rig)}>
+                          {savingRig === rig.id ? "Provisioning…" : "Provision unit"}
+                        </button>
+                      )}
                     </td>
                   </tr>
                 );

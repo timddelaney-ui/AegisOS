@@ -143,13 +143,10 @@ export { API, BACKEND_URL };
 // Plan values come from GET /api/auth/me -> effective_plan.
 export const effectivePlan = (user) => user?.effective_plan || null;
 export const isFleetUser = (user) => effectivePlan(user) === "aegis_fleet";
-// Workbook Pro features (all sheets, SOPs, AI, wellbore, jobs, teams): paid plans and active trials.
-export const hasWorkbookAccess = (user) => ["workbook_pro", "aegis_fleet", "trial"].includes(effectivePlan(user));
+// The core workbook and emergency SOPs are available on every authenticated plan.
+export const hasWorkbookAccess = (user) => Boolean(user);
 
 export const isProUser = (user) => {
   if (!user) return false;
-  if (effectivePlan(user)) return ["workbook_pro", "aegis_fleet"].includes(effectivePlan(user));
-  if (user.subscription_tier === "enterprise") return true;
-  if (user.subscription_status === "active") return true;
-  return false;
+  return ["workbook_pro", "field_pilot", "aegis_fleet"].includes(effectivePlan(user));
 };

@@ -54,20 +54,13 @@ export function FeatureGate({ feature, children, strict = false, fallback = null
 
 /** Route-level gate — redirect lower-tier users to /pricing with a hint. */
 export function TierProtectedRoute({ feature, children }) {
-  const { canAccess, loaded, hidesCompletely, featureLabel } = useTier();
+  const { canAccess, loaded, featureLabel } = useTier();
   const navigate = useNavigate();
   React.useEffect(() => {
     if (!loaded) return;
     if (canAccess(feature)) return;
-    // Enterprise-only "hidden" features: pretend route doesn't exist so a
-    // Personal user who manually types the URL bounces straight back to
-    // their hub without a tempting "upgrade for this!" pitch.
-    if (hidesCompletely(feature)) {
-      navigate("/hub", { replace: true });
-      return;
-    }
     navigate(`/pricing?highlight=${encodeURIComponent(minTierFor(feature))}&from=${encodeURIComponent(featureLabel(feature))}`, { replace: true });
-  }, [feature, canAccess, loaded, hidesCompletely, featureLabel, navigate]);
+  }, [feature, canAccess, loaded, featureLabel, navigate]);
   if (!loaded || !canAccess(feature)) return null;
   return children;
 }
@@ -106,11 +99,17 @@ export function UpgradeModal() {
           <div className="rounded-lg bg-white/5 border border-white/10 p-3 mt-2">
             <div className="text-[11px] uppercase tracking-wider font-bold text-slate-400">{spec?.label}</div>
             <div className="text-[11px] text-slate-500 mb-2">{spec?.tagline}</div>
-            {spec?.price_monthly_usd ? (
+            {spec?.price_monthly_cad ? (
               <div className="text-xl font-bold" style={{ color: spec?.accent }}>
-                $9.99 CAD<span className="text-xs text-slate-400 font-normal"> / month</span>
-                {" "}· $79.99 CAD<span className="text-xs text-slate-400 font-normal"> / year (Save 33%)</span>
+                ${spec.price_monthly_cad} CAD<span className="text-xs text-slate-400 font-normal"> / user / month</span>
                 <div className="text-[10px] text-slate-500 font-normal mt-1">No tax added.</div>
+              </div>
+            ) : spec?.price_active_monthly_cad ? (
+              <div className="text-sm font-bold" style={{ color: spec?.accent }}>
+                ${spec.price_active_monthly_cad.toLocaleString("en-CA")} CAD / active month
+                <div className="text-[10px] text-slate-400 font-normal mt-1">
+                  ${spec.price_standby_monthly_cad.toLocaleString("en-CA")} CAD / standby month
+                </div>
               </div>
             ) : (
               <div className="text-xl font-bold" style={{ color: spec?.accent }}>Custom — contact sales</div>

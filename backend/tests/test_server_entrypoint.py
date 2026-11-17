@@ -32,24 +32,6 @@ def test_server_is_a_fastapi_entrypoint():
     )
 
 
-def test_legacy_free_for_all_is_disabled_by_default():
+def test_unconditional_free_for_all_bypass_is_removed():
     source = (Path(__file__).resolve().parents[1] / "server.py").read_text()
-    module = ast.parse(source)
-    assignment = next(
-        node
-        for node in module.body
-        if isinstance(node, ast.Assign)
-        and any(isinstance(target, ast.Name) and target.id == "FREE_FOR_ALL" for target in node.targets)
-    )
-
-    assert any(
-        isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr == "get"
-        and len(node.args) > 1
-        and isinstance(node.args[0], ast.Constant)
-        and node.args[0].value == "CT_FREE_FOR_ALL"
-        and isinstance(node.args[1], ast.Constant)
-        and node.args[1].value == "false"
-        for node in ast.walk(assignment.value)
-    )
+    assert "CT_FREE_FOR_ALL" not in source

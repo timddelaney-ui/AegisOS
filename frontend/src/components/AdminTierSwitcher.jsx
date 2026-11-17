@@ -159,7 +159,7 @@ export default function AdminTierSwitcher() {
                         {TIER_SPECS[current]?.label || current}
                       </div>
                     </div>
-                    <div className="grid grid-cols-3 gap-1">
+                    <div className="grid grid-cols-4 gap-1">
                       {TIER_ORDER.map((t) => {
                         const spec = TIER_SPECS[t];
                         const isOn = current === t;

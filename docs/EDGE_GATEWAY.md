@@ -115,10 +115,10 @@ Simulators live in `tests/edge/simulators.py`; run `pytest tests/edge` (needs `a
 Not yet validated against physical PLCs.
 
 ## Tenancy, RBAC and audit
-See `backend/middleware/tenant.py` and `backend/services/audit_chain.py`. `org_id` falls back to the legacy
-`team_id`. Roles: `operator`, `company_man`, `fleet_manager`. Plans: `trial`, `field_pro`, `enterprise`
-(env overrides: `BETA_UNLOCK`, `BETA_FEATURES=a,b`). `GET /api/audit-logs` and `GET /api/audit-logs/verify`
-are fleet_manager-only.
+See `backend/middleware/tenant.py` and `backend/services/audit_chain.py`. `org_id` falls back to the legacy `team_id`. Roles: `operator`, `company_man`, `fleet_manager`.
+Plans: `free`, `pro`, `field_pilot`, and `enterprise`; beta invitations can grant only time-limited
+Field Pilot access, while feature entitlements cannot be overridden by environment variables.
+`GET /api/audit-logs` and `GET /api/audit-logs/verify` are fleet_manager-only.
 
 ## Managed broker (EMQX Cloud / HiveMQ) with Render
 

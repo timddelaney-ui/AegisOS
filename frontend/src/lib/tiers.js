@@ -1,187 +1,152 @@
-/**
- * CoilAegis Pricing Tier Catalog — single source of truth.
- *
- * Three plan tiers:
- *   • `personal`  — individual field engineers, no crew
- *   • `smallmed`  — small-to-medium crew (adds timecards / payroll / crew)
- *   • `enterprise`— full ops stack (live DAQ, 3D wellbore, dossier email, …)
- *
- * The `beta_unlock` flag on the backend overrides all gating so Field Test
- * Beta users see every feature regardless of plan. Keep the matrix in sync
- * with the Pricing page and Tutorial copy — those pages derive from
- * TIER_SPECS and FEATURE_SPECS below.
- */
+/** Commercial entitlements for Aegis OS. Keep prices aligned with backend billing. */
+export const TIER_FREE = "free";
+export const TIER_PRO = "pro";
+export const TIER_FIELD_PILOT = "field_pilot";
+export const TIER_FLEET = "fleet";
 
-export const TIER_PERSONAL   = "personal";
-export const TIER_SMALLMED   = "smallmed";
-export const TIER_ENTERPRISE = "enterprise";
+// Legacy names remain aliases for callers that still use the original catalog.
+export const TIER_PERSONAL = TIER_FREE;
+export const TIER_SMALLMED = TIER_PRO;
+export const TIER_ENTERPRISE = TIER_FLEET;
+export const TIER_ORDER = [TIER_FREE, TIER_PRO, TIER_FIELD_PILOT, TIER_FLEET];
 
-export const TIER_ORDER = [TIER_PERSONAL, TIER_SMALLMED, TIER_ENTERPRISE];
+export const normalizeTier = (tier) => ({
+  personal: TIER_FREE,
+  smallmed: TIER_PRO,
+  workbook_pro: TIER_PRO,
+  enterprise: TIER_FLEET,
+  aegis_fleet: TIER_FLEET,
+  trial: TIER_FREE,
+}[tier] || (TIER_ORDER.includes(tier) ? tier : TIER_FREE));
 
 export const TIER_SPECS = {
-  [TIER_PERSONAL]: {
-    id: TIER_PERSONAL,
-    label: "Personal",
-    tagline: "Individual field engineer",
-    price_monthly_usd: 9.99,
-    price_yearly_usd: 79.99,
-    seats: "1 seat",
-    highlights: [
-      "AI assistant",
-      "Training mode & tutorials",
-      "Workbooks + SOP library",
-      "Daily tasks",
-      "Parts orders",
-      "ERP templates",
-      "Equipment & assets",
-    ],
-    accent: "#06B6D4",     // cyan
+  [TIER_FREE]: {
+    id: TIER_FREE,
+    label: "Free Basic",
+    tagline: "Individual field user",
+    price_monthly_cad: 0,
+    seats: "1 user",
+    highlights: ["17 offline physics calculators", "Public AER / IWCF emergency SOPs"],
+    accent: "#06B6D4",
     glow: "rgba(6,182,212,0.25)",
   },
-  [TIER_SMALLMED]: {
-    id: TIER_SMALLMED,
-    label: "Small-Med Crew",
-    tagline: "Up to 15 crew members",
-    price_monthly_usd: 29.99,
-    price_yearly_usd: 249,
-    seats: "Up to 15 seats",
-    highlights: [
-      "Everything in Personal",
-      "Timecards + Payroll",
-      "Position Designation (RBAC)",
-      "Crew schedule",
-      "Crew contacts / address book",
-      "Team invites",
-    ],
-    accent: "#F59E0B",     // gold
+  [TIER_PRO]: {
+    id: TIER_PRO,
+    label: "CT Field Workbook Pro",
+    tagline: "Individual field engineer",
+    price_monthly_cad: 69,
+    seats: "Per user",
+    highlights: ["Everything in Free", "Advanced offline notes and personal field logs", "Multi-device sync", "Team and crew collaboration"],
+    accent: "#F59E0B",
     glow: "rgba(245,158,11,0.3)",
     popular: true,
   },
-  [TIER_ENTERPRISE]: {
-    id: TIER_ENTERPRISE,
-    label: "Enterprise",
-    tagline: "Full ops stack",
-    price_monthly_usd: null,  // custom
-    price_yearly_usd: null,
-    seats: "Unlimited seats",
-    highlights: [
-      "Everything in Small-Med",
-      "Live Ops console (1 Hz telemetry)",
-      "3D Wellbore + DLS color",
-      "Reel Fatigue (Palmgren-Miner)",
-      "Treatment log + Codes 1-69",
-      "Engineering Audit Dossier + email",
-      "Live DAQ ingest (Modbus / WITS / WITSML)",
-      "Von Mises & CT Drilling calculators",
-      "Document vault",
-      "Jobs ledger",
-      "Security & Compliance (TLS badge, encrypted notes, AI privacy, audit log)",
-    ],
-    accent: "#EF4444",     // crimson
+  [TIER_FIELD_PILOT]: {
+    id: TIER_FIELD_PILOT,
+    label: "Field Pilot",
+    tagline: "Authenticated pilot units",
+    price_monthly_cad: null,
+    price_active_monthly_cad: 2150,
+    price_standby_monthly_cad: 715,
+    seats: "Target rig units only",
+    highlights: ["Rig telemetry: Modbus TCP, OPC UA, WITS0, WITSML", "Mission Control cockpit and multi-pen strip charts", "Von Mises fatigue tracking", "5-channel fluid totalizers"],
+    accent: "#8B5CF6",
+    glow: "rgba(139,92,246,0.3)",
+  },
+  [TIER_FLEET]: {
+    id: TIER_FLEET,
+    label: "Fleet Enterprise",
+    tagline: "Multi-rig operations",
+    price_monthly_cad: null,
+    seats: "5+ units",
+    highlights: ["Everything in Field Pilot", "Multi-tenant RBAC and audit logs", "Rig provisioning and engineer assignments", "Fleet dashboards"],
+    accent: "#EF4444",
     glow: "rgba(239,68,68,0.3)",
   },
 };
+TIER_SPECS.enterprise = TIER_SPECS[TIER_FLEET];
 
-/**
- * Features used throughout the app. The `visibility` field controls what
- * lower tiers see:
- *   • `teaser`  — show nav entry with a lock icon; clicking triggers upgrade
- *   • `hidden`  — enterprise-only features that lower tiers can't even see
- */
 export const FEATURE_SPECS = {
-  // --- Personal tier ---
-  ai_panel:         { minTier: TIER_PERSONAL, visibility: "teaser",  label: "AI assistant" },
-  training:         { minTier: TIER_PERSONAL, visibility: "teaser",  label: "Training mode" },
-  workbooks:        { minTier: TIER_PERSONAL, visibility: "teaser",  label: "Workbooks" },
-  sop_library:      { minTier: TIER_PERSONAL, visibility: "teaser",  label: "SOP library" },
-  daily_tasks:      { minTier: TIER_PERSONAL, visibility: "teaser",  label: "Daily tasks" },
-  parts_orders:     { minTier: TIER_PERSONAL, visibility: "teaser",  label: "Parts orders" },
-  erp_templates:    { minTier: TIER_PERSONAL, visibility: "teaser",  label: "ERP templates" },
-  equipment_assets: { minTier: TIER_PERSONAL, visibility: "teaser",  label: "Equipment & assets" },
-  certifications:   { minTier: TIER_PERSONAL, visibility: "teaser",  label: "Certifications" },
-  hub:              { minTier: TIER_PERSONAL, visibility: "teaser",  label: "Hub" },
+  workbooks: { minTier: TIER_FREE, visibility: "teaser", label: "17 offline calculators" },
+  sop_library: { minTier: TIER_FREE, visibility: "teaser", label: "Emergency SOPs" },
+  hub: { minTier: TIER_FREE, visibility: "teaser", label: "Hub" },
 
-  // --- Small-Med Crew tier (crew-y, hybrid teasers to Personal) ---
-  timecards:        { minTier: TIER_SMALLMED, visibility: "teaser",  label: "Timecards & payroll" },
-  rbac_admin:       { minTier: TIER_SMALLMED, visibility: "teaser",  label: "Position Designation" },
-  crew_schedule:    { minTier: TIER_SMALLMED, visibility: "teaser",  label: "Crew schedule" },
-  crew_contacts:    { minTier: TIER_SMALLMED, visibility: "teaser",  label: "Crew contacts" },
-  team_mgmt:        { minTier: TIER_SMALLMED, visibility: "teaser",  label: "Team management" },
+  ai_panel: { minTier: TIER_PRO, visibility: "teaser", label: "AI assistant" },
+  training: { minTier: TIER_PRO, visibility: "teaser", label: "Training mode" },
+  daily_tasks: { minTier: TIER_PRO, visibility: "teaser", label: "Daily tasks" },
+  parts_orders: { minTier: TIER_PRO, visibility: "teaser", label: "Parts orders" },
+  erp_templates: { minTier: TIER_PRO, visibility: "teaser", label: "ERP templates" },
+  equipment_assets: { minTier: TIER_PRO, visibility: "teaser", label: "Equipment & assets" },
+  certifications: { minTier: TIER_PRO, visibility: "teaser", label: "Certifications" },
+  timecards: { minTier: TIER_PRO, visibility: "teaser", label: "Timecards & payroll" },
+  crew_schedule: { minTier: TIER_PRO, visibility: "teaser", label: "Crew schedule" },
+  crew_contacts: { minTier: TIER_PRO, visibility: "teaser", label: "Crew contacts" },
+  team_mgmt: { minTier: TIER_PRO, visibility: "teaser", label: "Team and crew collaboration" },
+  jobs_ledger: { minTier: TIER_PRO, visibility: "teaser", label: "Personal field logs and saved jobs" },
+  handover: { minTier: TIER_PRO, visibility: "teaser", label: "Field handovers" },
 
-  // --- Enterprise tier (completely hidden from lower tiers) ---
-  live_ops:           { minTier: TIER_ENTERPRISE, visibility: "hidden", label: "Live Ops console" },
-  daq_ingest:         { minTier: TIER_ENTERPRISE, visibility: "hidden", label: "Live DAQ ingest" },
-  wellbore_3d:        { minTier: TIER_ENTERPRISE, visibility: "hidden", label: "3D Wellbore" },
-  reel_fatigue:       { minTier: TIER_ENTERPRISE, visibility: "hidden", label: "Reel Fatigue" },
-  treatment_log:      { minTier: TIER_ENTERPRISE, visibility: "hidden", label: "Treatment log" },
-  dossier:            { minTier: TIER_ENTERPRISE, visibility: "hidden", label: "Audit Dossier + email" },
-  von_mises:          { minTier: TIER_ENTERPRISE, visibility: "hidden", label: "Von Mises stress" },
-  ct_drill_calc:      { minTier: TIER_ENTERPRISE, visibility: "hidden", label: "CT Drilling calculator" },
-  reels_mgmt:         { minTier: TIER_ENTERPRISE, visibility: "hidden", label: "Reels management" },
-  documents:          { minTier: TIER_ENTERPRISE, visibility: "hidden", label: "Document vault" },
-  jobs_ledger:        { minTier: TIER_ENTERPRISE, visibility: "hidden", label: "Jobs ledger" },
-  security_compliance:{ minTier: TIER_ENTERPRISE, visibility: "hidden", label: "Security & Compliance" },
-  shadow_mode:        { minTier: TIER_ENTERPRISE, visibility: "hidden", label: "Shadow Mode verification" },
-  exec_dashboard:     { minTier: TIER_ENTERPRISE, visibility: "hidden", label: "Executive dashboard" },
+  live_ops: { minTier: TIER_FIELD_PILOT, visibility: "hidden", label: "Mission Control cockpit" },
+  daq_ingest: { minTier: TIER_FIELD_PILOT, visibility: "hidden", label: "Rig telemetry and DAQ" },
+  wellbore_3d: { minTier: TIER_FIELD_PILOT, visibility: "hidden", label: "3D Wellbore" },
+  reel_fatigue: { minTier: TIER_FIELD_PILOT, visibility: "hidden", label: "Von Mises fatigue tracking" },
+  treatment_log: { minTier: TIER_FIELD_PILOT, visibility: "hidden", label: "Treatment log" },
+  von_mises: { minTier: TIER_FIELD_PILOT, visibility: "hidden", label: "Von Mises stress" },
+  ct_drill_calc: { minTier: TIER_FIELD_PILOT, visibility: "hidden", label: "CT Drilling calculator" },
+  reels_mgmt: { minTier: TIER_FIELD_PILOT, visibility: "hidden", label: "Reels management" },
+  fluid_totalizers: { minTier: TIER_FIELD_PILOT, visibility: "hidden", label: "Fluid totalizers" },
+
+  rbac_admin: { minTier: TIER_FLEET, visibility: "hidden", label: "Management controls" },
+  documents: { minTier: TIER_FLEET, visibility: "hidden", label: "Organization document vault" },
+  security_compliance: { minTier: TIER_FLEET, visibility: "hidden", label: "Security & Compliance" },
+  shadow_mode: { minTier: TIER_FLEET, visibility: "hidden", label: "Shadow Mode verification" },
+  exec_dashboard: { minTier: TIER_FLEET, visibility: "hidden", label: "Executive dashboard" },
+  manager_dashboard: { minTier: TIER_FLEET, visibility: "hidden", label: "Management dashboard" },
+  fleet_assignments: { minTier: TIER_FLEET, visibility: "hidden", label: "Fleet & Engineer Assignment Portal" },
 };
 
-// Routes → feature. `/pricing`, `/login`, `/auth-callback` and `/share/*` are
-// never gated so we don't list them here.
 export const ROUTE_FEATURES = {
-  "/hub":               "hub",
-  "/app":               "workbooks",
-  "/team":              "team_mgmt",
-  "/jobs":              "jobs_ledger",
-  "/equipment":         "equipment_assets",
-  "/schedule":          "crew_schedule",
-  "/treatment":         "treatment_log",
-  "/ctd-calculator":    "ct_drill_calc",
-  "/documents":         "documents",
-  "/erp-template":      "erp_templates",
-  "/crew-contacts":     "crew_contacts",
-  "/reels":             "reels_mgmt",
-  "/stress":            "von_mises",
-  "/fatigue":           "reel_fatigue",
-  "/wellbore":          "wellbore_3d",
-  "/certs":             "certifications",
-  "/tasks":             "daily_tasks",
-  "/parts-orders":      "parts_orders",
-  "/timecards":         "timecards",
-  "/crew-admin":        "rbac_admin",
-  "/live-ops":          "live_ops",
-  "/live-ops/classic":  "live_ops",
-  "/daq":               "daq_ingest",
-  "/security":          "security_compliance",
-  "/shadow":            "shadow_mode",
-  "/executive":         "exec_dashboard",
-};
-export const tierIndex = (tier) => {
-  const i = TIER_ORDER.indexOf(tier);
-  return i < 0 ? 0 : i;
+  "/hub": "hub",
+  "/app": "workbooks",
+  "/sop": "sop_library",
+  "/team": "team_mgmt",
+  "/jobs": "jobs_ledger",
+  "/equipment": "equipment_assets",
+  "/schedule": "crew_schedule",
+  "/treatment": "treatment_log",
+  "/ctd-calculator": "ct_drill_calc",
+  "/documents": "documents",
+  "/erp-template": "erp_templates",
+  "/crew-contacts": "crew_contacts",
+  "/reels": "reels_mgmt",
+  "/stress": "von_mises",
+  "/fatigue": "reel_fatigue",
+  "/wellbore": "wellbore_3d",
+  "/certs": "certifications",
+  "/tasks": "daily_tasks",
+  "/parts-orders": "parts_orders",
+  "/timecards": "timecards",
+  "/crew-admin": "rbac_admin",
+  "/live": "live_ops",
+  "/live-ops": "live_ops",
+  "/daq": "daq_ingest",
+  "/security": "security_compliance",
+  "/shadow": "shadow_mode",
+  "/executive": "exec_dashboard",
+  "/manager": "manager_dashboard",
+  "/unified-platform": "fleet_assignments",
 };
 
-/** Does `tier` meet or exceed the minimum required for this feature? */
+export const tierIndex = (tier) => Math.max(0, TIER_ORDER.indexOf(normalizeTier(tier)));
 export const tierHasAccess = (tier, featureId) => {
   const spec = FEATURE_SPECS[featureId];
-  if (!spec) return true; // unknown feature → never gate (safety)
-  return tierIndex(tier) >= tierIndex(spec.minTier);
+  return Boolean(spec && tierIndex(tier) >= tierIndex(spec.minTier));
 };
-
-/** Should the feature be shown as a locked teaser to this tier? */
 export const tierShowsLockedTeaser = (tier, featureId) => {
   const spec = FEATURE_SPECS[featureId];
-  if (!spec) return false;
-  if (tierHasAccess(tier, featureId)) return false;
-  return spec.visibility === "teaser";
+  return Boolean(spec && !tierHasAccess(tier, featureId) && spec.visibility === "teaser");
 };
-
-/** Should the feature be hidden ENTIRELY from this tier's navigation? */
 export const tierHidesCompletely = (tier, featureId) => {
   const spec = FEATURE_SPECS[featureId];
-  if (!spec) return false;
-  if (tierHasAccess(tier, featureId)) return false;
-  return spec.visibility === "hidden";
+  return Boolean(spec && !tierHasAccess(tier, featureId) && spec.visibility === "hidden");
 };
-
-/** Returns the lowest tier that unlocks the given feature. */
-export const minTierFor = (featureId) => FEATURE_SPECS[featureId]?.minTier || TIER_PERSONAL;
+export const minTierFor = (featureId) => FEATURE_SPECS[featureId]?.minTier || TIER_PRO;

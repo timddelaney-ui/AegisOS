@@ -12,8 +12,8 @@ from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
 from middleware.tenant import (
-    PLAN_FEATURES, ROLES, TenantDB, beta_features, has_entitlement, org_id_of,
-    org_plan, permissions_for, require_permission, role_of,
+    PLAN_FEATURES, ROLES, TenantDB, org_id_of, org_plan, permissions_for,
+    require_permission, role_of,
 )
 from services import audit_chain
 from phase1_modules import require_management
@@ -32,9 +32,13 @@ class LeadAssignment(BaseModel):
     user_id: Optional[str] = Field(...)
 
 
-def build_router(*, require_user, db, chain_audit) -> APIRouter:
+def build_router(*, require_user, db, chain_audit, has_fleet_plan=None) -> APIRouter:
     r = APIRouter()
     fleet = lambda perm: require_permission(perm, require_user)  # noqa: E731
+
+    def require_fleet_plan(user):
+        if not has_fleet_plan or not has_fleet_plan(user):
+            raise HTTPException(403, "Fleet Enterprise is required for organization management.")
 
     async def _plan(user):
         team = await db.teams.find_one({"team_id": org_id_of(user)}, {"_id": 0})
@@ -43,12 +47,13 @@ def build_router(*, require_user, db, chain_audit) -> APIRouter:
     @r.get("/me/entitlements")
     async def my_entitlements(user: dict = Depends(require_user)):
         plan = await _plan(user)
-        feats = sorted(PLAN_FEATURES[plan] | beta_features())
+        feats = sorted(PLAN_FEATURES[plan])
         return {"org_id": org_id_of(user), "plan": plan, "features": feats,
                 "role": role_of(user), "permissions": permissions_for(user)}
 
     @r.put("/org/users/{user_id}/role")
     async def change_role(user_id: str, body: RoleChange, user: dict = Depends(fleet("user.manage"))):
+        require_fleet_plan(user)
         if body.role not in ROLES:
             raise HTTPException(400, f"role must be one of {list(ROLES)}")
         org = org_id_of(user)
@@ -63,6 +68,9 @@ def build_router(*, require_user, db, chain_audit) -> APIRouter:
 
     @r.post("/org/rigs")
     async def provision_rig(body: RigCreate, user: dict = Depends(fleet("rig.provision"))):
+        require_fleet_plan(user)
+        if body.rig_id not in {f"CT-UNIT-{i:02d}" for i in range(1, 5)}:
+            raise HTTPException(400, "Rig ID must be CT-UNIT-01 through CT-UNIT-04.")
         tdb = TenantDB(db, org_id_of(user))
         if await tdb.rigs.find_one({"rig_id": body.rig_id}):
             raise HTTPException(409, "Rig already exists.")
@@ -78,6 +86,7 @@ def build_router(*, require_user, db, chain_audit) -> APIRouter:
 
     @r.get("/rigs/lead-assignments")
     async def list_lead_assignments(user: dict = Depends(require_user)):
+        require_fleet_plan(user)
         require_management(user)
         team_id = user.get("team_id")
         if not team_id:
@@ -87,12 +96,16 @@ def build_router(*, require_user, db, chain_audit) -> APIRouter:
 
     @r.put("/rigs/{rig_id}/lead-assignment")
     async def assign_lead(rig_id: str, body: LeadAssignment, user: dict = Depends(require_user)):
+        require_fleet_plan(user)
         require_management(user)
         team_id = user.get("team_id")
         if not team_id:
             raise HTTPException(400, "Join a team before managing assignments.")
-        if rig_id not in {f"RIG{i}" for i in range(1, 26)} | {"YARD"}:
+        if rig_id not in {f"CT-UNIT-{i:02d}" for i in range(1, 5)}:
             raise HTTPException(404, "Rig not found.")
+        tdb = TenantDB(db, team_id)
+        if not await tdb.rigs.find_one({"rig_id": rig_id}):
+            raise HTTPException(404, "Rig must be provisioned before assigning a lead.")
         if body.user_id is not None:
             member = await db.users.find_one({"team_id": team_id, "user_id": body.user_id}, {"_id": 0, "user_id": 1})
             if not member:

@@ -13,9 +13,7 @@ Exposes four coordinated subsystems:
   (d) Audit log — generalises the existing tier_change_log into a
       universal, append-only ledger of security-sensitive actions.
 
-Routes mount under `/api/security/*`. All routes require Enterprise tier
-UNLESS the global `BETA_UNLOCK` flag on server.py is on, in which case the
-gate is relaxed — matches the rest of the tier guard.
+Routes mount under `/api/security/*`. All routes require Fleet Enterprise tier.
 """
 from __future__ import annotations
 

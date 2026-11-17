@@ -47,7 +47,6 @@ PAYPAL_CLIENT_SECRET = os.environ.get("PAYPAL_CLIENT_SECRET", "").strip()
 PAYPAL_WEBHOOK_ID = os.environ.get("PAYPAL_WEBHOOK_ID", "").strip()
 PAYPAL_PLAN_IDS = {
     "ct_pro_monthly": os.environ.get("PAYPAL_PLAN_MONTHLY", "").strip(),
-    "ct_pro_yearly": os.environ.get("PAYPAL_PLAN_YEARLY", "").strip(),
 }
 
 app = FastAPI()
@@ -63,7 +62,7 @@ class User(BaseModel):
     team_id: Optional[str] = None
     role: str = "crew"  # crew | field_manager | ops_manager
     subscription_status: str = "free"  # free | active | canceled
-    subscription_plan: Optional[str] = None  # workbook_pro | aegis_fleet | invite
+    subscription_plan: Optional[str] = None  # workbook_pro | field_pilot | aegis_fleet | invite
     subscription_expires_at: Optional[datetime] = None
     trial_expires_at: Optional[datetime] = None
 
@@ -142,6 +141,17 @@ async def _user_from_session_token(token: Optional[str]) -> Optional[dict]:
         return None
 
     user_doc = await db.users.find_one({"user_id": session_doc["user_id"]}, {"_id": 0})
+    org_id = (user_doc or {}).get("org_id") or (user_doc or {}).get("team_id")
+    if user_doc and org_id:
+        team = await db.teams.find_one(
+            {"team_id": org_id},
+            {"_id": 0, "plan": 1, "pilot_expires_at": 1, "subscription_expires_at": 1},
+        )
+        if team and team.get("plan"):
+            user_doc["organization_plan"] = team["plan"]
+            user_doc["organization_pilot_expires_at"] = (
+                team.get("pilot_expires_at") or team.get("subscription_expires_at")
+            )
     return _apply_admin_unlock(user_doc)
 
 
@@ -179,12 +189,18 @@ async def liveops_websocket(websocket: WebSocket):
         await websocket.close(code=4401)
         return
     if get_effective_plan(user) != "aegis_fleet":
-        await websocket.close(code=4403)
-        return
+        if get_effective_plan(user) != "field_pilot":
+            await websocket.close(code=4403)
+            return
 
     session_token = websocket.cookies.get("session_token")
     team_id = user["team_id"]
     rig_id = websocket.query_params.get("rig_id") or None
+    try:
+        _require_pilot_rig(user, rig_id)
+    except HTTPException:
+        await websocket.close(code=4403)
+        return
     queue = liveops_broadcaster.subscribe(team_id, rig_id)
     try:
         await websocket.accept()
@@ -492,9 +508,6 @@ async def _finish_login(response: Response, email: str, name: str, picture: Opti
     if existing:
         user_id = existing["user_id"]
         update_fields = {"name": name, "picture": picture}
-        # Backfill trial_expires_at for pre-trial users
-        if not existing.get("trial_expires_at"):
-            update_fields["trial_expires_at"] = datetime.now(timezone.utc) + timedelta(days=30)
         await db.users.update_one({"user_id": user_id}, {"$set": update_fields})
     else:
         user_id = f"user_{uuid.uuid4().hex[:12]}"
@@ -507,7 +520,6 @@ async def _finish_login(response: Response, email: str, name: str, picture: Opti
             "subscription_status": "free",
             "subscription_plan": None,
             "subscription_expires_at": None,
-            "trial_expires_at": datetime.now(timezone.utc) + timedelta(days=30),
             "created_at": datetime.now(timezone.utc),
         })
 
@@ -658,36 +670,43 @@ async def subscription_status(user: dict = Depends(require_user)):
     }
 
 
-# ============ PLAN TIER (Personal / Small-Med / Enterprise) ============
+# ============ PLAN TIER ============
 BETA_UNLOCK = (os.environ.get("BETA_UNLOCK", "false").strip().lower() in {"1", "true", "yes", "on"})
-_VALID_TIERS = {"personal", "smallmed", "enterprise"}
+_VALID_TIERS = {"free", "pro", "field_pilot", "fleet"}
 
 
 def _resolve_user_tier(user: dict) -> str:
-    """Return the viewer's active plan tier.
-
-    Precedence:
-      1. explicit `subscription_tier` on the user doc (set by webhooks or
-         admin assignment)
-      2. derive from legacy `subscription_status`/`subscription_plan`
-      3. default to `personal`
-    """
-    explicit = (user.get("subscription_tier") or "").strip().lower()
-    if explicit in _VALID_TIERS:
-        return explicit
-    # Legacy mapping: active Pro subscribers from the Free/Pro era are
-    # treated as Small-Med Crew — that's what the Pro bundle covered.
-    if user.get("subscription_status") == "active":
-        return "smallmed"
-    return "personal"
+    """Return the canonical commercial tier, including legacy user records."""
+    plan = get_effective_plan(user)
+    return {"free": "free", "workbook_pro": "pro", "field_pilot": "field_pilot", "aegis_fleet": "fleet"}[plan]
 
 
 FLEET_PLAN_KEYS = {"aegis_fleet"}
-# Aegis Fleet only: Reel Track, Manager Mode, Rig Telemetry.
+# Field Pilot exposes rig operations; Fleet-only paths remain management and
+# organization controls.
+PILOT_ONLY_PREFIXES = (
+    "/api/reels", "/api/fatigue", "/api/liveops", "/api/daq",
+    "/api/treatments", "/api/plugs", "/api/surveys", "/api/rigs/status",
+)
 FLEET_ONLY_PREFIXES = (
-    "/api/reels", "/api/fatigue",
-    "/api/rbac/promote", "/api/job-packages", "/api/timecards/approve-payroll", "/api/rigs",
-    "/api/liveops", "/api/daq",
+    "/api/rbac/promote", "/api/job-packages", "/api/timecards/approve-payroll",
+    "/api/rigs/lead-assignment", "/api/rigs/lead-assignments", "/api/org/rigs",
+    "/api/org/users", "/api/audit-logs", "/api/manager", "/api/documents",
+    "/api/dossier", "/api/positions", "/api/users/designation", "/api/hitl",
+    "/api/approvals",
+    "/api/rigs/labels",
+)
+PRO_ONLY_PREFIXES = (
+    "/api/teams", "/api/jobs", "/api/team/items", "/api/crew/chat",
+    "/api/crew/contacts", "/api/crew/handover", "/api/crew/shift-end",
+    "/api/crew/activity-summary", "/api/crew/checklist-events",
+    "/api/crew/handover-summary", "/api/crew/safety-eval",
+    "/api/crew/shift-end-preview", "/api/crew/shift-end-sms",
+    "/api/crew/shift-end-sms-preview", "/api/crew/handover-email",
+    "/api/crews", "/api/schedule", "/api/equipment", "/api/tasks",
+    "/api/parts-orders", "/api/timecards", "/api/certifications",
+    "/api/erp-templates", "/api/attachments", "/api/ctd-scenarios",
+    "/api/rbac/members", "/api/crew", "/api/handovers", "/api/share-links",
 )
 
 
@@ -697,39 +716,95 @@ def _is_beta_invitee(user: dict) -> bool:
 
 
 def get_effective_plan(user: Optional[dict]) -> str:
-    """Resolve the entitlement plan: aegis_fleet | workbook_pro | trial | free."""
+    """Resolve entitlements: free < workbook_pro < field_pilot < aegis_fleet."""
     if not user:
         return "free"
     now = datetime.now(timezone.utc)
-    if (user.get("admin_unlocked")
-            or (user.get("subscription_tier") or "").strip().lower() == "enterprise"
-            or (user.get("subscription_plan") or "") in FLEET_PLAN_KEYS):
+    subscription_plan = (user.get("subscription_plan") or "").strip().lower()
+    subscription_tier = (user.get("subscription_tier") or "").strip().lower()
+    organization_plan = (user.get("organization_plan") or "").strip().lower()
+    if user.get("admin_unlocked") or subscription_tier == "enterprise":
         return "aegis_fleet"
-    if user.get("subscription_status") == "active":
+    if organization_plan in {"enterprise", "aegis_fleet"}:
+        return "aegis_fleet"
+    if organization_plan in {"field_pilot", "field_pro"}:
+        expires = _parse_utc(
+            user.get("organization_pilot_expires_at")
+            or user.get("pilot_expires_at")
+            or user.get("subscription_expires_at")
+        )
+        if expires is not None and expires > now:
+            return "field_pilot"
+    if organization_plan in {"pro", "workbook_pro"}:
+        return "workbook_pro"
+    if subscription_plan in FLEET_PLAN_KEYS and user.get("subscription_status") == "active":
+        expires = _parse_utc(user.get("subscription_expires_at"))
+        if expires is None or expires > now:
+            return "aegis_fleet"
+    pilot_invite = BETA_UNLOCK and _is_beta_invitee(user)
+    pilot_plan = (subscription_plan == "field_pilot" or subscription_tier == "field_pilot") and user.get("subscription_status") == "active"
+    if pilot_plan or pilot_invite:
+        expires = _parse_utc(user.get("pilot_expires_at") or user.get("subscription_expires_at")
+                             or user.get("trial_expires_at"))
+        if expires is not None and expires > now:
+            return "field_pilot"
+    if (user.get("subscription_status") == "active"
+            and (subscription_plan in {"workbook_pro", "invite"} or subscription_tier in {"smallmed", "pro"})):
         exp = _parse_utc(user.get("subscription_expires_at"))
         if exp is None or exp > now:
             return "workbook_pro"
-    trial_exp = _parse_utc(user.get("trial_expires_at"))
-    if trial_exp is not None and trial_exp > now:
-        return "trial"
     return "free"
+
+
+def _pilot_rig_ids(user: Optional[dict]) -> set[str]:
+    configured = (user or {}).get("pilot_rig_ids") or []
+    if isinstance(configured, str):
+        configured = [configured]
+    allowed = {f"CT-UNIT-{i:02d}" for i in range(1, 5)}
+    return {rig_id for rig_id in configured if rig_id in allowed}
+
+
+def _require_pilot_rig(user: dict, rig_id: Optional[str]) -> None:
+    if get_effective_plan(user) == "field_pilot" and rig_id not in _pilot_rig_ids(user):
+        raise HTTPException(403, "This Field Pilot account is not authorized for that rig unit.")
 
 
 def _is_fleet_only_path(path: str) -> bool:
     return any(path == p or path.startswith(p + "/") for p in FLEET_ONLY_PREFIXES)
 
 
+def _is_pilot_only_path(path: str) -> bool:
+    return any(path == p or path.startswith(p + "/") for p in PILOT_ONLY_PREFIXES)
+
+
+def _is_pro_only_path(path: str) -> bool:
+    return any(path == p or path.startswith(p + "/") for p in PRO_ONLY_PREFIXES)
+
+
 @app.middleware("http")
 async def fleet_plan_gate(request: Request, call_next):
-    if request.method != "OPTIONS" and _is_fleet_only_path(request.url.path):
+    if request.method != "OPTIONS" and (
+        _is_fleet_only_path(request.url.path)
+        or _is_pilot_only_path(request.url.path)
+        or _is_pro_only_path(request.url.path)
+    ):
         token = request.cookies.get("session_token")
         auth = request.headers.get("authorization", "")
         user = await _user_from_session_token(token)
         if not user and auth.startswith("Bearer "):
             user = await _user_from_session_token(auth[7:])
         # Unauthenticated requests fall through so the route itself returns 401.
-        if user and get_effective_plan(user) != "aegis_fleet":
-            return JSONResponse({"detail": "This feature requires an Aegis Fleet plan."}, status_code=403)
+        if user:
+            plan = get_effective_plan(user)
+            path = request.url.path
+            if _is_fleet_only_path(path) and plan != "aegis_fleet":
+                return JSONResponse({"detail": "This feature requires a Fleet organization."}, status_code=403)
+            if request.method == "DELETE" and path == "/api/liveops/stream" and plan != "aegis_fleet":
+                return JSONResponse({"detail": "Clearing rig telemetry requires Fleet Enterprise."}, status_code=403)
+            if _is_pilot_only_path(path) and plan not in {"field_pilot", "aegis_fleet"}:
+                return JSONResponse({"detail": "This feature requires an active Field Pilot or Fleet plan."}, status_code=403)
+            if _is_pro_only_path(path) and plan == "free":
+                return JSONResponse({"detail": "This feature requires CT Field Workbook Pro or higher."}, status_code=403)
     return await call_next(request)
 
 
@@ -738,18 +813,19 @@ async def my_tier(user: dict = Depends(require_user)):
     """Returns the viewer's active plan tier plus the BETA_UNLOCK flag
     (honoured only for admins and invited beta users).
     """
-    tier = _resolve_user_tier(user)
+    plan = get_effective_plan(user)
+    tier = {"free": "free", "workbook_pro": "pro", "field_pilot": "field_pilot", "aegis_fleet": "fleet"}[plan]
     return {
         "tier": tier,
-        "effective_plan": get_effective_plan(user),
-        "beta_unlock": (BETA_UNLOCK and _is_beta_invitee(user)) or bool(user.get("admin_unlocked")),
+        "effective_plan": plan,
+        "beta_unlock": (BETA_UNLOCK and _is_beta_invitee(user)) and plan == "field_pilot",
         "subscription_status": user.get("subscription_status", "free"),
         "subscription_plan": user.get("subscription_plan"),
     }
 
 
 def _plan_for_lookup(lookup_key: str) -> str:
-    return "aegis_fleet" if (lookup_key or "").startswith("aegis_fleet") else "workbook_pro"
+    return "workbook_pro" if lookup_key == "ct_pro_monthly" else "free"
 
 
 def _period_for_lookup(lookup_key: str) -> timedelta:
@@ -1624,30 +1700,14 @@ def _parse_utc(value) -> Optional[datetime]:
 
 
 # Iter 21 — Free-for-all mode. Flip this env var to "false" to re-enable paid gating.
-FREE_FOR_ALL = os.environ.get("CT_FREE_FOR_ALL", "false").strip().lower() in ("1", "true", "yes", "on")
-
-
 def _user_is_pro(user: dict) -> bool:
-    """Pro when status is active AND (no expiry set OR expiry is still in the future)."""
-    if FREE_FOR_ALL:
-        return True
-    if user.get("subscription_status") != "active":
-        return False
-    exp = _parse_utc(user.get("subscription_expires_at"))
-    if exp is None:
-        # Legacy/active subscribers without an expiry recorded — grant access.
-        return True
-    return exp > datetime.now(timezone.utc)
+    """Only paid Pro, Field Pilot, and Fleet entitlements unlock Pro services."""
+    return get_effective_plan(user) in {"workbook_pro", "field_pilot", "aegis_fleet"}
 
 
 def _user_has_ai_access(user: dict) -> bool:
-    """AI features available during 30-day trial OR for active (non-expired) Pro subscribers."""
-    if FREE_FOR_ALL:
-        return True
-    if _user_is_pro(user):
-        return True
-    exp = _parse_utc(user.get("trial_expires_at"))
-    return exp is not None and exp > datetime.now(timezone.utc)
+    """AI requires a paid Pro entitlement; legacy trial timestamps grant nothing."""
+    return _user_is_pro(user)
 
 
 SYSTEM_PROMPTS = {
@@ -1941,7 +2001,7 @@ async def admin_whoami(user: dict = Depends(require_user)):
 # ============ ADMIN TIER MANAGEMENT ============
 class AdminTierUpdate(BaseModel):
     email: str
-    tier: str  # "personal" | "smallmed" | "enterprise"
+    tier: str  # free | pro | field_pilot | fleet
 
 
 @api_router.get("/admin/users/search")
@@ -1978,6 +2038,7 @@ async def admin_set_tier(body: AdminTierUpdate, user: dict = Depends(require_use
     if not _is_admin(user):
         raise HTTPException(403, "Admin only")
     tier = (body.tier or "").strip().lower()
+    tier = {"personal": "free", "smallmed": "pro", "enterprise": "fleet"}.get(tier, tier)
     if tier not in _VALID_TIERS:
         raise HTTPException(400, f"tier must be one of {sorted(_VALID_TIERS)}")
     email = (body.email or "").strip().lower()
@@ -1987,10 +2048,29 @@ async def admin_set_tier(body: AdminTierUpdate, user: dict = Depends(require_use
     if not target:
         raise HTTPException(404, "User not found")
     prev_tier = _resolve_user_tier(target)
-    await db.users.update_one(
-        {"user_id": target["user_id"]},
-        {"$set": {"subscription_tier": tier, "updated_at": datetime.now(timezone.utc)}},
-    )
+    now = datetime.now(timezone.utc)
+    if tier == "free":
+        update = {
+            "$set": {"subscription_tier": "personal", "subscription_status": "free", "updated_at": now},
+            "$unset": {"subscription_plan": "", "subscription_expires_at": "", "pilot_expires_at": ""},
+        }
+    elif tier == "pro":
+        update = {"$set": {
+            "subscription_tier": "smallmed", "subscription_status": "active",
+            "subscription_plan": "workbook_pro", "updated_at": now,
+        }}
+    elif tier == "field_pilot":
+        update = {"$set": {
+            "subscription_tier": "field_pilot", "subscription_status": "active",
+            "subscription_plan": "field_pilot", "pilot_expires_at": now + timedelta(days=60),
+            "updated_at": now,
+        }}
+    else:
+        update = {"$set": {
+            "subscription_tier": "enterprise", "subscription_status": "active",
+            "subscription_plan": "aegis_fleet", "updated_at": now,
+        }}
+    await db.users.update_one({"user_id": target["user_id"]}, update)
     # Audit so a sales-demo tier flip isn't invisible to the team.
     try:
         await db.tier_change_log.insert_one({
@@ -4379,6 +4459,7 @@ class TreatmentEntryUpdate(BaseModel):
 
 @api_router.get("/treatments")
 async def list_treatments(rig_id: Optional[str] = None, status: Optional[str] = None, user: dict = Depends(require_user)):
+    _require_pilot_rig(user, rig_id)
     team_id = user.get("team_id")
     if not team_id:
         return {"treatments": [], "team_id": None}
@@ -4391,6 +4472,7 @@ async def list_treatments(rig_id: Optional[str] = None, status: Optional[str] = 
 
 @api_router.get("/treatments/active")
 async def get_active_treatment(rig_id: str, user: dict = Depends(require_user)):
+    _require_pilot_rig(user, rig_id)
     team_id = user.get("team_id")
     if not team_id:
         return {"treatment": None}
@@ -4400,6 +4482,7 @@ async def get_active_treatment(rig_id: str, user: dict = Depends(require_user)):
 
 @api_router.post("/treatments")
 async def start_treatment(body: TreatmentCreate, user: dict = Depends(require_user)):
+    _require_pilot_rig(user, body.rig_id)
     team_id = user.get("team_id")
     if not team_id:
         raise HTTPException(400, "Join or create a team first.")
@@ -4439,6 +4522,10 @@ async def close_treatment(treatment_id: str, user: dict = Depends(require_user))
     team_id = user.get("team_id")
     if not team_id:
         raise HTTPException(400, "No team.")
+    existing = await db.treatments.find_one({"treatment_id": treatment_id, "team_id": team_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(404, "Active treatment not found.")
+    _require_pilot_rig(user, existing.get("rig_id"))
     now = datetime.now(timezone.utc)
     r = await db.treatments.update_one(
         {"treatment_id": treatment_id, "team_id": team_id, "status": "active"},
@@ -4458,6 +4545,7 @@ async def delete_treatment(treatment_id: str, user: dict = Depends(require_user)
     trt = await db.treatments.find_one({"treatment_id": treatment_id, "team_id": team_id}, {"_id": 0})
     if not trt:
         raise HTTPException(404, "Treatment not found.")
+    _require_pilot_rig(user, trt.get("rig_id"))
     # Only creator or admin can delete
     if trt.get("created_by") != user["email"] and not _is_admin(user):
         raise HTTPException(403, "Only the treatment owner or an admin can delete.")
@@ -4474,6 +4562,7 @@ async def list_treatment_entries(treatment_id: str, since: Optional[str] = None,
     trt = await db.treatments.find_one({"treatment_id": treatment_id, "team_id": team_id}, {"_id": 0})
     if not trt:
         raise HTTPException(404, "Treatment not found.")
+    _require_pilot_rig(user, trt.get("rig_id"))
     q: Dict[str, Any] = {"treatment_id": treatment_id, "team_id": team_id}
     if since:
         try:
@@ -4526,6 +4615,7 @@ async def add_treatment_entry(treatment_id: str, body: TreatmentEntryCreate, use
     trt = await db.treatments.find_one({"treatment_id": treatment_id, "team_id": team_id}, {"_id": 0})
     if not trt:
         raise HTTPException(404, "Treatment not found.")
+    _require_pilot_rig(user, trt.get("rig_id"))
     if trt.get("status") != "active":
         raise HTTPException(400, "Treatment is closed — reopen or start a new one to log entries.")
     now = datetime.now(timezone.utc)
@@ -4609,6 +4699,7 @@ async def edit_treatment_entry(treatment_id: str, entry_id: str, body: Treatment
     entry = await db.treatment_entries.find_one({"entry_id": entry_id, "treatment_id": treatment_id, "team_id": team_id}, {"_id": 0})
     if not entry:
         raise HTTPException(404, "Entry not found.")
+    _require_pilot_rig(user, entry.get("rig_id"))
     if entry.get("author") != user["email"] and not _is_admin(user):
         raise HTTPException(403, "Only the author or an admin can edit this entry.")
     now = datetime.now(timezone.utc)
@@ -4661,6 +4752,7 @@ async def delete_treatment_entry(treatment_id: str, entry_id: str, user: dict = 
     entry = await db.treatment_entries.find_one({"entry_id": entry_id, "treatment_id": treatment_id, "team_id": team_id}, {"_id": 0})
     if not entry:
         raise HTTPException(404, "Entry not found.")
+    _require_pilot_rig(user, entry.get("rig_id"))
     if entry.get("author") != user["email"] and not _is_admin(user):
         raise HTTPException(403, "Only the author or an admin can delete this entry.")
     await db.treatment_entries.delete_one({"entry_id": entry_id, "treatment_id": treatment_id, "team_id": team_id})
@@ -4683,6 +4775,7 @@ async def treatments_events_timeline(
     (optionally filtered to a rig). Used by the Live Ops playback scrubber to
     render Significant-Event and NPT pins alongside manual annotations.
     """
+    _require_pilot_rig(user, rig_id)
     team_id = user.get("team_id")
     if not team_id:
         return {"events": []}
@@ -4986,11 +5079,14 @@ async def _broadcast_liveops(team_id: str, rig_id: Optional[str], sample: dict):
         logger.exception("Liveops WebSocket broadcast failed for team %s rig %s", team_id, rig_id)
 
 
-register_phase1(api_router, db, require_user, get_current_user, _is_admin, _broadcast_liveops)
+register_phase1(
+    api_router, db, require_user, get_current_user, _is_admin, _broadcast_liveops,
+    require_pilot_rig=_require_pilot_rig,
+)
 
 
 # ============ SECURITY & COMPLIANCE (Enterprise bundle) ============
-from middleware.tenant import org_id_of, org_plan, has_entitlement, ensure_tenant_indexes, PLAN_FEATURES  # noqa: E402
+from middleware.tenant import org_id_of, org_plan, ensure_tenant_indexes  # noqa: E402
 from services import audit_chain  # noqa: E402
 from services.org_routes import build_router as _build_org_router  # noqa: E402
 from security_module import build_router as _build_security_router, scrub_pii as _scrub_pii, audit_log as _audit_log  # noqa: E402
@@ -5011,15 +5107,10 @@ async def _maybe_scrub_for_team(team_id: Optional[str], text: str) -> str:
 
 
 async def _require_enterprise(user: dict = Depends(require_user)):
-    """Gate for `/security/*` writes. Honours BETA_UNLOCK the same way the
-    frontend tier guard does so the flag is a single global switch.
-    """
+    """Security and compliance controls are Fleet Enterprise-only."""
     team = await db.teams.find_one({"team_id": user.get("team_id")}, {"_id": 0}) if user.get("team_id") else None
     plan = org_plan(team, user)
-    # Global beta flags only apply to admins / invited users, never organic signups.
-    if has_entitlement(plan, "security_compliance") and (
-        plan in ("enterprise",) or _is_beta_invitee(user) or "security_compliance" in PLAN_FEATURES.get(plan, ())
-    ):
+    if plan == "enterprise":
         return user
     raise HTTPException(403, "Security & Compliance requires an Enterprise plan.")
 
@@ -5032,7 +5123,12 @@ _security_router = _build_security_router(
     data_region=os.environ.get("DATA_REGION", "us-east"),
 )
 api_router.include_router(_security_router)
-api_router.include_router(_build_org_router(require_user=require_user, db=db, chain_audit=_chain_audit))
+api_router.include_router(_build_org_router(
+    require_user=require_user,
+    db=db,
+    chain_audit=_chain_audit,
+    has_fleet_plan=lambda user: get_effective_plan(user) == "aegis_fleet",
+))
 from routes.approvals import build_approvals_router as _build_approvals_router  # noqa: E402
 api_router.include_router(_build_approvals_router(require_user=require_user, db=db, chain_audit=_chain_audit))
 

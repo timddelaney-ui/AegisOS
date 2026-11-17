@@ -4,12 +4,14 @@ import { renderToString } from "react-dom/server.node";
 import Hub, { HubModules } from "./Hub";
 import { useAuth } from "../context/AuthContext";
 import { useTier } from "../context/TierContext";
+import { getTool } from "../config/toolRegistry";
+import { tierHasAccess, tierHidesCompletely } from "../lib/tiers";
 
 jest.mock("react-router-dom", () => ({ useNavigate: () => jest.fn() }));
 jest.mock("../context/AuthContext", () => ({
   API: "https://api.example.com/api",
   useAuth: jest.fn(),
-  isProUser: (user) => user?.subscription_tier === "enterprise",
+  isProUser: (user) => ["workbook_pro", "field_pilot", "aegis_fleet"].includes(user?.effective_plan),
 }));
 jest.mock("../context/TierContext", () => ({
   useTier: jest.fn(),
@@ -28,12 +30,17 @@ beforeEach(() => {
 });
 
 test.each([
-  ["personal", "crew"],
-  ["enterprise", "crew"],
-  ["enterprise", "ops_manager"],
-])("renders Hub for the %s tier and %s role without losing tools", (tier, role) => {
+  ["free", "crew"],
+  ["pro", "crew"],
+  ["fleet", "crew"],
+  ["fleet", "ops_manager"],
+])("renders Hub for the %s tier and %s role without losing entitled tools", (tier, role) => {
+  useTier.mockReturnValue({
+    canAccess: (feature) => tierHasAccess(tier, feature),
+    hidesCompletely: (feature) => tierHidesCompletely(tier, feature),
+  });
   useAuth.mockReturnValue({
-    user: { name: "Test user", role, subscription_tier: tier, effective_plan: tier === "personal" ? "workbook_pro" : "aegis_fleet" },
+    user: { name: "Test user", role, subscription_tier: tier, effective_plan: ({ free: "free", pro: "workbook_pro", fleet: "aegis_fleet" })[tier] },
   });
 
   const html = renderToString(<Hub />);
@@ -46,14 +53,16 @@ test.each([
     "equipment", "schedule", "treatment", "emergency", "training", "redeem", "feedback",
   ];
   if (role === "ops_manager") expected.push("crew-admin");
-  // Reel Track, Manager Mode and Rig Telemetry tiles require Aegis Fleet.
-  const fleetOnly = ["live-ops", "daq", "reels", "fatigue", "crew-admin"];
-  const visible = tier === "personal" ? expected.filter((id) => !fleetOnly.includes(id)) : expected;
+  // Teaser features remain visible; hidden features are omitted below their minimum tier.
+  const visible = expected.filter((id) => {
+    const feature = getTool(id)?.feature;
+    return !feature || tierHasAccess(tier, feature) || !tierHidesCompletely(tier, feature);
+  });
   expect(tiles.sort()).toEqual(visible.sort());
-  if (tier === "personal") {
-    expect(html).toContain("Cheaper than a coffee");
+  if (tier === "free") {
+    expect(html).toContain("Upgrade to CT Field Workbook Pro");
   } else {
-    expect(html).not.toContain("Cheaper than a coffee");
+    expect(html).not.toContain("Upgrade to CT Field Workbook Pro");
   }
 });
 

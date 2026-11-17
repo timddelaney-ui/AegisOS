@@ -24,7 +24,9 @@ beforeEach(() => {
   api.get.mockReset();
   api.get.mockImplementation((url) => Promise.resolve({ data: url.endsWith("/rbac/members")
     ? { members: [{ user_id: "u1", name: "Engineer" }] }
-    : { assignments: [] } }));
+    : url.endsWith("/org/rigs")
+      ? [{ rig_id: "CT-UNIT-01" }]
+      : { assignments: [] } }));
   api.put.mockReset();
   axios.get.mockImplementation((url) => Promise.resolve({
     data: url.endsWith("/treatments/active")
@@ -38,10 +40,10 @@ test("saves a team member assignment through the server and surfaces errors", as
   document.body.appendChild(host);
   const root = createRoot(host);
   await act(async () => root.render(<UnifiedAegisPlatform />));
-  const select = host.querySelector('[aria-label="Lead engineer for RIG1"]');
-  api.put.mockResolvedValueOnce({ data: { rig_id: "RIG1", user_id: "u1" } });
+  const select = host.querySelector('[aria-label="Lead engineer for CT-UNIT-01"]');
+  api.put.mockResolvedValueOnce({ data: { rig_id: "CT-UNIT-01", user_id: "u1" } });
   await act(async () => { select.value = "u1"; select.dispatchEvent(new Event("change", { bubbles: true })); });
-  expect(api.put).toHaveBeenCalledWith("/api/rigs/RIG1/lead-assignment", { user_id: "u1" });
+  expect(api.put).toHaveBeenCalledWith("/api/rigs/CT-UNIT-01/lead-assignment", { user_id: "u1" });
   expect(select.value).toBe("u1");
 
   api.put.mockRejectedValueOnce(new Error("offline"));

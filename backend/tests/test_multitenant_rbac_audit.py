@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import sys
 
@@ -16,12 +17,12 @@ from services import audit_chain  # noqa: E402
 from services.org_routes import build_router  # noqa: E402
 
 USERS = {
-    "a_fleet": {"user_id": "a_fleet", "email": "f@a", "team_id": "orgA", "role": "ops_manager"},
+    "a_fleet": {"user_id": "a_fleet", "email": "f@a", "team_id": "orgA", "role": "ops_manager", "subscription_plan": "aegis_fleet"},
     "a_op": {"user_id": "a_op", "email": "o@a", "team_id": "orgA", "role": "crew"},
     "a_cm": {"user_id": "a_cm", "email": "c@a", "team_id": "orgA", "org_role": "company_man"},
     "a_supervisor": {"user_id": "a_supervisor", "email": "s@a", "team_id": "orgA", "role": "field_manager"},
-    "b_fleet": {"user_id": "b_fleet", "email": "f@b", "team_id": "orgB", "org_role": "fleet_manager"},
-    "b_management": {"user_id": "b_management", "email": "m@b", "team_id": "orgB", "role": "ops_manager"},
+    "b_fleet": {"user_id": "b_fleet", "email": "f@b", "team_id": "orgB", "org_role": "fleet_manager", "subscription_plan": "aegis_fleet"},
+    "b_management": {"user_id": "b_management", "email": "m@b", "team_id": "orgB", "role": "ops_manager", "subscription_plan": "aegis_fleet"},
 }
 
 
@@ -39,7 +40,10 @@ def make_app():
         await audit_chain.append(db, org_id=user["team_id"], action=action,
                                  actor_user_id=user["user_id"], rig_id=rig_id, target=target, meta=meta)
 
-    app.include_router(build_router(require_user=require_user, db=db, chain_audit=chain), prefix="/api")
+    app.include_router(build_router(
+        require_user=require_user, db=db, chain_audit=chain,
+        has_fleet_plan=lambda user: user.get("subscription_plan") == "aegis_fleet",
+    ), prefix="/api")
     return app, db
 
 
@@ -70,9 +74,9 @@ def test_rbac_matrix():
 
 def test_route_permissions(env):
     c, _ = env
-    assert c.post("/api/org/rigs", json={"rig_id": "R1"}, headers=h("a_op")).status_code == 403
-    assert c.post("/api/org/rigs", json={"rig_id": "R1"}, headers=h("a_cm")).status_code == 403
-    assert c.post("/api/org/rigs", json={"rig_id": "R1"}, headers=h("a_fleet")).status_code == 200
+    assert c.post("/api/org/rigs", json={"rig_id": "CT-UNIT-01"}, headers=h("a_op")).status_code == 403
+    assert c.post("/api/org/rigs", json={"rig_id": "CT-UNIT-01"}, headers=h("a_cm")).status_code == 403
+    assert c.post("/api/org/rigs", json={"rig_id": "CT-UNIT-01"}, headers=h("a_fleet")).status_code == 200
     for u in ("a_op", "a_cm"):
         assert c.get("/api/audit-logs", headers=h(u)).status_code == 403
         assert c.get("/api/audit-logs/verify", headers=h(u)).status_code == 403
@@ -81,10 +85,10 @@ def test_route_permissions(env):
 
 def test_cross_tenant_isolation(env):
     c, db = env
-    c.post("/api/org/rigs", json={"rig_id": "R1"}, headers=h("a_fleet"))
+    c.post("/api/org/rigs", json={"rig_id": "CT-UNIT-01"}, headers=h("a_fleet"))
     # Tenant B cannot see A's rig, and a duplicate id in B is independent
     assert c.get("/api/org/rigs", headers=h("b_fleet")).json() == []
-    assert c.post("/api/org/rigs", json={"rig_id": "R1"}, headers=h("b_fleet")).status_code == 200
+    assert c.post("/api/org/rigs", json={"rig_id": "CT-UNIT-01"}, headers=h("b_fleet")).status_code == 200
     # Role change across tenants is a 404 even for a valid user id
     r = c.put("/api/org/users/a_op/role", json={"role": "company_man"}, headers=h("b_fleet"))
     assert r.status_code == 404
@@ -95,25 +99,28 @@ def test_cross_tenant_isolation(env):
 
 def test_job_rig_lead_assignments_are_team_scoped_and_management_only(env):
     c, db = env
+    assert c.post("/api/org/rigs", json={"rig_id": "CT-UNIT-01"}, headers=h("a_fleet")).status_code == 200
     run(db.users.insert_many([
         {"user_id": "a_op", "team_id": "orgA"},
         {"user_id": "b_fleet", "team_id": "orgB"},
     ]))
-    path = "/api/rigs/RIG1/lead-assignment"
+    path = "/api/rigs/CT-UNIT-01/lead-assignment"
     assert c.get("/api/rigs/lead-assignments", headers=h("a_op")).status_code == 403
     assert c.put(path, json={"user_id": "a_op"}, headers=h("a_op")).status_code == 403
     assert c.put(path, json={"user_id": "a_op"}, headers=h("a_supervisor")).status_code == 403
     assert c.put(path, json={}, headers=h("a_fleet")).status_code == 422
     assert c.put(path, json={"user_id": "b_fleet"}, headers=h("a_fleet")).status_code == 404
-    assert c.put("/api/rigs/RIG26/lead-assignment", json={"user_id": "a_op"}, headers=h("a_fleet")).status_code == 404
-    assert c.put(path, json={"user_id": "a_op"}, headers=h("a_fleet")).json() == {"rig_id": "RIG1", "user_id": "a_op"}
+    assert c.put("/api/rigs/CT-UNIT-05/lead-assignment", json={"user_id": "a_op"}, headers=h("a_fleet")).status_code == 404
+    assert c.put(path, json={"user_id": "a_op"}, headers=h("a_fleet")).json() == {"rig_id": "CT-UNIT-01", "user_id": "a_op"}
     assert c.get("/api/rigs/lead-assignments", headers=h("b_management")).json()["assignments"] == []
     assert c.get("/api/rigs/lead-assignments", headers=h("a_fleet")).json()["assignments"] == [
-        {"team_id": "orgA", "rig_id": "RIG1", "user_id": "a_op"}
+        {"team_id": "orgA", "rig_id": "CT-UNIT-01", "user_id": "a_op"}
     ]
     assert c.put(path, json={"user_id": None}, headers=h("a_fleet")).json()["user_id"] is None
     entries = c.get("/api/audit-logs", headers=h("a_fleet")).json()["items"]
-    assert [entry["action"] for entry in entries] == ["rig.lead_assignment", "rig.lead_assignment"]
+    assert [entry["action"] for entry in entries] == [
+        "rig.lead_assignment", "rig.lead_assignment", "rig.provision",
+    ]
 
 
 def test_tenantdb_injects_org_and_blocks_guessed_id():
@@ -160,16 +167,23 @@ def test_concurrent_appends_keep_single_chain():
     run(go())
 
 
-def test_plan_entitlements_and_beta_override(monkeypatch):
+def test_plan_entitlements_cannot_be_overridden_by_beta_environment(monkeypatch):
     monkeypatch.delenv("BETA_UNLOCK", raising=False)
     monkeypatch.delenv("BETA_FEATURES", raising=False)
-    assert org_plan({"plan": "field_pro"}) == "field_pro"
-    assert org_plan(None, {"subscription_tier": "smallmed"}) == "field_pro"
-    assert org_plan(None, {}) == "trial"
-    assert not has_entitlement("trial", "security_compliance")
+    assert org_plan({"plan": "field_pro", "pilot_expires_at": datetime.now(timezone.utc) + timedelta(days=1)}) == "field_pro"
+    assert org_plan({"plan": "field_pro", "pilot_expires_at": datetime.now(timezone.utc) - timedelta(days=1)}) == "free"
+    assert org_plan(None, {"subscription_tier": "smallmed"}) == "pro"
+    assert org_plan(None, {"subscription_plan": "field_pilot"}) == "free"
+    assert org_plan(None, {
+        "subscription_plan": "field_pilot",
+        "subscription_status": "active",
+        "pilot_expires_at": datetime.now(timezone.utc) + timedelta(days=1),
+    }) == "field_pilot"
+    assert org_plan(None, {}) == "free"
+    assert not has_entitlement("free", "security_compliance")
     assert has_entitlement("enterprise", "security_compliance")
     monkeypatch.setenv("BETA_FEATURES", "security_compliance")
-    assert has_entitlement("trial", "security_compliance")
-    assert not has_entitlement("trial", "audit_export")
+    assert not has_entitlement("free", "security_compliance")
+    assert not has_entitlement("free", "audit_export")
     monkeypatch.setenv("BETA_UNLOCK", "true")
-    assert has_entitlement("trial", "audit_export")
+    assert not has_entitlement("free", "audit_export")

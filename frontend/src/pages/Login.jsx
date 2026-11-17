@@ -129,8 +129,8 @@ const Login = () => {
               </div>
 
               <div className="mt-6 bg-[#FF6B1A]/10 border border-[#FF6B1A]/30 rounded-lg p-3 text-xs">
-                <p className="font-bold text-[#FF6B1A] mb-1">30-Day Free Trial — No credit card</p>
-                <p className="text-white/70">Full platform access for 30 days. Then <span className="font-semibold text-white">$9.99 CAD / month</span> or <span className="font-semibold text-white">$79.99 CAD / year (Save 33%)</span>, no tax added.</p>
+                <p className="font-bold text-[#FF6B1A] mb-1">Free Basic · Upgrade when you need more</p>
+                <p className="text-white/70">Start with 17 offline calculators and emergency SOPs. CT Field Workbook Pro adds collaboration and sync for <span className="font-semibold text-white">$69 CAD / user / month</span>.</p>
               </div>
             </div>
           </div>
@@ -194,8 +194,8 @@ const Login = () => {
               <li><strong className="text-white">Mobile-first.</strong> Runs on any phone, any browser, any hitch. Metric or Imperial toggle on every sheet.</li>
               <li><strong className="text-white">Cited, not guessed.</strong> Every result carries the API, AER, CSA, or IWCF reference in brackets.</li>
               <li><strong className="text-white">Advisory-only by design.</strong> A safety notice stays on every screen — this app supports safe work practices, it does not replace the licensee program, JHA, or site ERP.</li>
-              <li><strong className="text-white">Team-aware.</strong> Invite your tool push and day shift to the same workspace. Shared jobs, shared feedback loop.</li>
-              <li><strong className="text-white">30-day free trial.</strong> Full access, no credit card. Upgrade to Pro ($9.99 CAD/mo or $79.99 CAD/yr, no tax added) when you're ready.</li>
+              <li><strong className="text-white">Tiered access.</strong> Free Basic is single-user. Pro adds notes, field logs, multi-device sync, and crew collaboration.</li>
+              <li><strong className="text-white">Pilot and Fleet access.</strong> Rig telemetry is restricted to provisioned pilot environments; management controls require Fleet Enterprise.</li>
             </ul>
           </div>
 

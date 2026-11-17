@@ -6,7 +6,7 @@
 """
 from __future__ import annotations
 
-import os
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from fastapi import HTTPException
@@ -145,33 +145,69 @@ def require_permission(perm: str, require_user):
 
 
 # ------------------------------------------------------------ entitlements
-PLANS = ("trial", "field_pro", "enterprise")
-LEGACY_TIER_MAP = {"personal": "trial", "smallmed": "field_pro", "enterprise": "enterprise"}
-PLAN_FEATURES: Dict[str, frozenset] = {
-    "trial": frozenset({"live_telemetry"}),
-    "field_pro": frozenset({"live_telemetry", "handover", "dossier", "wellbore3d"}),
-    "enterprise": frozenset({"live_telemetry", "handover", "dossier", "wellbore3d",
-                             "security_compliance", "audit_export", "multi_rig_fleet", "mqtt_ingest"}),
+PLANS = ("free", "pro", "field_pilot", "enterprise", "trial", "field_pro")
+LEGACY_TIER_MAP = {
+    "personal": "free", "free": "free",
+    "smallmed": "pro", "pro": "pro",
+    "field_pilot": "field_pilot",
+    "enterprise": "enterprise",
 }
-
-
-def beta_features() -> frozenset:
-    """Opt-in beta overrides: BETA_FEATURES=a,b or BETA_UNLOCK=true (all)."""
-    if os.environ.get("BETA_UNLOCK", "").strip().lower() in {"1", "true", "yes", "on"}:
-        return frozenset().union(*PLAN_FEATURES.values())
-    raw = os.environ.get("BETA_FEATURES", "")
-    return frozenset(x.strip() for x in raw.split(",") if x.strip())
+PLAN_FEATURES: Dict[str, frozenset] = {
+    "free": frozenset(),
+    "trial": frozenset(),
+    "pro": frozenset({"handover"}),
+    "field_pro": frozenset({"live_telemetry", "handover", "dossier", "wellbore3d"}),
+    "field_pilot": frozenset({"live_telemetry", "handover", "dossier", "wellbore3d",
+                              "fatigue", "daq_ingest", "fluid_totalizers"}),
+    "enterprise": frozenset({"live_telemetry", "handover", "dossier", "wellbore3d",
+                             "security_compliance", "audit_export", "multi_rig_fleet",
+                             "mqtt_ingest", "fatigue", "daq_ingest", "fluid_totalizers"}),
+}
 
 
 def org_plan(org: Optional[dict], user: Optional[dict] = None) -> str:
     if (user or {}).get("admin_unlocked"):
         return "enterprise"
     plan = ((org or {}).get("plan") or "").strip().lower()
+    plan = {"aegis_fleet": "enterprise", "workbook_pro": "pro"}.get(plan, plan)
     if plan in PLANS:
-        return plan
+        if plan in {"field_pilot", "field_pro"}:
+            expiry = (
+                (org or {}).get("pilot_expires_at")
+                or (org or {}).get("subscription_expires_at")
+                or (user or {}).get("organization_pilot_expires_at")
+                or (user or {}).get("pilot_expires_at")
+                or (user or {}).get("subscription_expires_at")
+            )
+            if _is_future_expiry(expiry):
+                return plan
+        else:
+            return plan
+    subscription_plan = ((user or {}).get("subscription_plan") or "").strip().lower()
+    if subscription_plan in {"aegis_fleet", "enterprise"}:
+        return "enterprise"
+    if subscription_plan in {"field_pilot"}:
+        expiry = (user or {}).get("pilot_expires_at") or (user or {}).get("subscription_expires_at")
+        if (user or {}).get("subscription_status") == "active" and _is_future_expiry(expiry):
+            return "field_pilot"
+    if subscription_plan in {"workbook_pro", "pro"}:
+        return "pro"
     tier = ((user or {}).get("subscription_tier") or "").strip().lower()
-    return LEGACY_TIER_MAP.get(tier, "trial")
+    return LEGACY_TIER_MAP.get(tier, "free")
+
+
+def _is_future_expiry(value: Any) -> bool:
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return False
+    if not isinstance(value, datetime):
+        return False
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value > datetime.now(timezone.utc)
 
 
 def has_entitlement(plan: str, feature: str) -> bool:
-    return feature in PLAN_FEATURES.get(plan, frozenset()) or feature in beta_features()
+    return feature in PLAN_FEATURES.get(plan, frozenset())

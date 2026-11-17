@@ -101,7 +101,7 @@ export default function Hub() {
     <div className="job-page">
       <div className="flex items-center justify-between"><h1 className="text-xl font-bold">Your tools</h1><HubCustomizeButton onApply={loadPrefs} /></div>
       <HubModules>{tools.map((tool) => <ToolCard key={tool.id} tileId={tool.id} title={tool.title} tool={tool} onAction={onAction} />)}</HubModules>
-      {!isProUser(user) && <p className="job-muted">Cheaper than a coffee - view plans for more tools.</p>}
+      {!isProUser(user) && <p className="job-muted">Upgrade to CT Field Workbook Pro for field logs, sync, and crew collaboration.</p>}
       <AIPanel open={aiOpen} onClose={closeAI} mode="training" />
     </div>
   );

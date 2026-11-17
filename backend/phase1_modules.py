@@ -134,8 +134,15 @@ def parse_event_at(raw: Optional[str], now: Optional[datetime] = None) -> dateti
     return dt
 
 
-def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _is_admin, liveops_notifier=None):
+def register_phase1(
+    api_router: APIRouter, db, require_user, get_current_user, _is_admin,
+    liveops_notifier=None, require_pilot_rig=None,
+):
     """Attach all Phase 1 endpoints to the main api_router."""
+
+    def check_pilot_rig(user, rig_id):
+        if require_pilot_rig:
+            require_pilot_rig(user, rig_id)
 
     # -----------------------------------------------------------------
     # RBAC admin endpoints
@@ -267,6 +274,7 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
     @api_router.post("/liveops/feed")
     async def feed_liveops(body: LiveSample, user: dict = Depends(require_user)):
         require_crew(user)
+        check_pilot_rig(user, body.rig_id)
         team_id = user.get("team_id")
         if not team_id:
             raise HTTPException(400, "No team.")
@@ -309,6 +317,7 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
         rig_id: Optional[str] = None,
         user: dict = Depends(require_user),
     ):
+        check_pilot_rig(user, rig_id)
         team_id = user.get("team_id")
         if not team_id:
             return {"samples": [], "latest": None}
@@ -1896,11 +1905,21 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
         if not team_id:
             return {"configs": []}
         docs = await db.daq_configs.find({"team_id": team_id}, {"_id": 0}).sort("created_at", -1).to_list(100)
+        if require_pilot_rig:
+            scoped = []
+            for config in docs:
+                try:
+                    check_pilot_rig(user, config.get("rig_id"))
+                    scoped.append(config)
+                except HTTPException:
+                    continue
+            docs = scoped
         return {"configs": [ser(d) for d in docs]}
 
     @api_router.post("/daq/configs")
     async def create_daq_config(body: DaqConfig, user: dict = Depends(require_user)):
         require_supervisor(user)
+        check_pilot_rig(user, body.rig_id)
         team_id = user.get("team_id")
         if not team_id:
             raise HTTPException(400, "No team.")
@@ -1939,6 +1958,7 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
         cfg = await db.daq_configs.find_one({"config_id": config_id, "team_id": user.get("team_id")}, {"_id": 0})
         if not cfg:
             raise HTTPException(404, "Config not found.")
+        check_pilot_rig(user, body.rig_id if body.rig_id is not None else cfg.get("rig_id"))
         update = {k: v for k, v in body.model_dump().items() if v is not None}
         update["updated_at"] = now_utc()
         # Toggling enabled flips status to connecting (listener engages on next tick)
@@ -1952,6 +1972,10 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
     @api_router.delete("/daq/configs/{config_id}")
     async def delete_daq_config(config_id: str, user: dict = Depends(require_user)):
         require_supervisor(user)
+        cfg = await db.daq_configs.find_one({"config_id": config_id, "team_id": user.get("team_id")}, {"_id": 0})
+        if not cfg:
+            raise HTTPException(404, "Config not found.")
+        check_pilot_rig(user, cfg.get("rig_id"))
         res = await db.daq_configs.delete_one({"config_id": config_id, "team_id": user.get("team_id")})
         if res.deleted_count == 0:
             raise HTTPException(404, "Config not found.")
@@ -1962,6 +1986,7 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
     # -----------------------------------------------------------------
     class DaqTestBody(BaseModel):
         protocol: str
+        rig_id: Optional[str] = None
         host: Optional[str] = None
         port: Optional[int] = None
         witsml_url: Optional[str] = None
@@ -1973,6 +1998,7 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
     @api_router.post("/daq/test")
     async def test_daq_connection(body: DaqTestBody, user: dict = Depends(require_user)):
         require_supervisor(user)
+        check_pilot_rig(user, body.rig_id)
         from daq_listeners import connection_probe
         cfg = body.model_dump()
         if cfg["protocol"] not in SUPPORTED_PROTOCOLS:
@@ -1995,6 +2021,7 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
         cfg = await db.daq_configs.find_one({"config_id": config_id, "team_id": user.get("team_id")}, {"_id": 0})
         if not cfg:
             raise HTTPException(404, "Not found.")
+        check_pilot_rig(user, cfg.get("rig_id"))
         if body.status not in ("idle", "connecting", "connected", "error"):
             raise HTTPException(400, "invalid status")
         update: Dict[str, Any] = {"status": body.status, "updated_at": now_utc()}
@@ -2468,7 +2495,9 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
         team_id = user.get("team_id")
         if not team_id:
             raise HTTPException(400, "No team.")
-        allowed = set([f"RIG{i}" for i in range(1, 26)]) | {"YARD"}
+        allowed = set([f"RIG{i}" for i in range(1, 26)]) | {"YARD"} | {
+            f"CT-UNIT-{i:02d}" for i in range(1, 5)
+        }
         now = now_utc()
         saved = 0
         for rig_id, label in body.labels.items():
@@ -2513,6 +2542,11 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
             rig_id = d.get("rig_id")
             if not rig_id:
                 continue
+            if require_pilot_rig:
+                try:
+                    check_pilot_rig(user, rig_id)
+                except HTTPException:
+                    continue
             out[rig_id] = {
                 "status": d.get("status") or "yard",
                 "note": d.get("note"),
@@ -2527,10 +2561,13 @@ def register_phase1(api_router: APIRouter, db, require_user, get_current_user, _
         team_id = user.get("team_id")
         if not team_id:
             raise HTTPException(400, "No team.")
-        allowed_rigs = set([f"RIG{i}" for i in range(1, 26)]) | {"YARD"}
+        allowed_rigs = set([f"RIG{i}" for i in range(1, 26)]) | {"YARD"} | {
+            f"CT-UNIT-{i:02d}" for i in range(1, 5)
+        }
         now = now_utc()
         saved = 0
         for rig_id, item in body.statuses.items():
+            check_pilot_rig(user, rig_id)
             if rig_id not in allowed_rigs:
                 continue
             st = (item.status or "").lower()

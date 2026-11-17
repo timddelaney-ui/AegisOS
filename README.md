@@ -10,7 +10,11 @@ Aegis OS is the operating layer for hybrid edge/cloud coiled-tubing field operat
 - Directional survey parser: enabled
 
 ## Runtime access model
-Aegis OS enforces plan access through authenticated session data and backend tier checks. Beta unlocks are opt-in and environment-scoped; they are never enabled by default.
+Aegis OS has four enforced commercial tiers: Free Basic, CT Field Workbook Pro, Field Pilot, and Fleet Enterprise. Route visibility is only a convenience; backend API gates enforce the same entitlement boundaries. Free accounts get the offline workbook and public emergency SOPs, Pro adds field productivity and collaboration, Field Pilot adds rig operations, and Fleet Enterprise adds organization management.
+
+Field Pilot access must be explicitly provisioned with `subscription_plan=field_pilot`, a future `pilot_expires_at`, and a `pilot_rig_ids` allowlist containing only authorized `CT-UNIT-01` through `CT-UNIT-04` IDs. The optional `BETA_UNLOCK` flag applies only to authenticated invitees with an active invite expiry and grants Field Pilot, never Fleet Enterprise. New accounts do not receive a trial entitlement. Fleet provisioning and lead assignments require a Fleet Enterprise plan, a management role, and a provisioned rig unit.
+
+Self-serve checkout accepts only `ct_pro_monthly`. Configure `PAYPAL_PLAN_MONTHLY` to a PayPal subscription plan priced at **$69 CAD per user per month**; Pilot active/standby and Fleet Enterprise are provisioned through sales rather than self-serve checkout. Fleet invoice generation is not yet implemented in the portal.
 
 ## Local startup
 The backend ASGI application is `backend/server.py` (`server:app` when run from the `backend/` directory). Configure `backend/.env` with at least `MONGO_URL` and `DB_NAME`, and ensure the MongoDB instance is reachable.
@@ -36,7 +40,7 @@ The frontend uses `REACT_APP_BACKEND_URL` to reach the backend; the example poin
 
 Google sign-in uses the same backend URL and requires `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` on the backend. Connection or configuration failures stay on the login page with an error; they do not redirect to the legacy Emergent provider. On Vercel, set `REACT_APP_BACKEND_URL` as a browser-visible Config variable and redeploy after changing it.
 
-The Unified Aegis Platform is available to Aegis Fleet crew under All tools. It links to the existing operational screens and displays the current job's feed mode and source. The Operator panel groups its navigation under "Open separate tools" to distinguish existing app screens from features built into the rig-floor view. Management can assign an existing team member as lead for a job rig; assignments are stored on the server and use the existing best-effort audit chain. Assigning a lead does not change rig status. Fleet billing and invoice generation are not implemented in this screen.
+The Unified Aegis Platform is available to Fleet Enterprise users. It links to existing operational screens and displays the current job's feed mode and source. Management can provision the four supported CT unit IDs and assign an existing team member as lead; assignments are organization-scoped and audited. Assigning a lead does not change rig status.
 
 The Hub groups existing tools into expandable Rig operations, Engineering & calculations, Crew & planning, and Documents, safety & support sections. Rig operations opens by default. Search finds tools across sections; All tools shows the full grid with your saved tile order. Customize home still controls visibility and order (within sections in grouped view). Recent jobs, crew details, and Quick AI Moves expand on tap; Workbook, Live Ops, AI, and Emergency SOPs remain directly accessible.
 

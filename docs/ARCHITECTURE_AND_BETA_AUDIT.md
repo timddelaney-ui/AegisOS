@@ -33,7 +33,7 @@ Audit date: 2026-10-26. Method: static code review of the repo plus `python -m c
 Every tenant-owned document carries `team_id`; routes scope queries by `user["team_id"]`.
 
 ### Access control
-- Tiers (free/pro/team/enterprise) via `tiers.js` (UI) and backend tier checks; `BETA_UNLOCK` (env, default off) opens gating.
+- Tiers (free/pro/field pilot/fleet) via `tiers.js` (UI) and backend tier checks; `BETA_UNLOCK` only grants time-limited Field Pilot access to authenticated invitees.
 - Roles: legacy `field_manager/ops_manager/admin` mapped to `supervisor/management`; `require_crew` / `require_supervisor` / `require_management` in `phase1_modules.py`.
 - Only 6 routes are unauthenticated: `/`, `/health`, `/auth/session`, `/auth/logout`, `/payments/status/{id}`, `/stripe/webhook` (signature-verified).
 
@@ -80,7 +80,7 @@ Simulator (`wits_fallback_sim`) drives the UI whenever no real listener is conne
 | 4 | High | Historical finding: CI only byte-compiled Python. Current CI adds focused edge tests and frontend test/build jobs, but full backend integration tests still need a configured test database and the frontend dependency install has not been verified in this environment. | Run CI successfully and add isolated backend integration coverage. Ensure demo sessions are never seeded in beta/prod. |
 | 5 | Medium | `/fatigue/feed` accepts unvalidated `cycle_count`/`depth_ft`/pressure (negative cycles would reduce damage; read-modify-write without atomicity → race on concurrent feeds). | Constrain with `Field(ge=0)`; use atomic `$inc`/versioning. |
 | 6 | Medium | `/auth/session` calls the external OAuth endpoint without timeout; `session_token` returned by provider is used as-is; sessions are never deleted on expiry. | Add timeouts; TTL index. |
-| 7 | Medium | Defaults are permissive outside production: `sk_test_emergent` Stripe key fallback, hard-coded `FEEDBACK_INBOX`, CORS requirements only enforced when `APP_ENV=production`. | Beta env **must** set `APP_ENV=production`, real Stripe/CORS values, and `BETA_UNLOCK`/`CT_FREE_FOR_ALL` deliberately. |
+| 7 | Medium | Defaults are permissive outside production: `sk_test_emergent` Stripe key fallback, hard-coded `FEEDBACK_INBOX`, CORS requirements only enforced when `APP_ENV=production`. | Beta env **must** set `APP_ENV=production` and real Stripe/CORS values. |
 | 8 | Medium | SQLite/MQTT publisher and authenticated dashboard WebSocket fan-out are now implemented, but cloud application acknowledgement/consumer and blackout end-to-end evidence are still absent. The WebSocket broadcaster is in-process; multi-worker deployments require shared pub/sub. | Complete and verify cloud integration and fault-injection tests before field operation. |
 | 9 | Low | Duplicated math (see §3). `server.py` is 4.2k lines / `phase1_modules.py` 2.4k, hard to review. | Share constants; add golden-value tests. |
 | 10 | Low | Support contacts/response owners in `KNOWN_LIMITATIONS_AND_SUPPORT_POLICY.md` and all scorecard/checklist boxes are blank. | Fill in before invites. |

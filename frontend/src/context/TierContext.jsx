@@ -3,7 +3,7 @@ import axios from "axios";
 import { useAuth, API } from "./AuthContext";
 import {
   TIER_PERSONAL,
-  TIER_ORDER,
+  normalizeTier,
   tierHasAccess,
   tierShowsLockedTeaser,
   tierHidesCompletely,
@@ -37,13 +37,13 @@ export const TierProvider = ({ children }) => {
 
     try {
       const { data } = await axios.get(`${API}/me/tier`, { withCredentials: true });
-      const nextTier = data?.tier && TIER_ORDER.includes(data.tier) ? data.tier : TIER_PERSONAL;
+      const nextTier = normalizeTier(data?.tier || data?.effective_plan);
       setTier(nextTier);
       setBetaUnlock(Boolean(data?.beta_unlock));
       setState(`offline_tier:${user.user_id}`, { tier: nextTier, betaUnlock: Boolean(data?.beta_unlock) });
     } catch (e) {
       const saved = !e.response ? getStateSync(`offline_tier:${user.user_id}`, null) : null;
-      setTier(saved && TIER_ORDER.includes(saved.tier) ? saved.tier : TIER_PERSONAL);
+      setTier(saved ? normalizeTier(saved.tier) : TIER_PERSONAL);
       setBetaUnlock(!!saved?.betaUnlock);
     } finally {
       setLoaded(true);
@@ -56,27 +56,18 @@ export const TierProvider = ({ children }) => {
   }, [authLoading, refresh]);
 
   const canAccess = useCallback(
-    (featureId) => {
-      if (betaUnlock) return true;
-      return tierHasAccess(tier, featureId);
-    },
-    [tier, betaUnlock],
+    (featureId) => tierHasAccess(tier, featureId),
+    [tier],
   );
 
   const showsLockedTeaser = useCallback(
-    (featureId) => {
-      if (betaUnlock) return false;
-      return tierShowsLockedTeaser(tier, featureId);
-    },
-    [tier, betaUnlock],
+    (featureId) => tierShowsLockedTeaser(tier, featureId),
+    [tier],
   );
 
   const hidesCompletely = useCallback(
-    (featureId) => {
-      if (betaUnlock) return false;
-      return tierHidesCompletely(tier, featureId);
-    },
-    [tier, betaUnlock],
+    (featureId) => tierHidesCompletely(tier, featureId),
+    [tier],
   );
 
   const promptUpgrade = useCallback((featureId) => setUpgradeFor(featureId), []);
