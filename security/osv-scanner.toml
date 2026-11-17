@@ -34,3 +34,8 @@ reason = "The fix requires SVGO 2 or later; the current SVGR chain requires SVGO
 id = "GHSA-gcqx-w48m-w2h4"
 ignoreUntil = 2026-11-25
 reason = "No fixed deepmerge release is published; reassess and remove this exception when an upstream fix is available."
+
+[[IgnoredVulns]]
+id = "GHSA-fc5q-39xc-vjpf"
+ignoreUntil = 2026-11-25
+reason = "No patched picomatch release is listed; the Yarn tree contains 2.3.2 and 4.0.4. Reassess and remove this exception when an upstream fix is available."
