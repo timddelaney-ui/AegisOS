@@ -12,6 +12,17 @@ const PERM_STORAGE = "ctp_notif_perm_prompted_v2";
 const PERM_BANNER_DISMISSED = "ctp_notif_perm_banner_dismissed_v1";
 const isoNow = () => new Date().toISOString();
 
+function validateDigest(data) {
+  if (!["chat", "tasks", "treatment"].every((key) => {
+    const section = data?.[key];
+    return Number.isInteger(section?.count) && section.count >= 0 &&
+      Array.isArray(section.latest) &&
+      section.latest.every((item) => item !== null && typeof item === "object" && !Array.isArray(item));
+  })) {
+    throw new Error("Invalid notification digest response");
+  }
+}
+
 /**
  * NotificationCenter (iter 29) — no bell UI. The user asked for banner
  * notifications (sonner toasts) + proper OS-level notifications (Web
@@ -37,6 +48,7 @@ export default function NotificationCenter() {
   const toastedIds = useRef(new Set());
   const sinceRef = useRef(null);
   const [showPermBanner, setShowPermBanner] = useState(false);
+  const [digestUnavailable, setDigestUnavailable] = useState(false);
 
   // Load last-seen marker whenever the active rig changes.
   useEffect(() => {
@@ -104,7 +116,9 @@ export default function NotificationCenter() {
         params: { rig_id: rigId, since: sinceRef.current || undefined, limit: 5 },
         withCredentials: true,
       });
+      validateDigest(data);
       setDigest(data);
+      setDigestUnavailable(false);
 
       // Chat banners
       for (const m of data.chat?.latest || []) {
@@ -166,7 +180,10 @@ export default function NotificationCenter() {
           }
         }
       }
-    } catch { /* retry next poll */ }
+    } catch (error) {
+      console.warn("[Notifications] digest unavailable", error?.message);
+      setDigestUnavailable(true);
+    }
   }, [user, rigId, onTeamPage, onTreatmentPage, navigate, notifyOS]);
 
   // Poll
@@ -203,11 +220,12 @@ export default function NotificationCenter() {
 
   if (!user) return null;
 
-  // ONLY UI is the one-time permission banner. No bell, no badge, no drawer.
-  if (!showPermBanner) return null;
+  if (!showPermBanner && !digestUnavailable) return null;
 
   return (
-    <div
+    <>
+      {digestUnavailable && <p role="status" className="mx-4 my-2 text-sm text-amber-700">Crew alerts are unavailable. Retrying automatically.</p>}
+      {showPermBanner && <div
       data-testid="notif-perm-banner"
       className="fixed z-[70] left-1/2 -translate-x-1/2 top-2 sm:top-4 bg-white border border-[#FF6B1A] rounded-xl shadow-xl px-3 py-2 flex items-center gap-2 max-w-[95vw] sm:max-w-sm"
       style={{ top: "calc(env(safe-area-inset-top, 0px) + 8px)" }}
@@ -232,6 +250,7 @@ export default function NotificationCenter() {
       >
         <X className="w-3.5 h-3.5" />
       </button>
-    </div>
+      </div>}
+    </>
   );
 }

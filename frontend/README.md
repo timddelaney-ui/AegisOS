@@ -27,6 +27,10 @@ confirmed 401/403 responses remove cached access. Logout removes offline access.
 Clearing browser storage removes local jobs/drafts; use shared logs for durable
 crew records.
 
+Crew-alert polling validates the notification digest before using it. Failed or
+malformed responses show an unavailable status and retry automatically without
+replacing the job workspace with the application error screen.
+
 Treatment logs remain **rig-scoped**, not job-ID-scoped. Offline entries are durable
 device drafts with explicit destination review/upload. They are never automatically
 replayed: treatment creation/entry endpoints have no idempotency support. Ambiguous
