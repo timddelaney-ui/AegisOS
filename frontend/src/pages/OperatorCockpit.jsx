@@ -78,18 +78,20 @@ function CommandBar({ signals }) {
   );
 }
 
-export default function OperatorCockpit() {
+export default function OperatorCockpit({ embedded = false }) {
   const signals = useCockpitSignals();
   return (
-    <div className="min-h-screen bg-[#0B1120] text-[#F8FAFC] p-2 sm:p-3 flex flex-col sm:flex-row gap-3" data-testid="operator-cockpit">
-      <aside aria-label="Cockpit navigation" data-testid="cockpit-rail" className="flex flex-row sm:flex-col gap-1 sm:w-12 sm:shrink-0 sm:border-r sm:border-slate-800 sm:pr-2">
-        {railLinks.map(({ to, label, Icon }) => (
-          <NavLink key={to} to={to} title={label} aria-label={label}
-            className={({ isActive }) => `flex min-h-11 min-w-11 items-center justify-center rounded-lg border ${isActive ? "border-cyan-500 bg-cyan-500/10 text-cyan-300" : "border-transparent text-slate-400 hover:border-slate-700 hover:text-slate-100"}`}>
-            <Icon size={18} aria-hidden="true" />
-          </NavLink>
-        ))}
-      </aside>
+    <div className={`${embedded ? "rounded-xl border border-slate-800" : "min-h-screen"} bg-[#0B1120] text-[#F8FAFC] p-2 sm:p-3 flex flex-col sm:flex-row gap-3`} data-testid="operator-cockpit">
+      {!embedded && (
+        <aside aria-label="Cockpit navigation" data-testid="cockpit-rail" className="flex flex-row sm:flex-col gap-1 sm:w-12 sm:shrink-0 sm:border-r sm:border-slate-800 sm:pr-2">
+          {railLinks.map(({ to, label, Icon }) => (
+            <NavLink key={to} to={to} title={label} aria-label={label}
+              className={({ isActive }) => `flex min-h-11 min-w-11 items-center justify-center rounded-lg border ${isActive ? "border-cyan-500 bg-cyan-500/10 text-cyan-300" : "border-transparent text-slate-400 hover:border-slate-700 hover:text-slate-100"}`}>
+              <Icon size={18} aria-hidden="true" />
+            </NavLink>
+          ))}
+        </aside>
+      )}
       <main className="min-w-0 flex-1 flex flex-col gap-3">
         <CockpitTitle />
         <Widget name="Telemetry & Command Bar"><CommandBar signals={signals} /></Widget>

@@ -236,7 +236,7 @@ def build_approvals_router(*, require_user, db, chain_audit) -> APIRouter:
 
     # ---------- audit verification ----------
     @r.get("/approvals/audit/verify")
-    async def verify_chain(user: dict = Depends(at_least("management"))):
+    async def verify_chain(user: dict = Depends(at_least("supervisor"))):
         return {"org_id": org_id_of(user), **await audit_chain.verify(db, org_id_of(user))}
 
     @r.get("/approvals/audit")

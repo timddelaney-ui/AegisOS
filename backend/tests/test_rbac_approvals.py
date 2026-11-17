@@ -90,6 +90,8 @@ def test_full_chain_flow_and_verify(env):
 
     v = c.get("/api/approvals/audit/verify", headers=h("mgr")).json()
     assert v["valid"] and v["entries"] == 7
+    supervisor_verification = c.get("/api/approvals/audit/verify", headers=h("sup"))
+    assert supervisor_verification.status_code == 200 and supervisor_verification.json()["valid"]
 
     entries = run(db.audit_logs.find({"org_id": "orgA"}, {"_id": 0}).sort("seq", 1).to_list(50))
     assert entries[0]["prev_hash"] == audit_chain.GENESIS
@@ -109,10 +111,13 @@ def test_403s_not_401(env):
     for u in ("op", "lead"):
         assert c.post(f"/api/approvals/requests/{rid}/supervisor-decision",
                       json={"decision": "approve"}, headers=h(u)).status_code == 403
-    for u in ("op", "lead", "sup"):
+    for u in ("op", "lead"):
         assert c.post(f"/api/approvals/requests/{rid}/management-decision",
                       json={"decision": "approve"}, headers=h(u)).status_code == 403
         assert c.get("/api/approvals/audit/verify", headers=h(u)).status_code == 403
+    assert c.post(f"/api/approvals/requests/{rid}/management-decision",
+                  json={"decision": "approve"}, headers=h("sup")).status_code == 403
+    assert c.get("/api/approvals/audit/verify", headers=h("sup")).status_code == 200
     assert c.post("/api/approvals/requests", json={"kind": "bad", "title": "t"}, headers=h("op")).status_code == 400
     # operator only sees own; other operator sees nothing
     assert c.get("/api/approvals/requests", headers=h("legacy_crew")).json()["items"] == []

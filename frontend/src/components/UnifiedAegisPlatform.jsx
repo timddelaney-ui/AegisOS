@@ -8,7 +8,8 @@ import { useTier } from "../context/TierContext";
 import { planRole } from "../lib/roles";
 import { OPERATION_CODE_BY_NUM } from "../lib/operationCodes";
 import { useCachedApi } from "../hooks/useCachedApi";
-import JobGauges from "./JobGauges";
+import MainOperatorScreen from "./MainOperatorScreen";
+import OperatorCockpit from "../pages/OperatorCockpit";
 
 const ENVIRONMENTS = [
   { id: "operator", label: "Operator", description: "Rig floor" },
@@ -29,6 +30,8 @@ function FleetAssignments() {
   const [error, setError] = useState("");
   const [savingRig, setSavingRig] = useState(null);
   const [notice, setNotice] = useState("");
+  const provisionedUnitIds = MANAGEMENT_RIGS.filter((rig) => provisionedRigs.has(rig.id)).map((rig) => rig.id);
+  const assignedCount = provisionedUnitIds.filter((rigId) => assignments[rigId]).length;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -90,6 +93,22 @@ function FleetAssignments() {
         </div>
         <button type="button" className="job-secondary" onClick={load} disabled={loading || savingRig !== null}>Refresh</button>
       </div>
+      {!loading && (
+        <dl className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <div className="rounded border border-slate-700 bg-slate-950/60 p-3">
+            <dt className="text-xs text-slate-400">Provisioned CT units</dt>
+            <dd className="mt-1 font-mono text-xl font-bold">{provisionedUnitIds.length} / {MANAGEMENT_RIGS.length}</dd>
+          </div>
+          <div className="rounded border border-slate-700 bg-slate-950/60 p-3">
+            <dt className="text-xs text-slate-400">Lead assignments</dt>
+            <dd className="mt-1 font-mono text-xl font-bold">{assignedCount}</dd>
+          </div>
+          <div className="rounded border border-slate-700 bg-slate-950/60 p-3">
+            <dt className="text-xs text-slate-400">Provisioned units without a lead</dt>
+            <dd className="mt-1 font-mono text-xl font-bold">{provisionedUnitIds.length - assignedCount}</dd>
+          </div>
+        </dl>
+      )}
       {error && <p role="alert" className="mt-3 text-sm text-rose-300">{error}</p>}
       {notice && <p role="status" className="mt-3 text-sm text-emerald-300">{notice}</p>}
       {loading ? <p className="job-muted mt-3">Loading assignments…</p> : !error || members.length > 0 ? (
@@ -130,6 +149,7 @@ function FleetAssignments() {
 }
 
 function TreatmentTimeline({ rigId, enabled }) {
+  const [scrubIndex, setScrubIndex] = useState(0);
   const active = useCachedApi("/treatments/active", { rig_id: rigId }, enabled);
   const treatment = active.data?.treatment;
   const entries = useCachedApi(
@@ -147,7 +167,11 @@ function TreatmentTimeline({ rigId, enabled }) {
     }, 15000);
     return () => clearInterval(timer);
   }, [enabled, refreshActive, refreshEntries]);
-  const events = (entries.data?.entries || []).slice().reverse().slice(0, 12);
+  const events = (entries.data?.entries || []).slice()
+    .sort((a, b) => new Date(a.event_at || a.created_at || 0) - new Date(b.event_at || b.created_at || 0))
+    .slice(-12);
+  const selectedIndex = Math.min(scrubIndex, Math.max(0, events.length - 1));
+  const selectedEvent = events[selectedIndex];
 
   return (
     <section className="job-card" aria-labelledby="job-timeline-heading">
@@ -163,6 +187,18 @@ function TreatmentTimeline({ rigId, enabled }) {
                     : (
                       <>
                         <p className="job-muted mt-2">{treatment.name}{entries.status === "cached" ? " · cached entries" : ""}</p>
+                        <label className="mt-3 flex items-center gap-3 text-xs text-slate-400">
+                          <span>Scrub event {selectedIndex + 1} of {events.length}</span>
+                          <input type="range" min="0" max={events.length - 1} value={selectedIndex}
+                            aria-label="Scrub treatment timeline"
+                            onChange={(event) => setScrubIndex(Number(event.target.value))}
+                            className="min-w-0 flex-1 accent-emerald-400" />
+                        </label>
+                        {selectedEvent && (
+                          <p className="mt-2 rounded border border-slate-700 bg-slate-950/60 p-2 text-sm" data-testid="selected-timeline-event">
+                            {selectedEvent.text}
+                          </p>
+                        )}
                         <ol className="mt-3 space-y-3 border-l border-slate-600 pl-4">
                           {events.map((entry) => {
                             const operation = OPERATION_CODE_BY_NUM[entry.operation_code];
@@ -185,6 +221,55 @@ function TreatmentTimeline({ rigId, enabled }) {
                         </ol>
                       </>
                     )}
+    </section>
+  );
+}
+
+function AuditVerificationCard() {
+  const [verification, setVerification] = useState(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  const verify = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const { data } = await api.get(`${API}/approvals/audit/verify`);
+      setVerification(data);
+    } catch (err) {
+      setError(err.response?.data?.detail || "Unable to verify this organization's audit chain.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { verify(); }, [verify]);
+  const valid = verification?.valid;
+
+  return (
+    <section className="job-card" aria-labelledby="audit-verification-heading">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 id="audit-verification-heading" className="font-bold">HITL audit-chain verification</h2>
+          <p className="job-muted mt-1">Read-only SHA-256 integrity check for this organization.</p>
+        </div>
+        <button type="button" className="job-secondary" onClick={verify} disabled={loading}>
+          {loading ? "Verifying…" : "Verify chain"}
+        </button>
+      </div>
+      {error && <p role="alert" className="mt-3 text-sm text-rose-300">{error}</p>}
+      {verification && !error && (
+        <>
+          <p className={`mt-3 text-sm font-semibold ${valid ? "text-emerald-300" : "text-rose-300"}`} role="status">
+            {valid ? `Verified · ${verification.entries} entries` : `Verification failed at entry ${verification.broken_at_seq}: ${verification.reason || "Hash chain mismatch"}`}
+          </p>
+          {verification.head_hash && (
+            <p className="mt-1 break-all font-mono text-xs text-slate-400" data-testid="audit-head-hash">
+              Chain head: {verification.head_hash}
+            </p>
+          )}
+        </>
+      )}
     </section>
   );
 }
@@ -223,10 +308,10 @@ export default function UnifiedAegisPlatform() {
   const active = available.some((item) => item.id === selected) ? selected : defaultEnvironment;
 
   return (
-    <div className="job-page max-w-6xl" data-testid="unified-platform">
+    <div className="job-page mx-auto max-w-7xl bg-[#020617] p-3 text-slate-100" data-testid="unified-platform">
       <header>
         <h1 className="text-xl font-bold">Unified Aegis Platform</h1>
-        <p className="job-muted">Active job: {job.well.name || "Unnamed well"} · {labels[job.rig] || job.rig} · {job.mode} mode</p>
+        <p className="text-sm text-slate-400">Active job: {job.well.name || "Unnamed well"} · {labels[job.rig] || job.rig} · {job.mode} mode</p>
       </header>
       <nav aria-label="Available environments" className="flex flex-wrap gap-2">
         {available.map((item) => (
@@ -238,32 +323,14 @@ export default function UnifiedAegisPlatform() {
 
       {active === "operator" && (
         <section className="space-y-3">
-          <h2 className="text-lg font-bold">Rig floor</h2>
-          <JobGauges />
-          <p className="job-muted">Readings show their source and may be simulated or unavailable. Verify current feed status before use.</p>
-          <section className="job-card space-y-3" aria-labelledby="operator-tools-heading">
-            <h3 id="operator-tools-heading" className="font-bold">Open separate tools</h3>
-            <p className="job-muted">These links leave the rig-floor view and open existing tools in this app. They are not features built into this panel.</p>
-            <div className="flex flex-wrap gap-2">
-              {tier.canAccess("live_ops") && <Link className="job-secondary" to="/live">Go to operator cockpit</Link>}
-              <Link className="job-secondary" to="/log">Go to treatment log</Link>
-              <Link className="job-secondary" to="/job">Go to active job</Link>
-            </div>
-          </section>
+          <MainOperatorScreen />
         </section>
       )}
       {active === "supervisor" && (
         <>
-          <section className="job-card space-y-3">
-            <h2 className="text-lg font-bold">Mission control</h2>
-            <p className="job-muted">Open the existing cockpit for strip charts, encoder status, the yield envelope and the job workbook.</p>
-            <div className="flex flex-wrap gap-2">
-              {tier.canAccess("live_ops") && <Link className="job-secondary" to="/live">Open mission control</Link>}
-              <Link className="job-secondary" to="/approvals">Open approvals</Link>
-              <Link className="job-secondary" to="/log">Open treatment log</Link>
-            </div>
-          </section>
+          <OperatorCockpit embedded />
           <TreatmentTimeline rigId={job.rig} enabled={tier.canAccess("treatment_log")} />
+          <AuditVerificationCard />
         </>
       )}
       {active === "management" && (
@@ -273,10 +340,10 @@ export default function UnifiedAegisPlatform() {
             <h2 className="font-bold">Management tools</h2>
             <div className="flex flex-wrap gap-2">
               <Link className="job-secondary" to="/manager">Manager dashboard</Link>
-              <Link className="job-secondary" to="/audit">Audit ledger</Link>
+              <Link className="job-secondary" to="/audit">Full audit ledger</Link>
               {tier.canAccess("exec_dashboard") && <Link className="job-secondary" to="/executive">Executive dashboard</Link>}
             </div>
-            <p className="job-muted">Fleet billing and invoice generation are not available here.</p>
+            <p className="job-muted">Fleet billing, CAD ARR/MRR reporting, and invoice generation are not connected in this portal. Do not treat operational counts as financial reporting.</p>
           </section>
         </>
       )}

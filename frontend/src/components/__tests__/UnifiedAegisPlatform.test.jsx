@@ -14,7 +14,8 @@ jest.mock("../../context/RigContext", () => ({
   useRig: () => ({ labels: {}, statuses: {} }),
 }));
 jest.mock("../../context/TierContext", () => ({ useTier: () => ({ canAccess: () => true }) }));
-jest.mock("../JobGauges", () => () => <div>Feed readings</div>);
+jest.mock("../MainOperatorScreen", () => () => <div data-testid="main-operator-screen">Rig-floor field tools</div>);
+jest.mock("../../pages/OperatorCockpit", () => () => <div data-testid="embedded-operator-cockpit">Mission-control cockpit</div>);
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 let mockRole = "ops_manager";
@@ -27,7 +28,9 @@ beforeEach(() => {
     ? { members: [{ user_id: "u1", name: "Engineer" }] }
     : url.endsWith("/org/rigs")
       ? [{ rig_id: "CT-UNIT-01" }]
-      : { assignments: [] } }));
+      : url.endsWith("/approvals/audit/verify")
+        ? { valid: true, entries: 3, head_hash: "abcdef0123456789" }
+        : { assignments: [] } }));
   api.put.mockReset();
   axios.get.mockImplementation((url) => Promise.resolve({
     data: url.endsWith("/treatments/active")
@@ -81,14 +84,7 @@ test("operator cannot select management or supervisor environment", async () => 
   await act(async () => root.render(<UnifiedAegisPlatform />));
   expect(host.textContent).toContain("Rig floor");
   expect(host.textContent).not.toContain("Fleet dispatch");
-  const tools = host.querySelector('[aria-labelledby="operator-tools-heading"]');
-  expect(tools.textContent).toContain("Open separate tools");
-  expect(tools.textContent).toContain("They are not features built into this panel.");
-  expect([...tools.querySelectorAll("a")].map((link) => [link.textContent, link.getAttribute("href")])).toEqual([
-    ["Go to operator cockpit", "/live"],
-    ["Go to treatment log", "/log"],
-    ["Go to active job", "/job"],
-  ]);
+  expect(host.querySelector('[data-testid="main-operator-screen"]')).not.toBeNull();
   expect(api.get).not.toHaveBeenCalled();
   await act(async () => root.unmount());
   host.remove();
@@ -100,10 +96,38 @@ test("supervisor timeline shows actual treatment events", async () => {
   document.body.appendChild(host);
   const root = createRoot(host);
   await act(async () => root.render(<UnifiedAegisPlatform />));
+  expect(host.querySelector('[data-testid="embedded-operator-cockpit"]')).not.toBeNull();
   expect(host.querySelector("#job-timeline-heading")).not.toBeNull();
   expect(host.textContent).toContain("Tag Fill / Top of Fish");
   expect(host.textContent).toContain("Tagged plug");
   expect(host.textContent).toContain("12,000 ft");
+  expect(host.textContent).toContain("Verified · 3 entries");
+  expect(host.querySelector('[data-testid="audit-head-hash"]').textContent).toContain("abcdef0123456789");
+  await act(async () => root.unmount());
+  host.remove();
+});
+
+test("supervisor can scrub the recorded treatment event timeline", async () => {
+  mockRole = "field_manager";
+  axios.get.mockImplementation((url) => Promise.resolve({
+    data: url.endsWith("/treatments/active")
+      ? { treatment: { treatment_id: "trt_1", name: "Well 12" } }
+      : { entries: [
+        { entry_id: "e1", text: "First event", kind: "event", event_at: "2026-11-16T12:00:00Z" },
+        { entry_id: "e2", text: "Second event", kind: "event", event_at: "2026-11-16T13:00:00Z" },
+      ] },
+  }));
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  await act(async () => root.render(<UnifiedAegisPlatform />));
+  const scrubber = host.querySelector('[aria-label="Scrub treatment timeline"]');
+  expect(host.querySelector('[data-testid="selected-timeline-event"]').textContent).toBe("First event");
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(scrubber, "1");
+    scrubber.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  expect(host.querySelector('[data-testid="selected-timeline-event"]').textContent).toBe("Second event");
   await act(async () => root.unmount());
   host.remove();
 });
